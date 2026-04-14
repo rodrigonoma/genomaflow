@@ -10,7 +10,7 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - uploads:/tmp/uploads
 
@@ -21,7 +21,7 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - uploads:/tmp/uploads
 
@@ -40,7 +40,12 @@ services:
       retries: 5
 
   redis:
-    image: redis:alpine
+    image: redis:7.2-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
 volumes:
   pgdata:
