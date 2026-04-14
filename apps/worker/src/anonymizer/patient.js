@@ -9,7 +9,11 @@ function anonymize(patient) {
   const result = { sex: patient.sex };
 
   if (patient.birth_date) {
-    const age = new Date().getFullYear() - new Date(patient.birth_date).getFullYear();
+    const today = new Date();
+    const birth = new Date(patient.birth_date);
+    let age = today.getFullYear() - birth.getFullYear();
+    const birthdayThisYear = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
+    if (today < birthdayThisYear) age -= 1;
     const decade = Math.floor(age / 10) * 10;
     result.age_range = `${decade}-${decade + 9}`;
   }

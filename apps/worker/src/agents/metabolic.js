@@ -31,7 +31,14 @@ async function runMetabolicAgent(ctx) {
     }]
   });
 
-  const result = JSON.parse(response.content[0].text);
+  const rawText = response.content?.[0]?.text;
+  if (!rawText) throw new Error(`[metabolic] Claude returned empty response`);
+  let result;
+  try {
+    result = JSON.parse(rawText);
+  } catch (err) {
+    throw new Error(`[metabolic] Failed to parse Claude response: ${rawText.slice(0, 200)}`);
+  }
   result.disclaimer = DISCLAIMER;
   return result;
 }

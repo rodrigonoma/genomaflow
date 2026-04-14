@@ -8,8 +8,8 @@ const AGENT_MARKERS = {
     /triglicér/i, /trigliceri/i, /pcr/i, /proteína\s+c\s+reativa/i
   ],
   hematology: [
-    /hemoglobina/i, /hematócrito/i, /eritrócitos/i, /leucócitos/i,
-    /plaquetas/i, /neutrófilos/i, /linfócitos/i, /hemograma/i
+    /hemoglobina/i, /hematoc?r[ií]to/i, /eritr[oó]citos/i, /leuc[oó]citos/i,
+    /plaquetas/i, /neutr[oó]filos/i, /linf[oó]citos/i, /hemograma/i
   ]
 };
 
