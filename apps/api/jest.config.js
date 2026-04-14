@@ -6,5 +6,6 @@ process.env.UPLOADS_DIR = '/tmp/uploads';
 
 module.exports = {
   testEnvironment: 'node',
-  runInBand: true,
+  // Run tests sequentially to avoid shared DB conflicts
+  maxWorkers: 1,
 };

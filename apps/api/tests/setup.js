@@ -2,9 +2,16 @@ require('dotenv').config();
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL_TEST });
+function makePool() {
+  return new Pool({ connectionString: process.env.DATABASE_URL_TEST });
+}
+
+let pool = makePool();
 
 async function setupTestDb() {
+  // Recreate pool if it was ended by a previous test suite
+  if (pool.ending) pool = makePool();
+
   // Delete tenant first — CASCADE removes users, patients, exams, clinical_results
   await pool.query(`DELETE FROM tenants WHERE name = 'Test Clinic'`);
 
