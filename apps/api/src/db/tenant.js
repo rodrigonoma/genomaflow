@@ -11,7 +11,7 @@ async function withTenant(pg, tenantId, fn) {
   const client = await pg.connect();
   try {
     await client.query('BEGIN');
-    await client.query('SET LOCAL app.tenant_id = $1', [tenantId]);
+    await client.query('SELECT set_config($1, $2, true)', ['app.tenant_id', tenantId]);
     const result = await fn(client);
     await client.query('COMMIT');
     return result;
