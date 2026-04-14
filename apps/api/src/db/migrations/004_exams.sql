@@ -11,3 +11,15 @@ CREATE TABLE exams (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_exams_updated_at
+  BEFORE UPDATE ON exams
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
