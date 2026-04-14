@@ -15,12 +15,16 @@ module.exports = async function (fastify) {
     let patient_id = null;
     let fileData = null;
 
+    // Collect ALL parts before processing (field order may vary)
     for await (const part of parts) {
       if (part.type === 'field' && part.fieldname === 'patient_id') {
         patient_id = part.value;
       } else if (part.type === 'file' && part.fieldname === 'file') {
         fileData = part;
-        break;
+        // Must consume the stream to avoid hanging
+        const chunks = [];
+        for await (const chunk of part.file) chunks.push(chunk);
+        fileData._buffer = Buffer.concat(chunks);
       }
     }
 
@@ -31,30 +35,32 @@ module.exports = async function (fastify) {
     const filename = `${Date.now()}-${fileData.filename}`;
     const filePath = path.join(UPLOADS_DIR, filename);
 
-    await new Promise((resolve, reject) => {
-      const ws = fs.createWriteStream(filePath);
-      fileData.file.pipe(ws);
-      ws.on('finish', resolve);
-      ws.on('error', reject);
-    });
+    // Write file to disk
+    fs.writeFileSync(filePath, fileData._buffer);
 
-    const exam = await withTenant(fastify.pg, tenant_id, async (client) => {
-      const { rows } = await client.query(
-        `INSERT INTO exams (tenant_id, patient_id, uploaded_by, file_path, status, source)
-         VALUES ($1, $2, $3, $4, 'pending', 'upload')
-         RETURNING id, status`,
-        [tenant_id, patient_id, user_id, filePath]
-      );
-      return rows[0];
-    });
+    try {
+      const exam = await withTenant(fastify.pg, tenant_id, async (client) => {
+        const { rows } = await client.query(
+          `INSERT INTO exams (tenant_id, patient_id, uploaded_by, file_path, status, source)
+           VALUES ($1, $2, $3, $4, 'pending', 'upload')
+           RETURNING id, status`,
+          [tenant_id, patient_id, user_id, filePath]
+        );
+        return rows[0];
+      });
 
-    await examQueue.add('process-exam', {
-      exam_id: exam.id,
-      tenant_id,
-      file_path: filePath
-    });
+      await examQueue.add('process-exam', {
+        exam_id: exam.id,
+        tenant_id,
+        file_path: filePath
+      });
 
-    return reply.status(202).send({ exam_id: exam.id, status: 'pending' });
+      return reply.status(202).send({ exam_id: exam.id, status: 'pending' });
+    } catch (err) {
+      // Clean up the uploaded file if DB operation failed
+      fs.unlink(filePath, () => {});
+      throw err;
+    }
   });
 
   fastify.get('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {

@@ -26,8 +26,16 @@ async function migrate() {
 
       const sql = fs.readFileSync(path.join(dir, file), 'utf8');
       console.log(`[apply] ${file}`);
-      await client.query(sql);
-      await client.query('INSERT INTO _migrations (filename) VALUES ($1)', [file]);
+
+      await client.query('BEGIN');
+      try {
+        await client.query(sql);
+        await client.query('INSERT INTO _migrations (filename) VALUES ($1)', [file]);
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      }
     }
 
     console.log('Migrations complete.');
