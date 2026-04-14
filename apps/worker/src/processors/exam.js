@@ -86,10 +86,6 @@ async function processExam({ exam_id, tenant_id, file_path }) {
 
     await client.query('COMMIT');
 
-    const pub = new Redis(process.env.REDIS_URL);
-    await pub.publish(`exam:done:${tenant_id}`, JSON.stringify({ exam_id }));
-    await pub.quit();
-
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     await pool.query(
@@ -99,6 +95,17 @@ async function processExam({ exam_id, tenant_id, file_path }) {
     throw err;
   } finally {
     client.release();
+  }
+
+  // Notify API via Redis pub/sub — separate try/catch so a Redis failure
+  // doesn't corrupt the exam status after a successful COMMIT
+  try {
+    const pub = new Redis(process.env.REDIS_URL);
+    await pub.publish(`exam:done:${tenant_id}`, JSON.stringify({ exam_id }));
+    await pub.quit();
+  } catch (redisErr) {
+    // Log but do not rethrow — exam is already successfully processed
+    console.error(`[processor] Redis notify failed for exam ${exam_id}:`, redisErr.message);
   }
 }
 
