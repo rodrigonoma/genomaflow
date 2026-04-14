@@ -1,23 +1,24 @@
-
+require('dotenv').config();
 const Fastify = require('fastify');
-const jwt = require('@fastify/jwt');
-const { orchestrate } = require('../../agents/orchestrator');
 
-const app = Fastify();
+const app = Fastify({ logger: true });
 
-app.register(jwt, { secret: 'supersecret' });
-
-app.decorate("authenticate", async function(request, reply) {
-  await request.jwtVerify();
+app.register(require('./plugins/postgres'));
+app.register(require('./plugins/redis'));
+app.register(require('./plugins/auth'));
+app.register(require('@fastify/multipart'), {
+  limits: { fileSize: 20 * 1024 * 1024 }
 });
+app.register(require('@fastify/websocket'));
+app.register(require('./plugins/pubsub'));
 
-app.post('/login', async () => {
-  return { token: app.jwt.sign({ tenant_id: "tenant1" }) };
-});
+app.register(require('./routes/auth'), { prefix: '/auth' });
+app.register(require('./routes/patients'), { prefix: '/patients' });
+app.register(require('./routes/exams'), { prefix: '/exams' });
+app.register(require('./routes/alerts'), { prefix: '/alerts' });
 
-app.post('/chat', { preHandler: [app.authenticate] }, async (req) => {
-  const { message } = req.body;
-  return await orchestrate({ message });
-});
+if (require.main === module) {
+  app.listen({ port: 3000, host: '0.0.0.0' });
+}
 
-app.listen({ port: 3000 });
+module.exports = app;
