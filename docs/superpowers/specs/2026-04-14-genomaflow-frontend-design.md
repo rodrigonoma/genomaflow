@@ -89,7 +89,9 @@ apps/web/
 
 ### 3.3 WsService
 
-- Opens one WebSocket connection to `GET /exams/subscribe` after login
+- Opens one WebSocket connection after login: `ws://<host>/exams/subscribe?token=<jwt>`
+  - JWT is passed as a query parameter because native WebSocket does not support custom headers
+  - The Fastify backend's `authenticate` preHandler must accept the token from `request.query.token` in addition to the `Authorization` header
 - `examUpdates$: Subject<{exam_id: string}>` — emits on every `exam:done` message
 - Exponential backoff reconnect: 1s → 2s → 4s → max 30s
 - Closes on logout
@@ -114,7 +116,7 @@ No hardcoded URLs in components or services — always `environment.apiUrl`.
 
 | Component | Purpose |
 |---|---|
-| `<app-exam-card>` | Card with filename, status badge, date, link to result |
+| `<app-exam-card>` | Card with filename (basename of `file_path`), status badge, date, link to result |
 | `<app-alert-badge>` | Color-coded chip: `low`=gray, `medium`=yellow, `high`=orange, `critical`=red |
 | `<app-risk-meter>` | Horizontal progress bar with label (e.g. "Risco cardiovascular: alto") |
 | `<app-exam-status>` | Animated spinner for `pending`/`processing`, static icon for `done`/`error` |
@@ -176,7 +178,7 @@ export interface Exam {
 - Navigates to patient profile on row click
 
 **Patient Profile**
-- Basic info: sex, age range
+- Basic info: sex, birth_date (real value from `GET /patients/:id` — not the anonymized age_range, which is only used internally by Claude)
 - Exam history list ordered by date — each item shows date, status badge, agent types
 - "Enviar novo exame" button → navigates to exam upload
 
@@ -256,7 +258,7 @@ Table of tenant users:
 
 ## 8. Backend Additions Required
 
-Two new endpoints on the API (admin-only, scoped by tenant RLS):
+### New endpoints (admin-only, scoped by tenant RLS)
 
 ```
 POST   /users        — invite user to tenant: { email, password, role }
@@ -264,6 +266,10 @@ DELETE /users/:id    — remove user from tenant
 ```
 
 Both require `role=admin` guard on the Fastify route. RLS ensures tenant isolation at DB level.
+
+### WebSocket JWT via query param
+
+The `GET /exams/subscribe` WebSocket route must accept the JWT from `request.query.token` in addition to the `Authorization` header. Native WebSocket does not support custom headers, so the frontend passes the token as a query parameter. The Fastify `authenticate` plugin must be updated to check both sources.
 
 ---
 
