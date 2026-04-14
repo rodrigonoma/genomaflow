@@ -3,6 +3,7 @@ const { Pool } = require('pg');
 const Redis = require('ioredis');
 const { extractText } = require('../parsers/pdf');
 const { anonymize } = require('../anonymizer/patient');
+const { scrubText } = require('../anonymizer/text');
 const { classifyAgents } = require('../classifier/markers');
 const { retrieveGuidelines } = require('../rag/retriever');
 const { runMetabolicAgent } = require('../agents/metabolic');
@@ -25,6 +26,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
  */
 async function processExam({ exam_id, tenant_id, file_path }) {
   const client = await pool.connect();
+  let processingError = null;
 
   try {
     await client.query('BEGIN');
@@ -44,7 +46,9 @@ async function processExam({ exam_id, tenant_id, file_path }) {
     const patient = rows[0];
 
     const buffer = fs.readFileSync(file_path);
-    const examText = await extractText(buffer);
+    const rawText = await extractText(buffer);
+    // Scrub PII from the raw PDF text before it leaves the system (LGPD)
+    const examText = scrubText(rawText);
     const anonPatient = anonymize(patient);
     const agentNames = classifyAgents(examText);
 
@@ -87,14 +91,33 @@ async function processExam({ exam_id, tenant_id, file_path }) {
     await client.query('COMMIT');
 
   } catch (err) {
+    processingError = err;
     await client.query('ROLLBACK').catch(() => {});
-    await pool.query(
-      `UPDATE exams SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
-      [err.message, exam_id]
-    );
-    throw err;
   } finally {
     client.release();
+  }
+
+  // If the pipeline failed, update exam status in a fresh transaction.
+  // A new connection is required because SET LOCAL was rolled back with the
+  // main transaction — without this, FORCE ROW LEVEL SECURITY would block
+  // the UPDATE since app.tenant_id would not be set.
+  if (processingError) {
+    const errorClient = await pool.connect();
+    try {
+      await errorClient.query('BEGIN');
+      await errorClient.query('SET LOCAL app.tenant_id = $1', [tenant_id]);
+      await errorClient.query(
+        `UPDATE exams SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
+        [processingError.message, exam_id]
+      );
+      await errorClient.query('COMMIT');
+    } catch (updateErr) {
+      await errorClient.query('ROLLBACK').catch(() => {});
+      console.error('[processor] Failed to update exam error status:', updateErr.message);
+    } finally {
+      errorClient.release();
+    }
+    throw processingError;
   }
 
   // Notify API via Redis pub/sub — separate try/catch so a Redis failure

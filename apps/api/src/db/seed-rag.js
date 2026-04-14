@@ -51,7 +51,7 @@ async function seedRag() {
     await pool.query(
       `INSERT INTO rag_documents (source, title, content, embedding)
        VALUES ($1, $2, $3, $4::vector)
-       ON CONFLICT DO NOTHING`,
+       ON CONFLICT (source, title) DO NOTHING`,
       [doc.source, doc.title, doc.content, `[${embedding.join(',')}]`]
     );
 

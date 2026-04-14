@@ -2,6 +2,11 @@ ALTER TABLE patients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE exams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clinical_results ENABLE ROW LEVEL SECURITY;
 
+-- Force RLS even for table owners (e.g., postgres superuser)
+ALTER TABLE patients FORCE ROW LEVEL SECURITY;
+ALTER TABLE exams FORCE ROW LEVEL SECURITY;
+ALTER TABLE clinical_results FORCE ROW LEVEL SECURITY;
+
 CREATE POLICY tenant_isolation ON patients
   FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
 

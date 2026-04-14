@@ -30,6 +30,9 @@ module.exports = async function (fastify) {
 
     if (!patient_id) return reply.status(400).send({ error: 'patient_id is required' });
     if (!fileData) return reply.status(400).send({ error: 'file is required' });
+    if (fileData.mimetype !== 'application/pdf') {
+      return reply.status(400).send({ error: 'Only PDF files are accepted' });
+    }
 
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
     const filename = `${Date.now()}-${fileData.filename}`;
@@ -40,6 +43,17 @@ module.exports = async function (fastify) {
 
     try {
       const exam = await withTenant(fastify.pg, tenant_id, async (client) => {
+        // Verify the patient belongs to this tenant before inserting the exam
+        const { rows: patientRows } = await client.query(
+          'SELECT id FROM patients WHERE id = $1 AND tenant_id = $2',
+          [patient_id, tenant_id]
+        );
+        if (patientRows.length === 0) {
+          const err = new Error('Patient not found');
+          err.statusCode = 404;
+          throw err;
+        }
+
         const { rows } = await client.query(
           `INSERT INTO exams (tenant_id, patient_id, uploaded_by, file_path, status, source)
            VALUES ($1, $2, $3, $4, 'pending', 'upload')
@@ -59,6 +73,9 @@ module.exports = async function (fastify) {
     } catch (err) {
       // Clean up the uploaded file if DB operation failed
       fs.unlink(filePath, () => {});
+      if (err.statusCode === 404) {
+        return reply.status(404).send({ error: err.message });
+      }
       throw err;
     }
   });

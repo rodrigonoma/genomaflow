@@ -1,5 +1,9 @@
 const bcrypt = require('bcrypt');
 
+// Dummy hash used to perform a constant-time comparison when the user is not
+// found, preventing email enumeration via response-time differences.
+const DUMMY_HASH = '$2b$10$invalidhashfortimingprotection0000000000000000000000000';
+
 module.exports = async function (fastify) {
   fastify.post('/login', async (request, reply) => {
     const { email, password } = request.body;
@@ -10,6 +14,8 @@ module.exports = async function (fastify) {
     );
 
     if (rows.length === 0) {
+      // Always run bcrypt to prevent timing-based email enumeration
+      await bcrypt.compare(password, DUMMY_HASH).catch(() => {});
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
 
