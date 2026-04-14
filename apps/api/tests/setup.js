@@ -5,7 +5,7 @@ const bcrypt = require('bcrypt');
 const pool = new Pool({ connectionString: process.env.DATABASE_URL_TEST });
 
 async function setupTestDb() {
-  await pool.query(`DELETE FROM users WHERE email = 'test@clinic.com'`);
+  // Delete tenant first — CASCADE removes users, patients, exams, clinical_results
   await pool.query(`DELETE FROM tenants WHERE name = 'Test Clinic'`);
 
   const { rows: [tenant] } = await pool.query(
@@ -22,7 +22,7 @@ async function setupTestDb() {
 }
 
 async function teardownTestDb() {
-  await pool.query(`DELETE FROM users WHERE email = 'test@clinic.com'`);
+  // Delete tenant first — CASCADE removes users, patients, exams, clinical_results
   await pool.query(`DELETE FROM tenants WHERE name = 'Test Clinic'`);
   await pool.end();
 }
