@@ -23,7 +23,7 @@ export interface ClinicalResult {
 
 export interface Exam {
   id: string;
-  patient_id: string;
+  patient_id?: string;
   status: 'pending' | 'processing' | 'done' | 'error';
   source: string;
   file_path: string;
