@@ -1,6 +1,19 @@
+import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
+import { Router } from '@angular/router';
 import { authGuard } from './core/auth/auth.guard';
 import { roleGuard } from './core/auth/role.guard';
+import { AuthService } from './core/auth/auth.service';
+
+const rootRedirectGuard = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  const user = auth.currentUser;
+  if (!user) return router.createUrlTree(['/login']);
+  if (user.role === 'doctor') return router.createUrlTree(['/doctor/patients']);
+  if (user.role === 'lab_tech') return router.createUrlTree(['/lab/uploads']);
+  return router.createUrlTree(['/clinic/dashboard']);
+};
 
 export const routes: Routes = [
   {
@@ -26,6 +39,6 @@ export const routes: Routes = [
     loadChildren: () =>
       import('./features/clinic/clinic.routes').then(m => m.CLINIC_ROUTES)
   },
-  { path: '', redirectTo: 'login', pathMatch: 'full' },
+  { path: '', canActivate: [rootRedirectGuard], children: [] },
   { path: '**', redirectTo: 'login' }
 ];
