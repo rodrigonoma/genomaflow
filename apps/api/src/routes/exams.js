@@ -80,13 +80,41 @@ module.exports = async function (fastify) {
     }
   });
 
+  fastify.get('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { tenant_id } = request.user;
+
+    const exams = await withTenant(fastify.pg, tenant_id, async (client) => {
+      const { rows } = await client.query(
+        `SELECT e.id, e.patient_id, e.status, e.source, e.file_path, e.created_at, e.updated_at,
+                json_agg(
+                  json_build_object(
+                    'agent_type', cr.agent_type,
+                    'interpretation', cr.interpretation,
+                    'risk_scores', cr.risk_scores,
+                    'alerts', cr.alerts,
+                    'disclaimer', cr.disclaimer
+                  )
+                ) FILTER (WHERE cr.id IS NOT NULL) AS results
+         FROM exams e
+         LEFT JOIN clinical_results cr ON cr.exam_id = e.id
+         WHERE e.tenant_id = $1
+         GROUP BY e.id, e.patient_id, e.status, e.source, e.file_path, e.created_at, e.updated_at
+         ORDER BY e.created_at DESC`,
+        [tenant_id]
+      );
+      return rows;
+    });
+
+    return exams;
+  });
+
   fastify.get('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { tenant_id } = request.user;
     const { id } = request.params;
 
     const exam = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
-        `SELECT e.id, e.status, e.created_at, e.updated_at,
+        `SELECT e.id, e.patient_id, e.status, e.source, e.file_path, e.created_at, e.updated_at,
                 json_agg(
                   json_build_object(
                     'agent_type', cr.agent_type,
@@ -99,7 +127,7 @@ module.exports = async function (fastify) {
          FROM exams e
          LEFT JOIN clinical_results cr ON cr.exam_id = e.id
          WHERE e.id = $1
-         GROUP BY e.id`,
+         GROUP BY e.id, e.patient_id, e.status, e.source, e.file_path, e.created_at, e.updated_at`,
         [id]
       );
       return rows[0] || null;
