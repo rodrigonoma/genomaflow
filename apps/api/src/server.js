@@ -16,6 +16,7 @@ app.register(require('./routes/auth'), { prefix: '/auth' });
 app.register(require('./routes/patients'), { prefix: '/patients' });
 app.register(require('./routes/exams'), { prefix: '/exams' });
 app.register(require('./routes/alerts'), { prefix: '/alerts' });
+app.register(require('./routes/users'), { prefix: '/users' });
 
 if (require.main === module) {
   app.listen({ port: 3000, host: '0.0.0.0' });
