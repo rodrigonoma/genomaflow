@@ -25,6 +25,13 @@ services:
     volumes:
       - uploads:/tmp/uploads
 
+  web:
+    build: ./apps/web
+    ports:
+      - "4200:80"
+    depends_on:
+      - api
+
   db:
     image: pgvector/pgvector:pg15
     ports:
