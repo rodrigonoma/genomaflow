@@ -1,1 +1,4 @@
-import 'jest-preset-angular/setup-jest';
+import '@angular/compiler';
+import { setupZoneTestEnv } from 'jest-preset-angular/setup-env/zone';
+
+setupZoneTestEnv();

@@ -9,5 +9,10 @@ module.exports = {
     ]
   },
   moduleFileExtensions: ['ts', 'html', 'js', 'json'],
-  testPathPattern: '\\.spec\\.ts$'
+  testPathPattern: '\\.spec\\.ts$',
+  globals: {
+    ngJest: {
+      tsconfig: '<rootDir>/tsconfig.spec.json'
+    }
+  }
 };
