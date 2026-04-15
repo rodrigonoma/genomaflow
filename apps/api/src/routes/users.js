@@ -23,6 +23,9 @@ module.exports = async function (fastify) {
     if (role !== 'admin') return reply.status(403).send({ error: 'Forbidden' });
 
     const { email, password, role: newRole } = request.body;
+    if (!email || !password || !newRole) {
+      return reply.status(400).send({ error: 'Missing required fields: email, password, role' });
+    }
     if (!VALID_ROLES.includes(newRole)) {
       return reply.status(400).send({ error: 'Invalid role' });
     }

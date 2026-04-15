@@ -28,6 +28,25 @@ beforeAll(async () => {
   doctorToken = docRes.body.token;
 });
 
+describe('auth required', () => {
+  it('returns 401 for unauthenticated GET', async () => {
+    const res = await supertest(app.server).get('/users');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 401 for unauthenticated POST', async () => {
+    const res = await supertest(app.server).post('/users')
+      .send({ email: 'x@y.com', password: 'pass', role: 'doctor' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 401 for unauthenticated DELETE', async () => {
+    const res = await supertest(app.server)
+      .delete('/users/00000000-0000-0000-0000-000000000000');
+    expect(res.status).toBe(401);
+  });
+});
+
 afterAll(async () => { await teardownTestDb(); await app.close(); });
 
 describe('GET /users', () => {
