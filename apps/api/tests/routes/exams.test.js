@@ -27,6 +27,15 @@ beforeAll(async () => {
   fs.writeFileSync(fixturePath, '%PDF-1.4 Glicemia: 126 mg/dL');
 });
 
+describe('WS /exams/subscribe', () => {
+  it('rejects subscribe without any token', async () => {
+    const res = await supertest(app.server)
+      .get('/exams/subscribe');
+    // Without upgrade headers supertest treats WS as HTTP — expects 401 or 400
+    expect([400, 401]).toContain(res.status);
+  });
+});
+
 afterAll(async () => { await teardownTestDb(); await app.close(); });
 
 describe('POST /exams', () => {
