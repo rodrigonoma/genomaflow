@@ -118,6 +118,9 @@ import { AuthService } from './core/auth/auth.service';
             <a class="nav-item" routerLink="/clinic/users" routerLinkActive="active">
               <mat-icon>group</mat-icon> Usuários
             </a>
+            <a class="nav-item" routerLink="/clinic/integrations" routerLinkActive="active">
+              <mat-icon>cable</mat-icon> Integrações
+            </a>
           }
           @if (user.role === 'doctor') {
             <div class="nav-section-label">Clínica</div>

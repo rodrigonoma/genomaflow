@@ -11,5 +11,15 @@ export const CLINIC_ROUTES: Routes = [
     loadComponent: () =>
       import('./users/users.component').then(m => m.UsersComponent)
   },
+  {
+    path: 'integrations',
+    loadComponent: () =>
+      import('./integrations/integrations.component').then(m => m.IntegrationsComponent)
+  },
+  {
+    path: 'integrations/new',
+    loadComponent: () =>
+      import('./integrations/wizard/wizard.component').then(m => m.WizardComponent)
+  },
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' }
 ];
