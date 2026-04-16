@@ -73,6 +73,14 @@ describe('fetchAndParseSwagger — URL validation (no network)', () => {
   it('throws on 0.0.0.0', async () => {
     await expect(fetchAndParseSwagger('http://0.0.0.0/spec.json')).rejects.toThrow('Private/loopback');
   });
+
+  it('throws on IPv4-mapped IPv6 loopback', async () => {
+    await expect(fetchAndParseSwagger('http://[::ffff:127.0.0.1]/spec.json')).rejects.toThrow('Private/loopback');
+  });
+
+  it('throws on IPv4-mapped IPv6 cloud metadata', async () => {
+    await expect(fetchAndParseSwagger('http://[::ffff:169.254.1.1]/spec.json')).rejects.toThrow('Private/loopback');
+  });
 });
 
 describe('resolveFieldMap — null safety', () => {

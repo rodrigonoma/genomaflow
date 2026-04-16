@@ -19,6 +19,14 @@ function assertSafeUrl(raw) {
   ) {
     throw new Error('Private/loopback addresses are not permitted');
   }
+  // Block IPv4-mapped IPv6 (::ffff:127.0.0.1 → loopback, ::ffff:169.254.x → cloud metadata)
+  if (/^\[::ffff:/i.test(host)) {
+    throw new Error('Private/loopback addresses are not permitted');
+  }
+  // Block fe80:: link-local IPv6
+  if (/^\[fe80:/i.test(host)) {
+    throw new Error('Private/loopback addresses are not permitted');
+  }
 }
 
 /**
