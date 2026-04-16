@@ -2,7 +2,7 @@
 import { Component, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatStepperModule } from '@angular/material/stepper';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -26,7 +26,7 @@ const TARGET_FIELDS: TargetField[] = [
   selector: 'app-wizard',
   standalone: true,
   imports: [
-    ReactiveFormsModule, MatStepperModule, MatFormFieldModule,
+    FormsModule, ReactiveFormsModule, MatStepperModule, MatFormFieldModule,
     MatInputModule, MatSelectModule, MatButtonModule, MatIconModule
   ],
   template: `
