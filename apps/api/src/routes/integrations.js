@@ -144,7 +144,12 @@ module.exports = async function (fastify) {
       const { fields } = await fetchAndParseSwagger(specUrl, opts);
       return { spec_url: specUrl, fields };
     } catch (err) {
-      return reply.status(422).send({ error: err.message });
+      const msg = err.message || '';
+      const isNetworkError = msg === 'fetch failed' || /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET/i.test(msg);
+      const friendlyMsg = isNetworkError
+        ? `Não foi possível conectar à URL informada. Use o endereço acessível pelo servidor GenomaFlow (hostname interno da rede, não "localhost" do seu computador).`
+        : msg;
+      return reply.status(422).send({ error: friendlyMsg });
     }
   });
 

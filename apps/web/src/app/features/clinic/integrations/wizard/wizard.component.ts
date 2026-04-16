@@ -85,8 +85,11 @@ const TARGET_FIELDS: TargetField[] = [
                 <mat-form-field appearance="outline" class="field">
                   <mat-label>URL do Swagger / OpenAPI</mat-label>
                   <input matInput formControlName="swagger_url"
-                    placeholder="https://sistema.hospital.com/swagger/index.html" />
-                  <mat-hint>Cole a URL do Swagger UI ou direto do swagger.json</mat-hint>
+                    placeholder="http://seu-his:8080/swagger/index.html" />
+                  <mat-hint>
+                    URL acessível pelo servidor GenomaFlow (ex.: hostname interno da rede, não "localhost" do seu PC).
+                    No ambiente Docker local use o hostname do serviço, ex.: http://his-mock:3001/swagger
+                  </mat-hint>
                 </mat-form-field>
 
                 @if (resolvedSpecUrl) {
