@@ -78,11 +78,17 @@ function extractSpecUrlFromHtml(html, pageUrl) {
   const base = new URL(pageUrl);
   const origin = `${base.protocol}//${base.host}`;
 
-  // Resolve a possibly-relative path to absolute
+  // Resolve a possibly-relative path to absolute, using pageUrl as the base
   const toAbsolute = (path) => {
     if (!path) return null;
     if (/^https?:\/\//i.test(path)) return path;
-    return origin + (path.startsWith('/') ? path : '/' + path);
+    if (path.startsWith('/')) return origin + path;
+    // relative path (e.g. ./json, ../openapi.json) — resolve against the page URL
+    try {
+      return new URL(path, pageUrl).href;
+    } catch {
+      return null;
+    }
   };
 
   // SwaggerUIBundle({ url: "..." })
@@ -105,6 +111,16 @@ function extractSpecUrlFromHtml(html, pageUrl) {
       if (resolved) return resolved;
     }
   }
+
+  // @fastify/swagger-ui pattern: url: resolveUrl('./json')
+  // resolveUrl resolves relative to the current page URL
+  const resolveUrlPattern = /url\s*:\s*resolveUrl\s*\(\s*["']([^"']*)["']\s*\)/i;
+  const rm = html.match(resolveUrlPattern);
+  if (rm && rm[1]) {
+    const resolved = toAbsolute(rm[1]);
+    if (resolved) return resolved;
+  }
+
   return null;
 }
 
@@ -125,6 +141,7 @@ function candidateUrls(pageUrl) {
     '/swagger/v1/swagger.json',
     '/swagger/v2/swagger.json',
     '/swagger.json',
+    '/swagger/json',
     '/openapi.json',
     '/api-docs',
     '/v2/api-docs',

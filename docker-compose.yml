@@ -48,6 +48,14 @@ services:
       timeout: 5s
       retries: 5
 
+  his-mock:
+    build: ./apps/his-mock
+    ports:
+      - "3002:3001"
+    environment:
+      HIS_USER: his-admin
+      HIS_PASS: "his@2024"
+
   redis:
     image: redis:7.2-alpine
     ports:
