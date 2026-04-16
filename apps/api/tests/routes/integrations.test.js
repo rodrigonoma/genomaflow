@@ -1,6 +1,8 @@
 'use strict';
 
 const supertest = require('supertest');
+const bcrypt = require('bcrypt');
+const { Pool } = require('pg');
 const app = require('../../src/server');
 const { setupTestDb, teardownTestDb } = require('../setup');
 
@@ -9,12 +11,20 @@ let connectorId;
 
 beforeAll(async () => {
   await app.ready();
-  await setupTestDb();
+  const { tenantId } = await setupTestDb();
 
-  // Login
+  // Create an admin user (integrations routes require admin role)
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL_TEST });
+  const hash = await bcrypt.hash('password123', 10);
+  await pool.query(
+    `INSERT INTO users (tenant_id, email, password_hash, role) VALUES ($1, $2, $3, 'admin')`,
+    [tenantId, 'integration-admin@clinic.com', hash]
+  );
+  await pool.end();
+
   const loginRes = await supertest(app.server)
     .post('/auth/login')
-    .send({ email: 'test@clinic.com', password: 'password123' });
+    .send({ email: 'integration-admin@clinic.com', password: 'password123' });
   token = loginRes.body.token;
 
   // Seed a connector for tests that need one
