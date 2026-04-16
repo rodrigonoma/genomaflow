@@ -10,10 +10,24 @@ let connectorId;
 beforeAll(async () => {
   await app.ready();
   await setupTestDb();
-  const res = await supertest(app.server)
+
+  // Login
+  const loginRes = await supertest(app.server)
     .post('/auth/login')
     .send({ email: 'test@clinic.com', password: 'password123' });
-  token = res.body.token;
+  token = loginRes.body.token;
+
+  // Seed a connector for tests that need one
+  const createRes = await supertest(app.server)
+    .post('/integrations')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: 'Tasy Test',
+      mode: 'swagger',
+      config: { swagger_url: 'https://petstore.swagger.io/v2/swagger.json' },
+      field_map: { 'patient.name': '$.name', 'patient.birth_date': '$.birth_date' }
+    });
+  connectorId = createRes.body.id;
 });
 
 afterAll(async () => {
@@ -26,20 +40,11 @@ describe('POST /integrations', () => {
     const res = await supertest(app.server)
       .post('/integrations')
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        name: 'Tasy Test',
-        mode: 'swagger',
-        config: { swagger_url: 'https://petstore.swagger.io/v2/swagger.json' },
-        field_map: {
-          'patient.name': '$.name',
-          'patient.birth_date': '$.birth_date'
-        }
-      });
+      .send({ name: 'Second Connector', mode: 'swagger' });
     expect(res.status).toBe(201);
     expect(res.body).toHaveProperty('id');
-    expect(res.body.name).toBe('Tasy Test');
+    expect(res.body.name).toBe('Second Connector');
     expect(res.body.status).toBe('inactive');
-    connectorId = res.body.id;
   });
 
   it('rejects invalid mode', async () => {
@@ -75,7 +80,15 @@ describe('GET /integrations', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBeGreaterThan(0);
+    // The connector seeded in beforeAll must be present
+    const seeded = res.body.find(c => c.id === connectorId);
+    expect(seeded).toBeDefined();
+    expect(seeded.name).toBe('Tasy Test');
+  });
+
+  it('returns 401 without token', async () => {
+    const res = await supertest(app.server).get('/integrations');
+    expect(res.status).toBe(401);
   });
 });
 
@@ -124,10 +137,17 @@ describe('PUT /integrations/:id', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/status/);
   });
+
+  it('returns 401 without token', async () => {
+    const res = await supertest(app.server)
+      .put(`/integrations/${connectorId}`)
+      .send({ name: 'Hack' });
+    expect(res.status).toBe(401);
+  });
 });
 
 describe('GET /integrations/:id/logs', () => {
-  it('returns empty logs array for new connector', async () => {
+  it('returns logs array for connector', async () => {
     const res = await supertest(app.server)
       .get(`/integrations/${connectorId}/logs`)
       .set('Authorization', `Bearer ${token}`);
@@ -140,6 +160,12 @@ describe('GET /integrations/:id/logs', () => {
       .get('/integrations/00000000-0000-0000-0000-000000000000/logs')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(404);
+  });
+
+  it('returns 401 without token', async () => {
+    const res = await supertest(app.server)
+      .get(`/integrations/${connectorId}/logs`);
+    expect(res.status).toBe(401);
   });
 });
 
@@ -161,9 +187,18 @@ describe('POST /integrations/swagger/parse', () => {
     expect(res.status).toBe(422);
     expect(res.body.error).toMatch(/loopback|Private/i);
   });
+
+  // No positive test here: hitting external network (petstore.swagger.io) is
+  // intentionally omitted from unit/integration tests to avoid network dependency.
 });
 
 describe('DELETE /integrations/:id', () => {
+  it('returns 401 without token', async () => {
+    const res = await supertest(app.server)
+      .delete(`/integrations/${connectorId}`);
+    expect(res.status).toBe(401);
+  });
+
   it('deletes connector', async () => {
     const res = await supertest(app.server)
       .delete(`/integrations/${connectorId}`)
