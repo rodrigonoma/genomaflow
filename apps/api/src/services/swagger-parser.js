@@ -1,8 +1,21 @@
 'use strict';
 
 /**
+ * Hostnames explicitly trusted by the operator (e.g. on-prem HIS systems on private networks).
+ * Set INTEGRATION_ALLOWED_HOSTS=host1,host2 in the environment.
+ * These bypass the private-address SSRF check — only add hosts you control.
+ */
+const ALLOWED_HOSTS = new Set(
+  (process.env.INTEGRATION_ALLOWED_HOSTS || '')
+    .split(',')
+    .map(h => h.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+/**
  * Validate that a URL is safe to fetch (not SSRF-vulnerable).
  * Throws if URL is invalid, non-http/https, or points to a private address.
+ * Hosts listed in INTEGRATION_ALLOWED_HOSTS bypass the private-address check.
  */
 function assertSafeUrl(raw) {
   if (!raw || typeof raw !== 'string') throw new Error('url must be a non-empty string');
@@ -10,7 +23,8 @@ function assertSafeUrl(raw) {
   try { parsed = new URL(raw); } catch { throw new Error('Invalid URL'); }
   if (!['https:', 'http:'].includes(parsed.protocol))
     throw new Error('Only http/https URLs are permitted');
-  const host = parsed.hostname;
+  const host = parsed.hostname.toLowerCase();
+  if (ALLOWED_HOSTS.has(host)) return; // operator-trusted host
   if (
     /^(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host) ||
     host === '0.0.0.0' ||
