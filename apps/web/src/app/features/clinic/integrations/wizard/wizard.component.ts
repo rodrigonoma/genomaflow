@@ -85,9 +85,16 @@ const TARGET_FIELDS: TargetField[] = [
                 <mat-form-field appearance="outline" class="field">
                   <mat-label>URL do Swagger / OpenAPI</mat-label>
                   <input matInput formControlName="swagger_url"
-                    placeholder="https://sistema.hospital.com/api/docs/swagger.json" />
-                  <mat-hint>Suporta OpenAPI 2.x e 3.x</mat-hint>
+                    placeholder="https://sistema.hospital.com/swagger/index.html" />
+                  <mat-hint>Cole a URL do Swagger UI ou direto do swagger.json</mat-hint>
                 </mat-form-field>
+
+                @if (resolvedSpecUrl) {
+                  <div class="resolved-url">
+                    <mat-icon class="resolved-icon">check_circle</mat-icon>
+                    Spec encontrado: <span class="resolved-path">{{ resolvedSpecUrl }}</span>
+                  </div>
+                }
 
                 <mat-form-field appearance="outline" class="field">
                   <mat-label>Tipo de autenticação</mat-label>
@@ -120,11 +127,11 @@ const TARGET_FIELDS: TargetField[] = [
 
                 <div class="step-actions">
                   <button class="wizard-btn-ghost" type="button" matStepperPrevious>Voltar</button>
-                  <button class="wizard-btn" type="button"
+                  <button class="wizard-btn wizard-btn-discover" type="button"
                     [disabled]="connectionForm.invalid || parsing"
-                    (click)="parseSwagger()">
-                    {{ parsing ? 'Analisando...' : 'Analisar API' }}
-                    @if (!parsing) { <mat-icon>search</mat-icon> }
+                    (click)="discoverAndParse()">
+                    @if (parsing) { Descobrindo... }
+                    @else { <mat-icon>travel_explore</mat-icon> Descobrir e Analisar }
                   </button>
                 </div>
 
@@ -321,6 +328,17 @@ const TARGET_FIELDS: TargetField[] = [
     .wizard-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .wizard-btn:hover:not(:disabled) { opacity: 0.88; }
     .wizard-btn-activate { background: #10b981; color: #052e16; }
+    .wizard-btn-discover { background: #494bd6; color: #fff; }
+
+    .resolved-url {
+      display: flex; align-items: flex-start; gap: 0.5rem;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #10b981;
+      background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.2);
+      border-radius: 4px; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;
+      word-break: break-all;
+    }
+    .resolved-icon { font-size: 14px !important; width: 14px !important; height: 14px !important; flex-shrink: 0; margin-top: 1px; }
+    .resolved-path { color: #c0c1ff; }
     .wizard-btn-ghost {
       background: none; color: #908fa0; border: 1px solid rgba(70,69,84,0.25);
       border-radius: 4px; padding: 0.625rem 1rem; font-family: 'Space Grotesk', sans-serif;
@@ -404,6 +422,7 @@ export class WizardComponent {
 
   parsing = false;
   parseError = '';
+  resolvedSpecUrl = '';
   saving = false;
   saveError = '';
 
@@ -419,6 +438,34 @@ export class WizardComponent {
   }
 
   cancel(): void { this.router.navigate(['/clinic/integrations']); }
+
+  discoverAndParse(): void {
+    const { swagger_url, auth_type, auth_value } = this.connectionForm.value;
+    this.parsing = true;
+    this.parseError = '';
+    this.resolvedSpecUrl = '';
+    const body: Record<string, string> = { url: swagger_url! };
+    if (auth_type && auth_type !== 'none') {
+      body['auth_type'] = auth_type;
+      body['auth_value'] = auth_value ?? '';
+    }
+    this.http.post<{ spec_url: string; fields: string[] }>(
+      `${environment.apiUrl}/integrations/swagger/discover`, body
+    ).subscribe({
+      next: r => {
+        this.parsing = false;
+        this.resolvedSpecUrl = r.spec_url;
+        // Update form with the resolved spec URL so it gets saved to config
+        this.connectionForm.patchValue({ swagger_url: r.spec_url });
+        this.discoveredFields = r.fields;
+        document.querySelector<HTMLElement>('[matStepperNext]')?.click();
+      },
+      error: err => {
+        this.parsing = false;
+        this.parseError = err.error?.error ?? 'Não foi possível descobrir o spec da API';
+      }
+    });
+  }
 
   parseSwagger(): void {
     const { swagger_url, auth_type, auth_value } = this.connectionForm.value;

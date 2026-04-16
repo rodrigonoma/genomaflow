@@ -56,6 +56,156 @@ function extractFields(schema, prefix = '') {
 }
 
 /**
+ * Build auth headers from opts.
+ */
+function buildAuthHeaders(opts = {}) {
+  const headers = {};
+  if (opts.authType === 'bearer' && opts.authValue) {
+    headers['Authorization'] = `Bearer ${opts.authValue}`;
+  } else if (opts.authType === 'basic' && opts.authValue) {
+    headers['Authorization'] = `Basic ${Buffer.from(opts.authValue).toString('base64')}`;
+  } else if (opts.authType === 'api_key' && opts.authValue) {
+    headers['X-API-Key'] = opts.authValue;
+  }
+  return headers;
+}
+
+/**
+ * Extract the JSON spec URL from a Swagger UI HTML page.
+ * Tries several patterns used by SwaggerUI, Swashbuckle, Springdoc, etc.
+ */
+function extractSpecUrlFromHtml(html, pageUrl) {
+  const base = new URL(pageUrl);
+  const origin = `${base.protocol}//${base.host}`;
+
+  // Resolve a possibly-relative path to absolute
+  const toAbsolute = (path) => {
+    if (!path) return null;
+    if (/^https?:\/\//i.test(path)) return path;
+    return origin + (path.startsWith('/') ? path : '/' + path);
+  };
+
+  // SwaggerUIBundle({ url: "..." })
+  // Swashbuckle: SwaggerUIBundle({ urls: [{url:"..."}] })
+  const patterns = [
+    /SwaggerUIBundle\s*\(\s*\{[^}]*?url\s*:\s*["']([^"']+)["']/s,
+    /url\s*:\s*["']([^"']+\.(?:json|yaml|yml))["']/i,
+    /configUrl\s*:\s*["']([^"']+)["']/i,
+    /SwaggerUI\.init\s*\(\s*["']([^"']+)["']/i,
+    // ASP.NET / Swashbuckle 6: options.SwaggerEndpoint("...", "...")
+    /SwaggerEndpoint\s*\(\s*["']([^"']+)["']/i,
+    // Springdoc: window.onload = ... url: "/v3/api-docs"
+    /["']url["']\s*:\s*["']([^"']+api.?docs[^"']*)["']/i,
+  ];
+
+  for (const re of patterns) {
+    const m = html.match(re);
+    if (m && m[1]) {
+      const resolved = toAbsolute(m[1]);
+      if (resolved) return resolved;
+    }
+  }
+  return null;
+}
+
+/**
+ * Candidate JSON spec URLs to probe when the page gives no hints.
+ */
+function candidateUrls(pageUrl) {
+  const { protocol, host, pathname } = new URL(pageUrl);
+  const origin = `${protocol}//${host}`;
+  // Strip trailing UI path segments (swagger, index.html, etc.)
+  const base = pathname
+    .replace(/\/(swagger-ui|swagger|api-docs?)(\/.*)?$/, '')
+    .replace(/\/index\.html$/, '')
+    || '';
+
+  const roots = [...new Set([base, ''])];
+  const paths = [
+    '/swagger/v1/swagger.json',
+    '/swagger/v2/swagger.json',
+    '/swagger.json',
+    '/openapi.json',
+    '/api-docs',
+    '/v2/api-docs',
+    '/v3/api-docs',
+    '/api/swagger.json',
+    '/api/openapi.json',
+  ];
+
+  const candidates = [];
+  for (const root of roots) {
+    for (const p of paths) {
+      candidates.push(`${origin}${root}${p}`);
+    }
+  }
+  return [...new Set(candidates)];
+}
+
+/**
+ * Given a URL (which may be a Swagger UI HTML page or a JSON spec),
+ * resolves and returns the actual JSON spec URL.
+ *
+ * Strategy:
+ * 1. Fetch the URL. If it returns a valid OpenAPI/Swagger JSON → done.
+ * 2. If HTML → parse for spec URL hints, then try common path candidates.
+ *
+ * @param {string} url
+ * @param {{ authType?: string, authValue?: string }} [opts]
+ * @returns {Promise<string>} resolved spec URL
+ */
+async function discoverSpecUrl(url, opts = {}) {
+  assertSafeUrl(url);
+  const headers = buildAuthHeaders(opts);
+
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000), headers });
+  if (!res.ok) throw new Error(`Failed to fetch URL: ${res.status} ${res.statusText}`);
+
+  const contentType = res.headers.get('content-type') || '';
+
+  // Already a JSON spec?
+  if (contentType.includes('json') || contentType.includes('yaml')) {
+    let body;
+    try { body = await res.json(); } catch { /* not JSON */ }
+    if (body && (body.openapi || body.swagger)) return url;
+  }
+
+  // HTML page — extract spec URL
+  const html = await res.text();
+
+  // Try to find URL hint in HTML
+  const hinted = extractSpecUrlFromHtml(html, url);
+  if (hinted) {
+    try {
+      assertSafeUrl(hinted);
+      const probe = await fetch(hinted, { signal: AbortSignal.timeout(8_000), headers });
+      if (probe.ok) {
+        const body = await probe.json().catch(() => null);
+        if (body && (body.openapi || body.swagger)) return hinted;
+      }
+    } catch { /* try candidates */ }
+  }
+
+  // Probe common path candidates
+  for (const candidate of candidateUrls(url)) {
+    try {
+      assertSafeUrl(candidate);
+      const probe = await fetch(candidate, { signal: AbortSignal.timeout(5_000), headers });
+      if (!probe.ok) continue;
+      const ct = probe.headers.get('content-type') || '';
+      if (!ct.includes('json') && !ct.includes('yaml')) continue;
+      const body = await probe.json().catch(() => null);
+      if (body && (body.openapi || body.swagger)) return candidate;
+    } catch { /* try next */ }
+  }
+
+  throw new Error(
+    'Não foi possível encontrar o spec JSON/YAML. ' +
+    'Informe diretamente a URL do arquivo swagger.json ou openapi.json.'
+  );
+}
+
+/**
  * Fetch and parse a Swagger/OpenAPI URL.
  * Returns: { fields: string[], rawSchema: object }
  * Throws on invalid URL, SSRF-risk address, network error, or non-OpenAPI response.
@@ -66,15 +216,7 @@ function extractFields(schema, prefix = '') {
 async function fetchAndParseSwagger(url, opts = {}) {
   assertSafeUrl(url);
 
-  const headers = {};
-  if (opts.authType === 'bearer' && opts.authValue) {
-    headers['Authorization'] = `Bearer ${opts.authValue}`;
-  } else if (opts.authType === 'basic' && opts.authValue) {
-    headers['Authorization'] = `Basic ${Buffer.from(opts.authValue).toString('base64')}`;
-  } else if (opts.authType === 'api_key' && opts.authValue) {
-    headers['X-API-Key'] = opts.authValue;
-  }
-
+  const headers = buildAuthHeaders(opts);
   const res = await fetch(url, { signal: AbortSignal.timeout(10_000), headers });
   if (!res.ok) throw new Error(`Failed to fetch swagger: ${res.status} ${res.statusText}`);
 
@@ -137,4 +279,4 @@ function resolveFieldMap(fieldMap, payload) {
   return result;
 }
 
-module.exports = { assertSafeUrl, fetchAndParseSwagger, resolveFieldMap };
+module.exports = { assertSafeUrl, discoverSpecUrl, fetchAndParseSwagger, resolveFieldMap };

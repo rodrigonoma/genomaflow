@@ -7,7 +7,7 @@ const https = require('https');
 const http = require('http');
 const { Queue } = require('bullmq');
 const { withTenant } = require('../db/tenant');
-const { assertSafeUrl, fetchAndParseSwagger, resolveFieldMap } = require('../services/swagger-parser');
+const { assertSafeUrl, discoverSpecUrl, fetchAndParseSwagger, resolveFieldMap } = require('../services/swagger-parser');
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || '/tmp/uploads';
 const DOWNLOAD_TIMEOUT_MS = 30_000;
@@ -129,6 +129,20 @@ module.exports = async function (fastify) {
     try {
       const { fields } = await fetchAndParseSwagger(url, { authType: auth_type, authValue: auth_value });
       return { fields };
+    } catch (err) {
+      return reply.status(422).send({ error: err.message });
+    }
+  });
+
+  // Discover the JSON spec URL from a Swagger UI page or any URL
+  fastify.post('/swagger/discover', { preHandler: [fastify.authenticate, adminGuard] }, async (request, reply) => {
+    const { url, auth_type, auth_value } = request.body;
+    if (!url) return reply.status(400).send({ error: 'url is required' });
+    try {
+      const opts = { authType: auth_type, authValue: auth_value };
+      const specUrl = await discoverSpecUrl(url, opts);
+      const { fields } = await fetchAndParseSwagger(specUrl, opts);
+      return { spec_url: specUrl, fields };
     } catch (err) {
       return reply.status(422).send({ error: err.message });
     }
