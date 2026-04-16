@@ -44,3 +44,31 @@ export interface JwtPayload {
   tenant_id: string;
   role: 'doctor' | 'lab_tech' | 'admin';
 }
+
+export interface Connector {
+  id: string;
+  name: string;
+  mode: 'swagger' | 'hl7' | 'file_drop';
+  field_map: Record<string, string>;
+  status: 'active' | 'inactive' | 'error';
+  last_sync_at: string | null;
+  sync_count: number;
+  error_msg: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConnectorLog {
+  id: string;
+  event_type: 'ingest' | 'test' | 'error';
+  status: 'success' | 'error';
+  records_in: number;
+  records_out: number;
+  error_detail: string | null;
+  duration_ms: number;
+  created_at: string;
+}
+
+export interface SwaggerParseResult {
+  fields: string[];
+}
