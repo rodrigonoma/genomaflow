@@ -15,9 +15,20 @@ const rootRedirectGuard = () => {
   return router.createUrlTree(['/clinic/dashboard']);
 };
 
+const loginGuard = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  const user = auth.currentUser;
+  if (!user) return true;
+  if (user.role === 'doctor') return router.createUrlTree(['/doctor/patients']);
+  if (user.role === 'lab_tech') return router.createUrlTree(['/lab/uploads']);
+  return router.createUrlTree(['/clinic/dashboard']);
+};
+
 export const routes: Routes = [
   {
     path: 'login',
+    canActivate: [loginGuard],
     loadComponent: () =>
       import('./features/auth/login.component').then(m => m.LoginComponent)
   },
@@ -38,6 +49,12 @@ export const routes: Routes = [
     canActivate: [authGuard, roleGuard('admin')],
     loadChildren: () =>
       import('./features/clinic/clinic.routes').then(m => m.CLINIC_ROUTES)
+  },
+  {
+    path: 'results/:examId',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/doctor/results/result-panel.component').then(m => m.ResultPanelComponent)
   },
   { path: '', canActivate: [rootRedirectGuard], children: [] },
   { path: '**', redirectTo: 'login' }

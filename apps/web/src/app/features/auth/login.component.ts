@@ -1,6 +1,5 @@
 import { Component, inject } from '@angular/core';
 import { FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -10,11 +9,7 @@ import { MatIconModule } from '@angular/material/icon';
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [
-    ReactiveFormsModule,
-    MatFormFieldModule, MatInputModule,
-    MatButtonModule, MatIconModule
-  ],
+  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule],
   styles: [`
     :host {
       display: flex; align-items: center; justify-content: center;
@@ -96,12 +91,11 @@ import { MatIconModule } from '@angular/material/icon';
 })
 export class LoginComponent {
   private auth = inject(AuthService);
-  private router = inject(Router);
   private fb = inject(FormBuilder);
 
   form = this.fb.group({
     email: ['', [Validators.required, Validators.email]],
-    password: ['', [Validators.required, Validators.minLength(6)]]
+    password: ['', Validators.required]
   });
 
   error = '';
@@ -110,16 +104,12 @@ export class LoginComponent {
 
   submit(): void {
     if (this.form.invalid) return;
-
     this.error = '';
     this.loading = true;
     const { email, password } = this.form.value;
-
+    // AuthService.login() already navigates to the correct role page internally
     this.auth.login(email!, password!).subscribe({
-      next: () => {
-        this.loading = false;
-        this.router.navigate(['/dashboard']);
-      },
+      next: () => { this.loading = false; },
       error: () => {
         this.loading = false;
         this.error = 'E-mail ou senha inválidos.';

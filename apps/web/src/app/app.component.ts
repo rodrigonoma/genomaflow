@@ -62,8 +62,8 @@ import { AuthService } from './core/auth/auth.service';
     }
     .nav-item:hover { background: #131b2e; color: #dae2fd; }
     .nav-item.active { background: #171f33; color: #c0c1ff; border-left-color: #494bd6; }
-    .nav-item mat-icon { font-size: 18px; width: 18px; height: 18px; opacity: 0.7; }
-    .nav-item.active mat-icon { opacity: 1; }
+    ::ng-deep .nav-item .mat-icon { font-size: 18px !important; width: 18px !important; height: 18px !important; opacity: 0.7; }
+    ::ng-deep .nav-item.active .mat-icon { opacity: 1; }
 
     .sidebar-footer {
       padding: 1rem 1.5rem;
