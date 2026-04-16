@@ -11,8 +11,14 @@ function assertSafeUrl(raw) {
   if (!['https:', 'http:'].includes(parsed.protocol))
     throw new Error('Only http/https URLs are permitted');
   const host = parsed.hostname;
-  if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host))
+  if (
+    /^(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host) ||
+    host === '0.0.0.0' ||
+    host === '[::1]' ||
+    host === '::1'
+  ) {
     throw new Error('Private/loopback addresses are not permitted');
+  }
 }
 
 /**
@@ -24,13 +30,13 @@ function assertSafeUrl(raw) {
  */
 function extractFields(schema, prefix = '') {
   const fields = [];
-  if (!schema || schema.type !== 'object' || !schema.properties) {
+  if (!schema || !schema.properties) {
     if (prefix) fields.push(prefix);
     return fields;
   }
   for (const [key, val] of Object.entries(schema.properties)) {
     const path = prefix ? `${prefix}.${key}` : key;
-    if (val.type === 'object' && val.properties) {
+    if (val.properties) {
       fields.push(...extractFields(val, path));
     } else if (val.type === 'array' && val.items) {
       fields.push(...extractFields(val.items, path));
@@ -90,6 +96,7 @@ async function fetchAndParseSwagger(url) {
  * Supports dot notation and array-index notation (e.g. "$.results[0].name").
  */
 function resolveFieldMap(fieldMap, payload) {
+  if (!fieldMap || typeof fieldMap !== 'object') return {};
   const result = {};
   for (const [target, sourcePath] of Object.entries(fieldMap)) {
     if (!sourcePath) { result[target] = null; continue; }

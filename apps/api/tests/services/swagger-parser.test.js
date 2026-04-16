@@ -61,4 +61,26 @@ describe('fetchAndParseSwagger — URL validation (no network)', () => {
   it('throws on 10.x address', async () => {
     await expect(fetchAndParseSwagger('http://10.0.0.1/spec.json')).rejects.toThrow('Private/loopback');
   });
+
+  it('throws on 169.254.x.x (cloud metadata)', async () => {
+    await expect(fetchAndParseSwagger('http://169.254.169.254/latest/meta-data/')).rejects.toThrow('Private/loopback');
+  });
+
+  it('throws on IPv6 loopback [::1]', async () => {
+    await expect(fetchAndParseSwagger('http://[::1]/spec.json')).rejects.toThrow('Private/loopback');
+  });
+
+  it('throws on 0.0.0.0', async () => {
+    await expect(fetchAndParseSwagger('http://0.0.0.0/spec.json')).rejects.toThrow('Private/loopback');
+  });
+});
+
+describe('resolveFieldMap — null safety', () => {
+  it('returns empty object for null fieldMap', () => {
+    expect(resolveFieldMap(null, { foo: 1 })).toEqual({});
+  });
+
+  it('returns empty object for undefined fieldMap', () => {
+    expect(resolveFieldMap(undefined, {})).toEqual({});
+  });
 });
