@@ -30,7 +30,7 @@ CREATE TRIGGER trg_integration_connectors_updated_at
 CREATE TABLE integration_logs (
   id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   connector_id   UUID NOT NULL REFERENCES integration_connectors(id) ON DELETE CASCADE,
-  tenant_id      UUID NOT NULL,
+  tenant_id      UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   event_type     TEXT NOT NULL CHECK (event_type IN ('ingest', 'test', 'error')),
   status         TEXT NOT NULL CHECK (status IN ('success', 'error')),
   records_in     INTEGER DEFAULT 0,
@@ -41,6 +41,7 @@ CREATE TABLE integration_logs (
 );
 
 CREATE INDEX idx_integration_logs_connector ON integration_logs(connector_id);
+CREATE INDEX idx_integration_logs_tenant ON integration_logs(tenant_id);
 
 -- RLS
 ALTER TABLE integration_connectors ENABLE ROW LEVEL SECURITY;
@@ -62,3 +63,6 @@ CREATE POLICY tenant_isolation ON integration_logs
   FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
 CREATE POLICY tenant_isolation_write ON integration_logs
   FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+-- integration_logs is primarily append-only; DELETE allowed for tenant-scoped cleanup
+CREATE POLICY tenant_isolation_delete ON integration_logs
+  FOR DELETE USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
