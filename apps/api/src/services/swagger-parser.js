@@ -59,11 +59,23 @@ function extractFields(schema, prefix = '') {
  * Fetch and parse a Swagger/OpenAPI URL.
  * Returns: { fields: string[], rawSchema: object }
  * Throws on invalid URL, SSRF-risk address, network error, or non-OpenAPI response.
+ *
+ * @param {string} url
+ * @param {{ authType?: string, authValue?: string }} [opts]
  */
-async function fetchAndParseSwagger(url) {
+async function fetchAndParseSwagger(url, opts = {}) {
   assertSafeUrl(url);
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  const headers = {};
+  if (opts.authType === 'bearer' && opts.authValue) {
+    headers['Authorization'] = `Bearer ${opts.authValue}`;
+  } else if (opts.authType === 'basic' && opts.authValue) {
+    headers['Authorization'] = `Basic ${Buffer.from(opts.authValue).toString('base64')}`;
+  } else if (opts.authType === 'api_key' && opts.authValue) {
+    headers['X-API-Key'] = opts.authValue;
+  }
+
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000), headers });
   if (!res.ok) throw new Error(`Failed to fetch swagger: ${res.status} ${res.statusText}`);
 
   let spec;

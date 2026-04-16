@@ -124,10 +124,10 @@ module.exports = async function (fastify) {
   // ----- Swagger parse -----
 
   fastify.post('/swagger/parse', { preHandler: [fastify.authenticate, adminGuard] }, async (request, reply) => {
-    const { url } = request.body;
+    const { url, auth_type, auth_value } = request.body;
     if (!url) return reply.status(400).send({ error: 'url is required' });
     try {
-      const { fields } = await fetchAndParseSwagger(url);
+      const { fields } = await fetchAndParseSwagger(url, { authType: auth_type, authValue: auth_value });
       return { fields };
     } catch (err) {
       return reply.status(422).send({ error: err.message });
@@ -250,7 +250,10 @@ module.exports = async function (fastify) {
       if (connector.mode === 'swagger') {
         const { swagger_url } = connector.config;
         if (!swagger_url) return reply.status(422).send({ error: 'swagger_url not configured' });
-        const { fields } = await fetchAndParseSwagger(swagger_url);
+        const { fields } = await fetchAndParseSwagger(swagger_url, {
+          authType: connector.config.auth_type,
+          authValue: connector.config.auth_value
+        });
         const duration_ms = Date.now() - start;
         await withTenant(fastify.pg, tenant_id, async (client) => {
           await client.query(

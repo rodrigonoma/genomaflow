@@ -421,10 +421,15 @@ export class WizardComponent {
   cancel(): void { this.router.navigate(['/clinic/integrations']); }
 
   parseSwagger(): void {
-    const url = this.connectionForm.value.swagger_url!;
+    const { swagger_url, auth_type, auth_value } = this.connectionForm.value;
     this.parsing = true;
     this.parseError = '';
-    this.http.post<SwaggerParseResult>(`${environment.apiUrl}/integrations/swagger/parse`, { url })
+    const body: Record<string, string> = { url: swagger_url! };
+    if (auth_type && auth_type !== 'none') {
+      body['auth_type'] = auth_type;
+      body['auth_value'] = auth_value ?? '';
+    }
+    this.http.post<SwaggerParseResult>(`${environment.apiUrl}/integrations/swagger/parse`, body)
       .subscribe({
         next: r => {
           this.parsing = false;
