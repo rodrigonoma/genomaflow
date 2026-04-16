@@ -63,9 +63,14 @@ module.exports = async function (fastify) {
     const chunks = [];
     payload.on('data', chunk => chunks.push(chunk));
     payload.on('end', () => {
-      request.rawBody = Buffer.concat(chunks).toString('utf8');
+      const { Readable } = require('stream');
+      const buf = Buffer.concat(chunks);
+      request.rawBody = buf.toString('utf8');
+      const newPayload = Readable.from(buf);
+      newPayload.headers = payload.headers;
+      done(null, newPayload);
     });
-    done(null, payload);
+    payload.on('error', done);
   });
 
   // ----- Swagger parse -----
