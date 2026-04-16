@@ -56,7 +56,7 @@ const RESULTADOS = [
     data_coleta: '2024-11-10',
     data_resultado: '2024-11-25',
     status: 'concluido',
-    url_laudo_pdf: 'https://www.w3.org/WAI/WCAG21/Techniques/pdf/PDF1.pdf',
+    url_laudo_pdf: 'https://pdfobject.com/pdf/sample.pdf',
     laboratorio: 'Lab GenSeq',
     medico_solicitante: 'Dr. Fernando Costa',
     observacoes: 'Variante BRCA1 detectada — risco aumentado para câncer de mama'
@@ -71,7 +71,7 @@ const RESULTADOS = [
     data_coleta: '2024-12-01',
     data_resultado: '2024-12-15',
     status: 'concluido',
-    url_laudo_pdf: 'https://www.w3.org/WAI/WCAG21/Techniques/pdf/PDF1.pdf',
+    url_laudo_pdf: 'https://pdfobject.com/pdf/sample.pdf',
     laboratorio: 'Lab GenSeq',
     medico_solicitante: 'Dra. Camila Rocha',
     observacoes: 'Sem alterações clinicamente significativas identificadas'
@@ -86,7 +86,7 @@ const RESULTADOS = [
     data_coleta: '2024-12-10',
     data_resultado: '2024-12-20',
     status: 'concluido',
-    url_laudo_pdf: 'https://www.w3.org/WAI/WCAG21/Techniques/pdf/PDF1.pdf',
+    url_laudo_pdf: 'https://pdfobject.com/pdf/sample.pdf',
     laboratorio: 'Lab GenSeq',
     medico_solicitante: 'Dr. Fernando Costa',
     observacoes: 'Metabolizador lento CYP2C19 — ajuste de dose de clopidogrel recomendado'

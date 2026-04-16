@@ -17,15 +17,25 @@ const EXTERNAL_ID_SAFE = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
  * Download a file from URL and save to dest path.
- * Validates URL is safe (SSRF), rejects non-2xx responses,
- * enforces a size cap, and times out after DOWNLOAD_TIMEOUT_MS.
+ * Validates URL is safe (SSRF), follows up to 5 redirects,
+ * rejects non-2xx final responses, enforces a size cap.
  */
-function downloadFile(url, dest) {
-  assertSafeUrl(url); // SSRF guard — throws on private/loopback addresses
+function downloadFile(url, dest, _redirects = 0) {
+  assertSafeUrl(url); // SSRF guard — re-validated on every redirect hop
+  if (_redirects > 5) return Promise.reject(new Error('Too many redirects'));
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https') ? https : http;
     const file = fs.createWriteStream(dest);
     const req = protocol.get(url, res => {
+      // Follow 3xx redirects
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        file.destroy();
+        fs.unlink(dest, () => {});
+        const next = new URL(res.headers.location, url).href;
+        resolve(downloadFile(next, dest, _redirects + 1));
+        return;
+      }
       if (res.statusCode < 200 || res.statusCode >= 300) {
         res.resume();
         file.destroy();

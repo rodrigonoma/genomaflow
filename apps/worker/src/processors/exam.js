@@ -30,7 +30,7 @@ async function processExam({ exam_id, tenant_id, file_path }) {
 
   try {
     await client.query('BEGIN');
-    await client.query('SET LOCAL app.tenant_id = $1', [tenant_id]);
+    await client.query('SELECT set_config($1, $2, true)', ['app.tenant_id', tenant_id]);
 
     await client.query(
       `UPDATE exams SET status = 'processing', updated_at = NOW() WHERE id = $1`,
@@ -45,6 +45,7 @@ async function processExam({ exam_id, tenant_id, file_path }) {
     );
     const patient = rows[0];
 
+    if (!file_path) throw new Error('exam has no file_path — PDF download may have failed during ingest');
     const buffer = fs.readFileSync(file_path);
     const rawText = await extractText(buffer);
     // Scrub PII from the raw PDF text before it leaves the system (LGPD)
@@ -105,7 +106,7 @@ async function processExam({ exam_id, tenant_id, file_path }) {
     const errorClient = await pool.connect();
     try {
       await errorClient.query('BEGIN');
-      await errorClient.query('SET LOCAL app.tenant_id = $1', [tenant_id]);
+      await errorClient.query('SELECT set_config($1, $2, true)', ['app.tenant_id', tenant_id]);
       await errorClient.query(
         `UPDATE exams SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
         [processingError.message, exam_id]
