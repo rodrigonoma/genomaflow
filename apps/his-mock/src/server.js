@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const fastify = require('fastify')({ logger: false });
 
 // ---------------------------------------------------------------------------
@@ -56,7 +58,7 @@ const RESULTADOS = [
     data_coleta: '2024-11-10',
     data_resultado: '2024-11-25',
     status: 'concluido',
-    url_laudo_pdf: 'https://pdfobject.com/pdf/sample.pdf',
+    url_laudo_pdf: 'http://his-mock:3001/laudos/001098944.pdf',
     laboratorio: 'Lab GenSeq',
     medico_solicitante: 'Dr. Fernando Costa',
     observacoes: 'Variante BRCA1 detectada — risco aumentado para câncer de mama'
@@ -332,6 +334,21 @@ fastify.register(async function routes(f) {
       }
     };
   });
+});
+
+// ---------------------------------------------------------------------------
+// Laudos (PDFs estáticos)
+// ---------------------------------------------------------------------------
+
+fastify.get('/laudos/:filename', { schema: { hide: true } }, async (request, reply) => {
+  // Laudos são servidos sem auth (URLs de laudo são tipicamente pre-signed ou de acesso direto)
+  const safe = path.basename(request.params.filename);
+  const filePath = path.join(__dirname, '../laudos', safe);
+  if (!fs.existsSync(filePath)) return reply.status(404).send({ error: 'Laudo não encontrado' });
+  const stream = fs.createReadStream(filePath);
+  reply.header('Content-Type', 'application/pdf');
+  reply.header('Content-Disposition', `inline; filename="${safe}"`);
+  return reply.send(stream);
 });
 
 // ---------------------------------------------------------------------------

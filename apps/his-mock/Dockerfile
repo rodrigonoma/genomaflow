@@ -3,5 +3,6 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --production
 COPY src ./src
+COPY laudos ./laudos
 EXPOSE 3001
 CMD ["node", "src/server.js"]
