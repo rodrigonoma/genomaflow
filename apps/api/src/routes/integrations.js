@@ -10,31 +10,44 @@ const { withTenant } = require('../db/tenant');
 const { fetchAndParseSwagger, resolveFieldMap } = require('../services/swagger-parser');
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || '/tmp/uploads';
+const DOWNLOAD_TIMEOUT_MS = 30_000;
 
-/** Download a file from URL and save to dest path. Returns promise. */
+/**
+ * Download a file from URL and save to dest path.
+ * Times out after DOWNLOAD_TIMEOUT_MS milliseconds.
+ */
 function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https') ? https : http;
     const file = fs.createWriteStream(dest);
-    protocol.get(url, res => {
+    const req = protocol.get(url, res => {
       res.pipe(file);
       file.on('finish', () => file.close(resolve));
-    }).on('error', err => {
+    });
+    req.setTimeout(DOWNLOAD_TIMEOUT_MS, () => {
+      req.destroy();
+      fs.unlink(dest, () => {});
+      reject(new Error('File download timed out'));
+    });
+    req.on('error', err => {
       fs.unlink(dest, () => {});
       reject(err);
     });
   });
 }
 
-/** Verify HMAC-SHA256 webhook signature. */
-function verifySignature(secret, body, header) {
+/** Verify HMAC-SHA256 webhook signature over raw body bytes. */
+function verifySignature(secret, rawBody, header) {
   if (!header) return false;
   const expected = 'sha256=' + crypto
     .createHmac('sha256', secret)
-    .update(typeof body === 'string' ? body : JSON.stringify(body))
+    .update(rawBody)
     .digest('hex');
   try {
-    return crypto.timingSafeEqual(Buffer.from(header), Buffer.from(expected));
+    return crypto.timingSafeEqual(
+      Buffer.from(header),
+      Buffer.from(expected)
+    );
   } catch {
     return false;
   }
@@ -42,6 +55,18 @@ function verifySignature(secret, body, header) {
 
 module.exports = async function (fastify) {
   const examQueue = new Queue('exam-processing', { connection: fastify.redis });
+
+  // Capture raw body for ingest HMAC verification.
+  // We use addHook at the plugin level; rawBody is only populated when the
+  // content-type is application/json (the only type the ingest endpoint accepts).
+  fastify.addHook('preParsing', (request, reply, payload, done) => {
+    const chunks = [];
+    payload.on('data', chunk => chunks.push(chunk));
+    payload.on('end', () => {
+      request.rawBody = Buffer.concat(chunks).toString('utf8');
+    });
+    done(null, payload);
+  });
 
   // ----- Swagger parse -----
 
@@ -115,18 +140,26 @@ module.exports = async function (fastify) {
     const { id } = request.params;
     const { name, config, field_map, status } = request.body;
 
+    if (status !== undefined && !['active', 'inactive', 'error'].includes(status))
+      return reply.status(400).send({ error: 'status must be active, inactive, or error' });
+
     const connector = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
         `UPDATE integration_connectors
-         SET name = COALESCE($2, name),
-             config = COALESCE($3::jsonb, config),
+         SET name      = COALESCE($2, name),
+             config    = COALESCE($3::jsonb, config),
              field_map = COALESCE($4::jsonb, field_map),
-             status = COALESCE($5, status),
+             status    = COALESCE($5, status),
              updated_at = NOW()
          WHERE id = $1
          RETURNING id, name, mode, field_map, status, last_sync_at, sync_count, error_msg, updated_at`,
-        [id, name || null, config ? JSON.stringify(config) : null,
-         field_map ? JSON.stringify(field_map) : null, status || null]
+        [
+          id,
+          name !== undefined ? name : null,
+          config !== undefined ? JSON.stringify(config) : null,
+          field_map !== undefined ? JSON.stringify(field_map) : null,
+          status !== undefined ? status : null
+        ]
       );
       return rows[0] || null;
     });
@@ -179,7 +212,7 @@ module.exports = async function (fastify) {
       await withTenant(fastify.pg, tenant_id, async (client) => {
         await client.query(
           `INSERT INTO integration_logs (connector_id, tenant_id, event_type, status, error_detail, duration_ms)
-           VALUES ($1, $2, 'error', 'error', $3, $4)`,
+           VALUES ($1, $2, 'test', 'error', $3, $4)`,
           [id, tenant_id, err.message, duration_ms]
         );
       });
@@ -194,27 +227,27 @@ module.exports = async function (fastify) {
     const { id } = request.params;
     const limit = Math.min(Number(request.query.limit) || 50, 200);
 
-    // First verify connector exists and belongs to tenant
-    const connector = await withTenant(fastify.pg, tenant_id, async (client) => {
+    const result = await withTenant(fastify.pg, tenant_id, async (client) => {
+      // Verify connector exists and fetch logs in one round-trip
       const { rows } = await client.query(
-        `SELECT id FROM integration_connectors WHERE id = $1`, [id]
-      );
-      return rows[0] || null;
-    });
-    if (!connector) return reply.status(404).send({ error: 'Connector not found' });
-
-    const logs = await withTenant(fastify.pg, tenant_id, async (client) => {
-      const { rows } = await client.query(
-        `SELECT id, event_type, status, records_in, records_out, error_detail, duration_ms, created_at
-         FROM integration_logs
-         WHERE connector_id = $1
-         ORDER BY created_at DESC
+        `SELECT l.id, l.event_type, l.status, l.records_in, l.records_out,
+                l.error_detail, l.duration_ms, l.created_at
+         FROM integration_connectors c
+         JOIN integration_logs l ON l.connector_id = c.id
+         WHERE c.id = $1
+         ORDER BY l.created_at DESC
          LIMIT $2`,
         [id, limit]
       );
-      return rows;
+      // If no logs but connector doesn't exist, we need to check separately
+      const { rows: connRows } = await client.query(
+        `SELECT id FROM integration_connectors WHERE id = $1`, [id]
+      );
+      return { logs: rows, exists: connRows.length > 0 };
     });
-    return logs;
+
+    if (!result.exists) return reply.status(404).send({ error: 'Connector not found' });
+    return result.logs;
   });
 
   // ----- Webhook inbound (no JWT — HMAC only) -----
@@ -239,20 +272,35 @@ module.exports = async function (fastify) {
     if (connector.status !== 'active') return reply.status(403).send({ error: 'Connector is not active' });
     if (connector.mode !== 'swagger') return reply.status(400).send({ error: 'Ingest only supported for swagger mode' });
 
-    // Verify HMAC
+    // Verify HMAC over raw request body bytes
     const sig = request.headers['x-genomaflow-signature'];
-    if (!verifySignature(connector.config.webhook_secret, request.body, sig)) {
+    const rawBody = request.rawBody ?? '';
+    if (!verifySignature(connector.config.webhook_secret, rawBody, sig)) {
       return reply.status(401).send({ error: 'Invalid signature' });
     }
 
     const start = Date.now();
     const { tenant_id, field_map } = connector;
     const payload = request.body;
+    const mapped = resolveFieldMap(field_map, payload);
+
+    // Download file BEFORE opening the DB transaction (avoids holding connection during I/O)
+    let filePath = null;
+    const fileUrl = mapped['exam.file_url'];
+    if (fileUrl) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+      const filename = `integration-${Date.now()}-${mapped['exam.external_id'] || id}.pdf`;
+      filePath = path.join(UPLOADS_DIR, filename);
+      try {
+        await downloadFile(fileUrl, filePath);
+      } catch (err) {
+        filePath = null; // Continue without file; worker will handle missing file
+        fastify.log.warn({ err, connector_id: id }, 'Failed to download exam file');
+      }
+    }
 
     try {
-      const mapped = resolveFieldMap(field_map, payload);
       let examId;
-
       await withTenant(fastify.pg, tenant_id, async (client) => {
         // Find admin user for uploaded_by
         const { rows: adminRows } = await client.query(
@@ -277,16 +325,6 @@ module.exports = async function (fastify) {
           patientId = created[0].id;
         }
 
-        // Download file if file_url provided
-        let filePath = null;
-        const fileUrl = mapped['exam.file_url'];
-        if (fileUrl) {
-          fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-          const filename = `integration-${Date.now()}-${mapped['exam.external_id'] || id}.pdf`;
-          filePath = path.join(UPLOADS_DIR, filename);
-          await downloadFile(fileUrl, filePath);
-        }
-
         const { rows: examRows } = await client.query(
           `INSERT INTO exams (tenant_id, patient_id, uploaded_by, file_path, raw_data, status, source)
            VALUES ($1, $2, $3, $4, $5, 'pending', 'integration')
@@ -294,6 +332,9 @@ module.exports = async function (fastify) {
           [tenant_id, patientId, uploadedBy, filePath, JSON.stringify(payload)]
         );
         examId = examRows[0].id;
+
+        // Enqueue inside the transaction so exam is processed even if server crashes after commit
+        await examQueue.add('process-exam', { exam_id: examId, tenant_id, file_path: filePath });
 
         await client.query(
           `INSERT INTO integration_logs (connector_id, tenant_id, event_type, status, records_in, records_out, duration_ms)
@@ -307,8 +348,6 @@ module.exports = async function (fastify) {
         );
       });
 
-      await examQueue.add('process-exam', { exam_id: examId, tenant_id, file_path: null });
-
       return reply.status(202).send({ ok: true });
     } catch (err) {
       fastify.log.error(err);
@@ -316,7 +355,7 @@ module.exports = async function (fastify) {
       try {
         await errClient.query(
           `INSERT INTO integration_logs (connector_id, tenant_id, event_type, status, error_detail, duration_ms)
-           VALUES ($1, $2, 'error', 'error', $3, $4)`,
+           VALUES ($1, $2, 'ingest', 'error', $3, $4)`,
           [id, tenant_id, err.message, Date.now() - start]
         );
       } finally {
