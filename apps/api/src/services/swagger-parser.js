@@ -125,4 +125,4 @@ function resolveFieldMap(fieldMap, payload) {
   return result;
 }
 
-module.exports = { fetchAndParseSwagger, resolveFieldMap };
+module.exports = { assertSafeUrl, fetchAndParseSwagger, resolveFieldMap };
