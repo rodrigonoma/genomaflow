@@ -16,57 +16,194 @@ interface AlertItem { marker: string; value: string; severity: any; exam_id: str
   standalone: true,
   imports: [DatePipe, KeyValuePipe, RouterModule, MatCardModule, MatListModule, MatProgressBarModule, AlertBadgeComponent],
   template: `
-    <div class="page-container">
-      <h1 class="text-2xl font-semibold mb-6">Dashboard</h1>
-
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <mat-card class="p-4 text-center">
-          <div class="text-3xl font-bold text-blue-600">{{ counts.total }}</div>
-          <div class="text-sm text-gray-600">Total de exames</div>
-        </mat-card>
-        <mat-card class="p-4 text-center">
-          <div class="text-3xl font-bold text-green-600">{{ counts.done }}</div>
-          <div class="text-sm text-gray-600">Concluídos</div>
-        </mat-card>
-        <mat-card class="p-4 text-center">
-          <div class="text-3xl font-bold text-yellow-600">{{ counts.processing }}</div>
-          <div class="text-sm text-gray-600">Processando</div>
-        </mat-card>
-        <mat-card class="p-4 text-center">
-          <div class="text-3xl font-bold text-red-600">{{ counts.error }}</div>
-          <div class="text-sm text-gray-600">Com erro</div>
-        </mat-card>
+    <div class="dashboard-page">
+      <div class="page-header">
+        <h1 class="page-title">Dashboard</h1>
+        <span class="page-subtitle">VISÃO GERAL DA CLÍNICA</span>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <mat-card class="p-4">
-          <h2 class="font-medium mb-3">Alertas críticos recentes</h2>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <span class="metric-value">{{ counts.total }}</span>
+          <span class="metric-label">TOTAL DE EXAMES</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value metric-done">{{ counts.done }}</span>
+          <span class="metric-label">CONCLUÍDOS</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value metric-processing">{{ counts.processing }}</span>
+          <span class="metric-label">PROCESSANDO</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value metric-error">{{ counts.error }}</span>
+          <span class="metric-label">COM ERRO</span>
+        </div>
+      </div>
+
+      <div class="panels-grid">
+        <div class="panel-card">
+          <h2 class="panel-title">Alertas Críticos Recentes</h2>
           @for (a of criticalAlerts; track a.marker) {
-            <div class="flex items-center gap-2 mb-2">
+            <div class="alert-row">
               <app-alert-badge [severity]="a.severity" />
-              <span class="text-sm">{{ a.marker }}: {{ a.value }}</span>
+              <span class="alert-text">{{ a.marker }}: {{ a.value }}</span>
             </div>
           }
           @if (!criticalAlerts.length) {
-            <p class="text-gray-500 text-sm">Nenhum alerta crítico.</p>
+            <p class="empty-panel">Nenhum alerta crítico.</p>
           }
-        </mat-card>
+        </div>
 
-        <mat-card class="p-4">
-          <h2 class="font-medium mb-3">Agentes mais utilizados</h2>
+        <div class="panel-card">
+          <h2 class="panel-title">Agentes Mais Utilizados</h2>
           @for (entry of agentCounts | keyvalue; track entry.key) {
-            <div class="mb-2">
-              <div class="flex justify-between text-sm mb-1">
-                <span class="capitalize">{{ entry.key }}</span>
-                <span>{{ entry.value }}</span>
+            <div class="agent-row">
+              <div class="agent-info">
+                <span class="agent-name">{{ entry.key }}</span>
+                <span class="agent-count">{{ entry.value }}</span>
               </div>
               <mat-progress-bar [value]="counts.done > 0 ? (entry.value / counts.done) * 100 : 0" />
             </div>
           }
-        </mat-card>
+          @if (!(agentCounts | keyvalue).length) {
+            <p class="empty-panel">Nenhum dado disponível.</p>
+          }
+        </div>
       </div>
     </div>
-  `
+  `,
+  styles: [`
+    :host {
+      display: block;
+      background: #0b1326;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .page-header {
+      margin-bottom: 2rem;
+    }
+
+    .page-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 1.5rem;
+      color: #dae2fd;
+      margin: 0 0 0.25rem 0;
+    }
+
+    .page-subtitle {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      color: #464554;
+      letter-spacing: 0.08em;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .metric-card {
+      background: #131b2e;
+      border: 1px solid rgba(70, 69, 84, 0.15);
+      border-radius: 8px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      transition: border-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .metric-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 1.875rem;
+      color: #c0c1ff;
+    }
+
+    .metric-value.metric-done { color: #10b981; }
+    .metric-value.metric-processing { color: #c0c1ff; }
+    .metric-value.metric-error { color: #ffb4ab; }
+
+    .metric-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      color: #908fa0;
+      letter-spacing: 0.06em;
+      text-align: center;
+    }
+
+    .panels-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.5rem;
+    }
+
+    .panel-card {
+      background: #131b2e;
+      border: 1px solid rgba(70, 69, 84, 0.15);
+      border-radius: 8px;
+      padding: 1.5rem;
+    }
+
+    .panel-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 1rem;
+      color: #dae2fd;
+      margin: 0 0 1rem 0;
+    }
+
+    .alert-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .alert-text {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      color: #c7c4d7;
+    }
+
+    .agent-row {
+      margin-bottom: 0.75rem;
+    }
+
+    .agent-info {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.25rem;
+    }
+
+    .agent-name {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      color: #c7c4d7;
+      text-transform: capitalize;
+    }
+
+    .agent-count {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #908fa0;
+    }
+
+    .empty-panel {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      color: #908fa0;
+      margin: 0;
+    }
+  `]
 })
 export class DashboardComponent implements OnInit {
   private http = inject(HttpClient);

@@ -70,12 +70,12 @@ import { MatIconModule } from '@angular/material/icon';
       <h2>Acesso ao sistema</h2>
 
       <form [formGroup]="form" (ngSubmit)="submit()">
-        <mat-form-field class="field" appearance="outlined">
+        <mat-form-field class="field" appearance="outline">
           <mat-label>E-mail</mat-label>
           <input matInput type="email" formControlName="email" autocomplete="email" />
         </mat-form-field>
 
-        <mat-form-field class="field" appearance="outlined">
+        <mat-form-field class="field" appearance="outline">
           <mat-label>Senha</mat-label>
           <input matInput [type]="showPass ? 'text' : 'password'" formControlName="password" autocomplete="current-password" />
           <button mat-icon-button matSuffix type="button" (click)="showPass = !showPass">

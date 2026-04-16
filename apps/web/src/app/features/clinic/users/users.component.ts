@@ -22,25 +22,28 @@ import { User } from '../../../shared/models/api.models';
     MatIconModule, MatTooltipModule
   ],
   template: `
-    <div class="page-container">
-      <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-semibold">Usuários</h1>
-        <button mat-flat-button color="primary" (click)="showInvite = true">Convidar usuário</button>
+    <div class="users-page">
+      <div class="page-header">
+        <h1 class="page-title">Usuários</h1>
+        <button class="primary-btn" (click)="showInvite = true">
+          <mat-icon>person_add</mat-icon>
+          Novo Usuário
+        </button>
       </div>
 
       @if (showInvite) {
-        <div class="bg-gray-50 border rounded p-4 mb-6">
-          <h3 class="font-medium mb-3">Novo usuário</h3>
-          <div class="flex gap-3 flex-wrap">
-            <mat-form-field>
+        <div class="invite-panel">
+          <h3 class="invite-title">Novo Usuário</h3>
+          <div class="invite-fields">
+            <mat-form-field appearance="outline">
               <mat-label>E-mail</mat-label>
               <input matInput [(ngModel)]="newEmail" type="email" />
             </mat-form-field>
-            <mat-form-field>
+            <mat-form-field appearance="outline">
               <mat-label>Senha inicial</mat-label>
               <input matInput [(ngModel)]="newPassword" type="password" />
             </mat-form-field>
-            <mat-form-field>
+            <mat-form-field appearance="outline">
               <mat-label>Role</mat-label>
               <mat-select [(ngModel)]="newRole">
                 <mat-option value="doctor">Médico</mat-option>
@@ -49,15 +52,17 @@ import { User } from '../../../shared/models/api.models';
               </mat-select>
             </mat-form-field>
           </div>
-          <div class="flex gap-2">
-            <button mat-flat-button color="primary" (click)="invite()">Criar</button>
-            <button mat-button (click)="showInvite = false">Cancelar</button>
+          <div class="invite-actions">
+            <button class="primary-btn small" (click)="invite()">Criar</button>
+            <button class="ghost-btn" (click)="showInvite = false">Cancelar</button>
           </div>
-          @if (inviteError) { <p class="text-red-600 text-sm mt-2">{{ inviteError }}</p> }
+          @if (inviteError) {
+            <p class="error-msg">{{ inviteError }}</p>
+          }
         </div>
       }
 
-      <table mat-table [dataSource]="users" class="w-full">
+      <table mat-table [dataSource]="users" class="users-table">
         <ng-container matColumnDef="email">
           <th mat-header-cell *matHeaderCellDef>E-mail</th>
           <td mat-cell *matCellDef="let u">{{ u.email }}</td>
@@ -65,23 +70,25 @@ import { User } from '../../../shared/models/api.models';
         <ng-container matColumnDef="role">
           <th mat-header-cell *matHeaderCellDef>Role</th>
           <td mat-cell *matCellDef="let u">
-            <span class="capitalize px-2 py-1 rounded text-xs font-medium"
-              [class]="u.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                       u.role === 'doctor' ? 'bg-blue-100 text-blue-800' :
-                       'bg-green-100 text-green-800'">
-              {{ u.role }}
-            </span>
+            @if (u.role === 'admin') {
+              <span class="role-badge role-admin">ADMIN</span>
+            } @else if (u.role === 'doctor') {
+              <span class="role-badge role-doctor">DOCTOR</span>
+            } @else {
+              <span class="role-badge role-lab">LAB TECH</span>
+            }
           </td>
         </ng-container>
         <ng-container matColumnDef="created_at">
           <th mat-header-cell *matHeaderCellDef>Criado em</th>
-          <td mat-cell *matCellDef="let u">{{ u.created_at | date:'dd/MM/yyyy' }}</td>
+          <td mat-cell *matCellDef="let u">
+            <span class="date-cell">{{ u.created_at | date:'dd/MM/yyyy' }}</span>
+          </td>
         </ng-container>
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let u">
-            <button mat-icon-button color="warn" (click)="remove(u)"
-              matTooltip="Remover">
+            <button mat-icon-button class="delete-btn" (click)="remove(u)" matTooltip="Remover">
               <mat-icon>delete</mat-icon>
             </button>
           </td>
@@ -90,7 +97,141 @@ import { User } from '../../../shared/models/api.models';
         <tr mat-row *matRowDef="let row; columns: columns;"></tr>
       </table>
     </div>
-  `
+  `,
+  styles: [`
+    :host {
+      display: block;
+      background: #0b1326;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 2rem;
+    }
+
+    .page-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 1.5rem;
+      color: #dae2fd;
+      margin: 0;
+    }
+
+    .primary-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1.25rem;
+      background: #c0c1ff;
+      color: #1000a9;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .primary-btn:hover { opacity: 0.9; }
+    .primary-btn.small { padding: 0.4rem 1rem; font-size: 0.8rem; }
+
+    .ghost-btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.4rem 1rem;
+      background: transparent;
+      color: #908fa0;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.875rem;
+      border: 1px solid rgba(70, 69, 84, 0.3);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .ghost-btn:hover { background: #222a3d; }
+
+    .invite-panel {
+      background: #131b2e;
+      border: 1px solid rgba(70, 69, 84, 0.15);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .invite-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 1rem;
+      color: #dae2fd;
+      margin: 0 0 1rem 0;
+    }
+
+    .invite-fields {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .invite-actions {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .error-msg {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      color: #ffb4ab;
+      margin: 0.75rem 0 0 0;
+    }
+
+    .users-table {
+      width: 100%;
+      background: transparent !important;
+    }
+
+    .role-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .role-admin {
+      background: rgba(192, 193, 255, 0.1);
+      color: #c0c1ff;
+    }
+
+    .role-doctor {
+      background: rgba(192, 193, 255, 0.08);
+      color: #b2b3f2;
+    }
+
+    .role-lab {
+      background: rgba(255, 183, 131, 0.1);
+      color: #ffb783;
+    }
+
+    .date-cell {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #908fa0;
+    }
+
+    .delete-btn {
+      color: #ffb4ab !important;
+    }
+  `]
 })
 export class UsersComponent implements OnInit {
   private http = inject(HttpClient);
