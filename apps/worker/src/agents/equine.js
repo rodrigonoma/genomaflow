@@ -44,7 +44,7 @@ async function runEquineAgent(ctx) {
     throw new Error(`[equine] Failed to parse Claude response: ${rawText.slice(0, 200)}`);
   }
   result.disclaimer = DISCLAIMER;
-  return result;
+  return { result, usage: response.usage };
 }
 
 module.exports = { runEquineAgent };

@@ -22,8 +22,8 @@ async function runCardiovascularAgent(ctx) {
   const guidelinesText = ctx.guidelines.map(g => `## ${g.title}\n${g.content}`).join('\n\n');
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
+    model: 'claude-opus-4-6',
+    max_tokens: 4096,
     system: SYSTEM_PROMPT,
     messages: [{
       role: 'user',
@@ -33,14 +33,17 @@ async function runCardiovascularAgent(ctx) {
 
   const rawText = response.content?.[0]?.text;
   if (!rawText) throw new Error(`[cardiovascular] Claude returned empty response`);
+  const start = rawText.indexOf('{');
+  const end = rawText.lastIndexOf('}');
+  const jsonText = start !== -1 && end !== -1 ? rawText.slice(start, end + 1) : rawText;
   let result;
   try {
-    result = JSON.parse(rawText);
+    result = JSON.parse(jsonText);
   } catch (err) {
     throw new Error(`[cardiovascular] Failed to parse Claude response: ${rawText.slice(0, 200)}`);
   }
   result.disclaimer = DISCLAIMER;
-  return result;
+  return { result, usage: response.usage };
 }
 
 module.exports = { runCardiovascularAgent };

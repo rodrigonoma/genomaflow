@@ -22,8 +22,8 @@ async function runMetabolicAgent(ctx) {
   const guidelinesText = ctx.guidelines.map(g => `## ${g.title}\n${g.content}`).join('\n\n');
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
+    model: 'claude-opus-4-6',
+    max_tokens: 4096,
     system: SYSTEM_PROMPT,
     messages: [{
       role: 'user',
@@ -33,14 +33,18 @@ async function runMetabolicAgent(ctx) {
 
   const rawText = response.content?.[0]?.text;
   if (!rawText) throw new Error(`[metabolic] Claude returned empty response`);
+  const start = rawText.indexOf('{');
+  const end = rawText.lastIndexOf('}');
+  const jsonText = start !== -1 && end !== -1 ? rawText.slice(start, end + 1) : rawText;
   let result;
   try {
-    result = JSON.parse(rawText);
+    result = JSON.parse(jsonText);
   } catch (err) {
+    console.error('[metabolic] jsonText (first 500):', JSON.stringify(jsonText.slice(0, 500)));
     throw new Error(`[metabolic] Failed to parse Claude response: ${rawText.slice(0, 200)}`);
   }
   result.disclaimer = DISCLAIMER;
-  return result;
+  return { result, usage: response.usage };
 }
 
 module.exports = { runMetabolicAgent };

@@ -21,5 +21,10 @@ export const CLINIC_ROUTES: Routes = [
     loadComponent: () =>
       import('./integrations/wizard/wizard.component').then(m => m.WizardComponent)
   },
+  {
+    path: 'billing',
+    loadComponent: () =>
+      import('./billing/billing.component').then(m => m.BillingComponent)
+  },
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' }
 ];

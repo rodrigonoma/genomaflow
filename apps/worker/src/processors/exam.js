@@ -37,12 +37,12 @@ const PHASE2_AGENTS = [
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-async function persistResult(client, examId, tenantId, agentType, result) {
+async function persistResult(client, examId, tenantId, agentType, result, usage) {
   await client.query(
     `INSERT INTO clinical_results
        (exam_id, tenant_id, agent_type, interpretation, risk_scores, alerts,
-        recommendations, disclaimer, model_version)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        recommendations, disclaimer, model_version, input_tokens, output_tokens)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
       examId, tenantId, agentType,
       result.interpretation,
@@ -50,9 +50,44 @@ async function persistResult(client, examId, tenantId, agentType, result) {
       JSON.stringify(result.alerts || []),
       JSON.stringify(result.recommendations || []),
       result.disclaimer,
-      'claude-opus-4-6'
+      'claude-opus-4-6',
+      usage?.input_tokens || 0,
+      usage?.output_tokens || 0
     ]
   );
+}
+
+async function getBalance(tenantId, pg) {
+  const res = await pg.query(
+    'SELECT COALESCE(balance, 0) AS balance FROM tenant_credit_balance WHERE tenant_id = $1',
+    [tenantId]
+  );
+  return Number(res.rows[0]?.balance ?? 0);
+}
+
+async function debitCredit(tenantId, examId, agentType, pg) {
+  await pg.query(
+    `INSERT INTO credit_ledger (tenant_id, amount, kind, exam_id, description)
+     VALUES ($1, -1, 'agent_usage', $2, $3)`,
+    [tenantId, examId, `Agent: ${agentType}`]
+  );
+}
+
+async function checkLowCreditAlert(tenantId, pg, redis) {
+  const balance = await getBalance(tenantId, pg);
+  if (balance <= 0 && redis) {
+    redis.publish(`billing:exhausted:${tenantId}`, JSON.stringify({ balance }));
+    return;
+  }
+  const grantedRes = await pg.query(
+    `SELECT COALESCE(SUM(amount), 0) AS granted FROM credit_ledger
+     WHERE tenant_id = $1 AND amount > 0 AND created_at >= NOW() - INTERVAL '30 days'`,
+    [tenantId]
+  );
+  const granted = Number(grantedRes.rows[0].granted);
+  if (granted > 0 && balance / granted <= 0.20 && redis) {
+    redis.publish(`billing:alert:${tenantId}`, JSON.stringify({ balance, granted }));
+  }
 }
 
 /**
@@ -110,13 +145,31 @@ async function processExam({ exam_id, tenant_id, file_path }) {
       return;
     }
 
+    // Balance check before running agents
+    const allAgents = [...phase1, ...PHASE2_AGENTS];
+    const balance = await getBalance(tenant_id, client);
+    if (balance < allAgents.length) {
+      await client.query(
+        "UPDATE exams SET status = 'failed', error_message = $1, updated_at = NOW() WHERE id = $2",
+        ['Saldo de créditos insuficiente', exam_id]
+      );
+      await client.query('COMMIT');
+      return;
+    }
+
+    // Redis instance for billing alerts (best-effort)
+    let billingRedis = null;
+    try { billingRedis = new Redis(process.env.REDIS_URL); } catch (_) {}
+
     // Phase 1 — specialty agents (sequential)
     const specialtyResults = [];
     for (const { type, runner } of phase1) {
       const guidelines = await retrieveGuidelines(client, examText, 5, tenantModule, subject.species || null);
-      const result = await runner({ examText, patient: anonSubject, guidelines });
+      const { result, usage } = await runner({ examText, patient: anonSubject, guidelines });
       specialtyResults.push({ agent_type: type, ...result });
-      await persistResult(client, exam_id, tenant_id, type, result);
+      await persistResult(client, exam_id, tenant_id, type, result, usage);
+      await debitCredit(tenant_id, exam_id, type, client);
+      await checkLowCreditAlert(tenant_id, client, billingRedis);
     }
 
     // Phase 2 — synthesis agents (parallel)
@@ -127,12 +180,17 @@ async function processExam({ exam_id, tenant_id, file_path }) {
       module: tenantModule,
       species: subject.species || null
     };
-    const phase2Results = await Promise.all(
+    const phase2Responses = await Promise.all(
       PHASE2_AGENTS.map(({ runner }) => runner(phase2Ctx))
     );
     for (let i = 0; i < PHASE2_AGENTS.length; i++) {
-      await persistResult(client, exam_id, tenant_id, PHASE2_AGENTS[i].type, phase2Results[i]);
+      const { result, usage } = phase2Responses[i];
+      await persistResult(client, exam_id, tenant_id, PHASE2_AGENTS[i].type, result, usage);
+      await debitCredit(tenant_id, exam_id, PHASE2_AGENTS[i].type, client);
+      await checkLowCreditAlert(tenant_id, client, billingRedis);
     }
+
+    if (billingRedis) { try { await billingRedis.quit(); } catch (_) {} }
 
     await client.query(
       `UPDATE exams SET status = 'done', updated_at = NOW() WHERE id = $1`,

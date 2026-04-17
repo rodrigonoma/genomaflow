@@ -55,7 +55,7 @@ async function runNutritionAgent(ctx) {
   }
   result.disclaimer = DISCLAIMER;
   result.recommendations = result.recommendations || [];
-  return result;
+  return { result, usage: response.usage };
 }
 
 module.exports = { runNutritionAgent };
