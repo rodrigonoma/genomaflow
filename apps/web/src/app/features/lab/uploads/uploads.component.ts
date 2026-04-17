@@ -1,6 +1,6 @@
 import { Component, inject, OnDestroy, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { DatePipe } from '@angular/common';
+import { AsyncPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTableModule } from '@angular/material/table';
@@ -13,9 +13,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { RouterModule } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { WsService } from '../../../core/ws/ws.service';
+import { AuthService } from '../../../core/auth/auth.service';
 import { ExamStatusComponent } from '../../../shared/components/exam-status/exam-status.component';
 import { environment } from '../../../../environments/environment';
-import { Patient, Exam } from '../../../shared/models/api.models';
+import { Patient, Exam, AnimalSearchResult } from '../../../shared/models/api.models';
 
 interface QueueEntry {
   exam_id: string;
@@ -32,7 +33,7 @@ interface QueueEntry {
   selector: 'app-uploads',
   standalone: true,
   imports: [
-    FormsModule, DatePipe, RouterModule,
+    FormsModule, AsyncPipe, DatePipe, RouterModule,
     MatTabsModule, MatTableModule, MatButtonModule,
     MatFormFieldModule, MatInputModule, MatSelectModule,
     MatTooltipModule, MatIconModule, ExamStatusComponent
@@ -47,20 +48,38 @@ interface QueueEntry {
       <mat-tab-group class="uploads-tabs">
         <mat-tab label="Individual">
           <div class="tab-content">
-            <mat-form-field appearance="outline" class="full-width">
-              <mat-label>Buscar paciente</mat-label>
-              <input matInput [(ngModel)]="patientSearch" (ngModelChange)="searchPatients()" />
-            </mat-form-field>
-
-            @if (patientResults.length) {
+            @if ((auth.currentUser$ | async)?.module === 'veterinary') {
               <mat-form-field appearance="outline" class="full-width">
-                <mat-label>Selecionar paciente</mat-label>
-                <mat-select [(ngModel)]="selectedPatientId">
-                  @for (p of patientResults; track p.id) {
-                    <mat-option [value]="p.id">{{ p.name }}</mat-option>
-                  }
-                </mat-select>
+                <mat-label>CPF do Tutor</mat-label>
+                <input matInput [(ngModel)]="ownerCpfSearch" (ngModelChange)="searchByOwnerCpf()" placeholder="000.000.000-00" />
               </mat-form-field>
+
+              @if (animalResults.length > 0) {
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Selecionar Animal</mat-label>
+                  <mat-select [(ngModel)]="selectedPatientId">
+                    @for (a of animalResults; track a.id) {
+                      <mat-option [value]="a.id">{{ a.name }} · {{ speciesLabel(a.species) }} · CPF ***{{ ownerCpfSearch.slice(-3) }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              }
+            } @else {
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Buscar paciente</mat-label>
+                <input matInput [(ngModel)]="patientSearch" (ngModelChange)="searchPatients()" />
+              </mat-form-field>
+
+              @if (patientResults.length) {
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Selecionar paciente</mat-label>
+                  <mat-select [(ngModel)]="selectedPatientId">
+                    @for (p of patientResults; track p.id) {
+                      <mat-option [value]="p.id">{{ p.name }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              }
             }
 
             <div class="file-selector-row">
@@ -386,10 +405,13 @@ interface QueueEntry {
 export class UploadsComponent implements OnInit, OnDestroy {
   private http = inject(HttpClient);
   private ws = inject(WsService);
+  auth = inject(AuthService);
 
   patientSearch = '';
   patientResults: Patient[] = [];
   selectedPatientId = '';
+  ownerCpfSearch = '';
+  animalResults: AnimalSearchResult[] = [];
   singleSelected: File | null = null;
   batchSelected: File[] = [];
   queue: QueueEntry[] = [];
@@ -433,6 +455,19 @@ export class UploadsComponent implements OnInit, OnDestroy {
       this.patientResults = all.filter(p =>
         normalize(p.name).includes(normalize(this.patientSearch)))
     );
+  }
+
+  searchByOwnerCpf(): void {
+    const cpf = this.ownerCpfSearch.replace(/\D/g, '');
+    if (cpf.length < 11) { this.animalResults = []; return; }
+    this.http.get<AnimalSearchResult[]>(
+      `${environment.apiUrl}/patients/search?owner_cpf=${cpf}`
+    ).subscribe(animals => { this.animalResults = animals; });
+  }
+
+  speciesLabel(species: string): string {
+    const labels: Record<string, string> = { dog: 'Cão', cat: 'Gato', equine: 'Equino', bovine: 'Bovino' };
+    return labels[species] ?? species;
   }
 
   onSingleFile(e: Event): void {
