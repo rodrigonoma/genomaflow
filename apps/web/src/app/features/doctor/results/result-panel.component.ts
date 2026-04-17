@@ -6,18 +6,21 @@ import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
 import { AlertBadgeComponent } from '../../../shared/components/alert-badge/alert-badge.component';
 import { RiskMeterComponent } from '../../../shared/components/risk-meter/risk-meter.component';
 import { DisclaimerComponent } from '../../../shared/components/disclaimer/disclaimer.component';
 import { environment } from '../../../../environments/environment';
-import { Exam } from '../../../shared/models/api.models';
+import { Exam, Subject } from '../../../shared/models/api.models';
+import { ReviewQueueService } from '../review-queue/review-queue.service';
 
 @Component({
   selector: 'app-result-panel',
   standalone: true,
   imports: [
     DatePipe, FormsModule, NgTemplateOutlet, UpperCasePipe,
-    MatCardModule, MatSelectModule, MatDividerModule,
+    MatCardModule, MatSelectModule, MatDividerModule, MatButtonModule, MatIconModule,
     AlertBadgeComponent, RiskMeterComponent, DisclaimerComponent
   ],
   template: `
@@ -37,6 +40,22 @@ import { Exam } from '../../../shared/models/api.models';
           <span class="exam-status-badge" [class]="'status-' + exam.status">{{ exam.status | uppercase }}</span>
         </div>
 
+        @if (subject) {
+          <div class="subject-identity">
+            @if (subject.subject_type === 'animal') {
+              <span class="identity-chip">
+                <mat-icon style="font-size:14px;width:14px;height:14px">pets</mat-icon>
+                {{ subject.name }} · {{ speciesLabel(subject.species!) }}
+              </span>
+            } @else {
+              <span class="identity-chip">
+                <mat-icon style="font-size:14px;width:14px;height:14px">person</mat-icon>
+                {{ subject.name }}
+              </span>
+            }
+          </div>
+        }
+
         <div class="content-layout">
           <aside class="sidebar">
             <div class="sidebar-card">
@@ -49,6 +68,19 @@ import { Exam } from '../../../shared/models/api.models';
                 <span class="meta-label">STATUS</span>
                 <span class="meta-value">{{ exam.status }}</span>
               </p>
+
+              @if (exam.review_status && exam.review_status !== 'reviewed') {
+                <button mat-flat-button class="review-btn" (click)="markAsReviewed()">
+                  <mat-icon>check_circle</mat-icon>
+                  Marcar como Revisado
+                </button>
+              }
+              @if (exam.review_status === 'reviewed') {
+                <div class="reviewed-badge">
+                  <mat-icon>verified</mat-icon>
+                  Revisado
+                </div>
+              }
 
               @if (allExams.length > 1) {
                 <div class="compare-section">
@@ -117,6 +149,18 @@ import { Exam } from '../../../shared/models/api.models';
                 <span class="ai-marker-label">AI · CLAUDE SONNET</span>
                 <p class="interpretation-text">{{ result.interpretation }}</p>
               </div>
+
+              @if (result.recommendations && result.recommendations.length > 0) {
+                <div class="recommendations-section">
+                  <h4 class="rec-title">Recomendações</h4>
+                  @for (rec of result.recommendations; track rec.description) {
+                    <div class="rec-item" [class]="'priority-' + rec.priority">
+                      <span class="rec-type">{{ rec.type | uppercase }}</span>
+                      <span class="rec-desc">{{ rec.description }}</span>
+                    </div>
+                  }
+                </div>
+              }
 
               <app-disclaimer />
             </div>
@@ -231,6 +275,41 @@ import { Exam } from '../../../shared/models/api.models';
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       color: #c7c4d7;
+    }
+
+    .review-btn {
+      width: 100%;
+      margin-top: 1rem;
+      background: #16a34a !important;
+      color: #fff !important;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .reviewed-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 1rem;
+      padding: 6px 10px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #10b981;
+    }
+
+    .reviewed-badge mat-icon {
+      font-size: 15px;
+      width: 15px;
+      height: 15px;
     }
 
     .compare-section {
@@ -385,16 +464,28 @@ import { Exam } from '../../../shared/models/api.models';
       padding-top: 1rem;
       border-top: 1px solid rgba(70,69,84,0.15);
     }
+
+    .subject-identity { margin-bottom: 1rem; display: flex; gap: 0.5rem; }
+    .identity-chip { display: flex; align-items: center; gap: 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #c0c1ff; background: rgba(73,75,214,0.1); border: 1px solid rgba(73,75,214,0.25); padding: 3px 8px; border-radius: 4px; }
+    .recommendations-section { margin-top: 1rem; }
+    .rec-title { font-family: 'Space Grotesk', sans-serif; font-size: 0.875rem; font-weight: 600; color: #c0c1ff; margin: 0 0 0.5rem 0; }
+    .rec-item { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.375rem; background: rgba(70,69,84,0.08); }
+    .rec-item.priority-high { background: rgba(255,183,131,0.08); }
+    .rec-item.priority-medium { background: rgba(192,193,255,0.08); }
+    .rec-type { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; color: #908fa0; flex-shrink: 0; padding-top: 2px; }
+    .rec-desc { font-family: 'Inter', sans-serif; font-size: 13px; color: #c7c4d7; line-height: 1.4; }
   `]
 })
 export class ResultPanelComponent implements OnInit {
   private http = inject(HttpClient);
   private route = inject(ActivatedRoute);
+  private reviewService = inject(ReviewQueueService);
 
   exam: Exam | null = null;
   compareExam: Exam | null = null;
   compareExamId: string | null = null;
   allExams: Exam[] = [];
+  subject: Subject | null = null;
 
   objectKeys = Object.keys;
 
@@ -402,6 +493,22 @@ export class ResultPanelComponent implements OnInit {
     const examId = this.route.snapshot.paramMap.get('examId')!;
     this.http.get<Exam>(`${environment.apiUrl}/exams/${examId}`).subscribe(e => {
       this.exam = e;
+      if (e.review_status === 'pending') {
+        this.reviewService.markViewed(e.id).subscribe({ error: () => {} });
+      }
+      if (e.subject_id || e.patient_id) {
+        const subjectId = e.subject_id || e.patient_id;
+        this.http.get<Subject>(`${environment.apiUrl}/patients/${subjectId}`)
+          .subscribe(s => { this.subject = s; });
+      }
+    });
+  }
+
+  markAsReviewed(): void {
+    if (!this.exam || this.exam.review_status === 'reviewed') return;
+    this.reviewService.markReviewed(this.exam.id).subscribe({
+      next: () => { if (this.exam) this.exam.review_status = 'reviewed'; },
+      error: () => {}
     });
   }
 
@@ -418,6 +525,11 @@ export class ResultPanelComponent implements OnInit {
       if (alerts.some(a => (a.severity ?? '').toLowerCase() === sev)) return sev.toUpperCase();
     }
     return 'none';
+  }
+
+  speciesLabel(species: string): string {
+    const labels: Record<string, string> = { dog: 'Cão', cat: 'Gato', equine: 'Equino', bovine: 'Bovino' };
+    return labels[species] ?? species;
   }
 
   getRiskColor(value: string): string {
