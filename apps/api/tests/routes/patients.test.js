@@ -15,8 +15,8 @@ beforeAll(async () => {
 
 afterAll(async () => { await teardownTestDb(); await app.close(); });
 
-describe('POST /patients', () => {
-  it('creates a patient scoped to tenant', async () => {
+describe('POST /patients — human module', () => {
+  it('creates a human subject with required fields', async () => {
     const res = await supertest(app.server)
       .post('/patients')
       .set('Authorization', `Bearer ${token}`)
@@ -24,6 +24,7 @@ describe('POST /patients', () => {
     expect(res.status).toBe(201);
     expect(res.body).toHaveProperty('id');
     expect(res.body.name).toBe('João Silva');
+    expect(res.body.subject_type).toBe('human');
   });
 
   it('returns 401 without token', async () => {
@@ -35,7 +36,7 @@ describe('POST /patients', () => {
 });
 
 describe('GET /patients', () => {
-  it('returns patients for the tenant', async () => {
+  it('returns subjects for the tenant', async () => {
     const res = await supertest(app.server)
       .get('/patients')
       .set('Authorization', `Bearer ${token}`);
