@@ -20,7 +20,8 @@ CREATE TABLE tenant_specialties (
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   agent_type TEXT NOT NULL
     CHECK (agent_type IN ('metabolic','cardiovascular','hematology',
-                          'small_animals','equine','bovine')),
+                          'small_animals','equine','bovine',
+                          'therapeutic','nutrition')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (tenant_id, agent_type)
 );
@@ -35,11 +36,13 @@ Mínimo 1 especialidade por tenant. Editável via Configurações após onboardi
 
 **Especialidades válidas por módulo:**
 
-| `module=human` | `module=veterinary` |
-|---|---|
-| `metabolic` | `small_animals` |
-| `cardiovascular` | `equine` |
-| `hematology` | `bovine` |
+| `module=human` | `module=veterinary` | Ambos os módulos |
+|---|---|---|
+| `metabolic` | `small_animals` | `therapeutic` |
+| `cardiovascular` | `equine` | `nutrition` |
+| `hematology` | `bovine` | |
+
+`therapeutic` e `nutrition` são agentes de síntese — rodam na Fase 2, após os agentes de especialidade, e consomem 1 crédito cada.
 
 ### 1.2 `subscriptions` — assinatura ativa por tenant
 

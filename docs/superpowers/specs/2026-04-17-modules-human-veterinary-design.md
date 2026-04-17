@@ -4,7 +4,7 @@
 
 **Goal:** Adicionar suporte a clínicas veterinárias através de um sistema de módulos configurado no cadastro do tenant, adaptando banco de dados, pipeline de IA, RAG e frontend sem quebrar o fluxo humano existente.
 
-**Architecture:** O módulo é fixo por tenant (definido no onboarding). A tabela `patients` é renomeada para `subjects` e ganha campos condicionais (`species`, `owner_cpf_hash`, `subject_type`). O worker roteia para agentes de IA diferentes conforme `module` + `species`. O frontend adapta labels, formulários e lookup de sujeito com base no módulo do tenant autenticado.
+**Architecture:** O módulo é fixo por tenant (definido no onboarding). A tabela `patients` é renomeada para `subjects` e ganha campos condicionais (`species`, `owner_cpf_hash`, `subject_type`). O worker executa em duas fases: Fase 1 — agentes de especialidade (metabolic, cardiovascular, hematology, small_animals, etc.) analisam o exame; Fase 2 — agentes de síntese (`therapeutic`, `nutrition`) recebem os outputs da Fase 1 + texto bruto e geram recomendações de tratamento e nutrição/hábitos. Ambas as fases são selecionáveis por tenant. O frontend adapta labels, formulários e lookup de sujeito com base no módulo do tenant autenticado.
 
 **Tech Stack:** PostgreSQL 15 (migrations), Node.js/Fastify (backend), BullMQ worker, Anthropic SDK (novos agentes), Angular 17+ (frontend), RAG com pgvector.
 
@@ -82,22 +82,46 @@ O JWT payload e o endpoint `/auth/login` passam a incluir `module` do tenant. O 
   ```
   Nunca faz match automático — retorna lista para seleção explícita.
 
-### 2.3 Worker — roteamento de agentes
+### 2.3 Worker — pipeline em duas fases
 
-O processor busca `module` e `species` do subject no início do job:
+O processor busca as especialidades configuradas do tenant e executa em duas fases:
 
 ```js
-// exam.js — lógica de roteamento
-if (tenant.module === 'human') {
-  agents = [runMetabolicAgent, runCardiovascularAgent, runHematologyAgent];
-} else {
-  if (['dog', 'cat'].includes(subject.species)) agents = [runSmallAnimalsAgent];
-  else if (subject.species === 'equine')         agents = [runEquineAgent];
-  else if (subject.species === 'bovine')         agents = [runBovineAgent];
+const specialties = await getAgentTypes(tenantId);
+
+// Fase 1: agentes de especialidade (rodam em sequência, debitam 1 crédito cada)
+const phase1Agents = specialties
+  .filter(t => PHASE1_AGENTS.includes(t))
+  .map(t => AGENT_MAP[t]);
+  // PHASE1_AGENTS: ['metabolic','cardiovascular','hematology','small_animals','equine','bovine']
+
+const specialtyResults = [];
+for (const agent of phase1Agents) {
+  const result = await agent(ctx);
+  specialtyResults.push(result);
+  await persistResult(result);
+  await debitCredit(tenantId, examId, agent.type);
 }
+
+// Fase 2: agentes de síntese (rodam em paralelo após Fase 1, debitam 1 crédito cada)
+const phase2Agents = specialties
+  .filter(t => PHASE2_AGENTS.includes(t))
+  .map(t => AGENT_MAP[t]);
+  // PHASE2_AGENTS: ['therapeutic','nutrition']
+
+const ctxWithResults = { ...ctx, specialtyResults };
+await Promise.all(phase2Agents.map(async agent => {
+  const result = await agent(ctxWithResults);
+  await persistResult(result);
+  await debitCredit(tenantId, examId, agent.type);
+}));
 ```
 
-O `subject.species` é passado no contexto (`ctx`) de cada agente veterinário.
+**Contexto dos agentes de Fase 2:**
+- `ctx.examText` — texto bruto do exame (mesmo da Fase 1)
+- `ctx.specialtyResults` — array de outputs dos agentes da Fase 1
+- `ctx.subject` — dados do paciente/animal (espécie, sexo, etc.)
+- `ctx.module` — `'human'` ou `'veterinary'`
 
 ### 2.4 RAG — filtro por módulo e espécie
 
@@ -145,6 +169,57 @@ Esta análise é um suporte à decisão clínica veterinária e não substitui a
 
 ### Princípio operacional de curadoria
 Os seeds de guidelines veterinárias devem ser revisados periodicamente conforme novas publicações das sociedades de referência (WSAVA, AAEP, AABP). A atualização das bases RAG é responsabilidade operacional contínua do GenomaFlow — não é só código, é curadoria de conhecimento clínico.
+
+---
+
+## 3.B Agentes de Síntese (Fase 2) — Humano e Veterinário
+
+Dois novos agentes cross-módulo, selecionáveis por tenant. Rodam **após** todos os agentes de Fase 1, recebendo os outputs das especialidades + texto bruto do exame. São agnósticos ao módulo — o system prompt adapta o contexto com base em `module` e `species`.
+
+### Disclaimer padrão (agentes de síntese)
+```
+As sugestões apresentadas são de suporte à decisão clínica e devem ser avaliadas e prescritas
+pelo profissional de saúde responsável. Não substituem consulta médica ou veterinária.
+```
+
+### Output JSON — agentes de síntese
+```json
+{
+  "interpretation": "<resumo das recomendações em português>",
+  "recommendations": [
+    { "type": "<medication|procedure|habit|diet|supplement>", "description": "<texto>", "priority": "<low|medium|high>" }
+  ],
+  "risk_scores": { "<domain>": "<LOW|MEDIUM|HIGH|CRITICAL>" },
+  "alerts": [{ "marker": "<name>", "value": "<value>", "severity": "<low|medium|high|critical>" }],
+  "disclaimer": "<texto>"
+}
+```
+
+### 3.B.1 `therapeutic_agent` — recomendações terapêuticas
+
+**Função:** Com base nos achados dos agentes de especialidade e nos valores brutos do exame, sugere condutas terapêuticas (medicamentos, procedimentos, encaminhamentos).
+
+**Humano:** classes de medicamentos indicadas, ajuste de dose quando relevante, indicação de encaminhamento a especialista.
+
+**Veterinário:** protocolos terapêuticos veterinários, medicamentos indicados por espécie, alertas de contra-indicações espécie-específicas.
+
+**RAG seed:**
+- Humano: diretrizes terapêuticas SBC, ADA, SBH, Ministério da Saúde
+- Vet: WSAVA treatment guidelines, formulário veterinário por espécie
+
+**Não inclui:** prescrição nominal de medicamentos com dose exata — sempre recomendação de classe/protocolo, decisão final do profissional.
+
+### 3.B.2 `nutrition_agent` — nutrição, hábitos e estilo de vida
+
+**Função:** Com base nos achados clínicos, sugere intervenções nutricionais, alimentares e de estilo de vida (humano) ou manejo alimentar e ambiental (veterinário).
+
+**Humano:** plano alimentar indicado, grupos alimentares a restringir/ampliar, hábitos (atividade física, cessação tabagismo, qualidade do sono, hidratação).
+
+**Veterinário:** dieta indicada por espécie e condição clínica, frequência de alimentação, enriquecimento ambiental, restrições alimentares espécie-específicas.
+
+**RAG seed:**
+- Humano: guias alimentares do Ministério da Saúde, SBEM, SBC — nutrição clínica
+- Vet: WSAVA Nutritional Assessment Guidelines, literatura de nutrição veterinária por espécie
 
 ---
 
