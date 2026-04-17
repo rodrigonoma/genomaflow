@@ -1,7 +1,5 @@
 const bcrypt = require('bcrypt');
 
-// Dummy hash used to perform a constant-time comparison when the user is not
-// found, preventing email enumeration via response-time differences.
 const DUMMY_HASH = '$2b$10$invalidhashfortimingprotection0000000000000000000000000';
 
 module.exports = async function (fastify) {
@@ -9,12 +7,13 @@ module.exports = async function (fastify) {
     const { email, password } = request.body;
 
     const { rows } = await fastify.pg.query(
-      'SELECT id, tenant_id, password_hash, role FROM users WHERE email = $1',
+      `SELECT u.id, u.tenant_id, u.password_hash, u.role, t.module
+       FROM users u JOIN tenants t ON t.id = u.tenant_id
+       WHERE u.email = $1`,
       [email]
     );
 
     if (rows.length === 0) {
-      // Always run bcrypt to prevent timing-based email enumeration
       await bcrypt.compare(password, DUMMY_HASH).catch(() => {});
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
@@ -28,7 +27,8 @@ module.exports = async function (fastify) {
     const token = fastify.jwt.sign({
       user_id: user.id,
       tenant_id: user.tenant_id,
-      role: user.role
+      role: user.role,
+      module: user.module
     });
 
     return { token };

@@ -29,3 +29,16 @@ describe('POST /auth/login', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('POST /auth/login — module field', () => {
+  it('returns module in decoded JWT payload', async () => {
+    const res = await supertest(app.server)
+      .post('/auth/login')
+      .send({ email: 'test@clinic.com', password: 'password123' });
+    expect(res.status).toBe(200);
+    const payload = JSON.parse(
+      Buffer.from(res.body.token.split('.')[1], 'base64').toString()
+    );
+    expect(payload.module).toBe('human');
+  });
+});
