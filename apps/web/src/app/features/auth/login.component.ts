@@ -1,5 +1,6 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -64,6 +65,12 @@ import { MatIconModule } from '@angular/material/icon';
       <div class="brand-sub">Clinical AI Platform &middot; v1.0</div>
       <h2>Acesso ao sistema</h2>
 
+      @if (showActivatedBanner) {
+        <div style="border-left:2px solid #585990;background:rgba(192,193,255,0.08);padding:1rem;border-radius:0.25rem;margin-bottom:1.5rem;font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#c0c1ff;">
+          ✅ Conta ativada! Seus créditos de boas-vindas já estão disponíveis.
+        </div>
+      }
+
       <form [formGroup]="form" (ngSubmit)="submit()">
         <mat-form-field class="field" appearance="outline">
           <mat-label>E-mail</mat-label>
@@ -89,9 +96,10 @@ import { MatIconModule } from '@angular/material/icon';
     </div>
   `
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   private auth = inject(AuthService);
   private fb = inject(FormBuilder);
+  private route = inject(ActivatedRoute);
 
   form = this.fb.group({
     email: ['', [Validators.required, Validators.email]],
@@ -101,6 +109,11 @@ export class LoginComponent {
   error = '';
   loading = false;
   showPass = false;
+  showActivatedBanner = false;
+
+  ngOnInit(): void {
+    this.showActivatedBanner = this.route.snapshot.queryParams['activated'] === 'true';
+  }
 
   submit(): void {
     if (this.form.invalid) return;

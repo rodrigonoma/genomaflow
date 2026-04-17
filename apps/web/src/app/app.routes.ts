@@ -56,6 +56,11 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/doctor/results/result-panel.component').then(m => m.ResultPanelComponent)
   },
+  {
+    path: 'onboarding',
+    loadComponent: () =>
+      import('./features/onboarding/onboarding.component').then(m => m.OnboardingComponent)
+  },
   { path: '', canActivate: [rootRedirectGuard], children: [] },
   { path: '**', redirectTo: 'login' }
 ];
