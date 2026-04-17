@@ -9,14 +9,12 @@ function makePool() {
 let pool = makePool();
 
 async function setupTestDb() {
-  // Recreate pool if it was ended by a previous test suite
   if (pool.ending) pool = makePool();
 
-  // Delete tenant first — CASCADE removes users, patients, exams, clinical_results
   await pool.query(`DELETE FROM tenants WHERE name = 'Test Clinic'`);
 
   const { rows: [tenant] } = await pool.query(
-    `INSERT INTO tenants (name, type) VALUES ('Test Clinic', 'clinic') RETURNING id`
+    `INSERT INTO tenants (name, type, module) VALUES ('Test Clinic', 'clinic', 'human') RETURNING id`
   );
 
   const hash = await bcrypt.hash('password123', 10);
@@ -29,7 +27,6 @@ async function setupTestDb() {
 }
 
 async function teardownTestDb() {
-  // Delete tenant first — CASCADE removes users, patients, exams, clinical_results
   await pool.query(`DELETE FROM tenants WHERE name = 'Test Clinic'`);
   await pool.end();
 }
