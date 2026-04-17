@@ -400,32 +400,32 @@ module.exports = async function (fastify) {
         );
         const uploadedBy = adminRows[0]?.id;
 
-        // Find or create patient — match on name + birth_date when available
-        let patientId;
+        // Find or create subject — match on name + birth_date when available
+        let subjectId;
         const patientName = mapped['patient.name'] || 'Desconhecido';
         const birthDate = mapped['patient.birth_date'] || null;
         const { rows: existing } = await client.query(
-          `SELECT id FROM patients
+          `SELECT id FROM subjects
            WHERE name = $1 AND (birth_date = $2 OR ($2 IS NULL AND birth_date IS NULL))
            LIMIT 1`,
           [patientName, birthDate]
         );
         if (existing.length > 0) {
-          patientId = existing[0].id;
+          subjectId = existing[0].id;
         } else {
           const { rows: created } = await client.query(
-            `INSERT INTO patients (tenant_id, name, birth_date, sex)
-             VALUES ($1, $2, $3, $4) RETURNING id`,
+            `INSERT INTO subjects (tenant_id, name, birth_date, sex, subject_type)
+             VALUES ($1, $2, $3, $4, 'human') RETURNING id`,
             [tenant_id, patientName, birthDate, mapped['patient.sex'] || null]
           );
-          patientId = created[0].id;
+          subjectId = created[0].id;
         }
 
         const { rows: examRows } = await client.query(
-          `INSERT INTO exams (tenant_id, patient_id, uploaded_by, file_path, raw_data, status, source)
+          `INSERT INTO exams (tenant_id, subject_id, uploaded_by, file_path, raw_data, status, source)
            VALUES ($1, $2, $3, $4, $5, 'pending', 'integration')
            RETURNING id`,
-          [tenant_id, patientId, uploadedBy, filePath, JSON.stringify(payload)]
+          [tenant_id, subjectId, uploadedBy, filePath, JSON.stringify(payload)]
         );
         examId = examRows[0].id;
 
