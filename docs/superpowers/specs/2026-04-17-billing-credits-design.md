@@ -8,6 +8,8 @@
 
 **Tech Stack:** PostgreSQL 15 (ledger + idempotência), Fastify (rotas + webhooks), BullMQ worker (débito por agente), Angular 17+ (billing dashboard + alertas), Stripe SDK, Mercado Pago SDK, WebSocket (notificações em tempo real via Redis pub/sub existente).
 
+**Preços:** Assinatura R$199,00/mês. Créditos avulsos: R$49,90 (100), R$109,90 (250), R$199,90 (500) = R$0,49/crédito base. Promoção de boas-vindas: 30% do valor do primeiro mês convertido em créditos (~122 créditos grátis).
+
 ---
 
 ## 1. Banco de Dados
@@ -326,7 +328,98 @@ Ambos recebidos via WebSocket no canal `billing:alert:{tenantId}` e `billing:exh
 
 ---
 
-## 5. Fora de Escopo (MVP)
+## 5. Token Tracking
+
+### 5.1 Migration 016 — colunas de tokens em `clinical_results`
+
+```sql
+ALTER TABLE clinical_results
+  ADD COLUMN input_tokens  INT NOT NULL DEFAULT 0,
+  ADD COLUMN output_tokens INT NOT NULL DEFAULT 0;
+```
+
+### 5.2 Worker — persistir tokens por agente
+
+Em `persistResult` no `exam.js`, incluir os tokens da resposta Claude:
+
+```js
+async function persistResult(client, examId, tenantId, agentType, result, usage) {
+  await client.query(
+    `INSERT INTO clinical_results
+       (exam_id, tenant_id, agent_type, interpretation, risk_scores, alerts,
+        recommendations, disclaimer, model_version, input_tokens, output_tokens)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    [
+      examId, tenantId, agentType,
+      result.interpretation,
+      JSON.stringify(result.risk_scores || {}),
+      JSON.stringify(result.alerts || []),
+      JSON.stringify(result.recommendations || []),
+      result.disclaimer,
+      'claude-opus-4-6',
+      usage?.input_tokens || 0,
+      usage?.output_tokens || 0
+    ]
+  );
+}
+```
+
+Cada agente passa `response.usage` para `persistResult`.
+
+### 5.3 View de consumo por tenant
+
+```sql
+CREATE VIEW tenant_token_usage AS
+  SELECT
+    cr.tenant_id,
+    DATE_TRUNC('month', cr.created_at) AS month,
+    cr.agent_type,
+    COUNT(*)                            AS executions,
+    SUM(cr.input_tokens)                AS total_input_tokens,
+    SUM(cr.output_tokens)               AS total_output_tokens,
+    SUM(cr.input_tokens + cr.output_tokens) AS total_tokens
+  FROM clinical_results cr
+  GROUP BY cr.tenant_id, DATE_TRUNC('month', cr.created_at), cr.agent_type;
+```
+
+---
+
+## 6. Tela de Billing `/clinic/billing` — Relatório de Consumo
+
+Adicionar ao dashboard de billing (seção abaixo do histórico de créditos):
+
+**Relatório de Consumo** (admin only, período selecionável: 30 / 60 / 90 dias):
+
+| Coluna | Dado |
+|---|---|
+| Período | Data início — Data fim |
+| Exames processados | COUNT(DISTINCT exam_id) do credit_ledger |
+| Agentes executados | COUNT de agent_usage no credit_ledger |
+| Créditos consumidos | SUM(amount * -1) WHERE kind='agent_usage' |
+| Tokens de entrada | SUM(input_tokens) do clinical_results |
+| Tokens de saída | SUM(output_tokens) do clinical_results |
+| Custo estimado API | (input × R$0,026 + output × R$0,13) / 1000 |
+
+Rota: `GET /billing/usage?days=30`
+
+```js
+// Retorno:
+{
+  period_days: 30,
+  exams_processed: 47,
+  agents_executed: 189,
+  credits_consumed: 189,
+  input_tokens: 756000,
+  output_tokens: 189000,
+  estimated_api_cost_brl: 44.07
+}
+```
+
+O custo estimado é exibido apenas como referência informativa para o tenant entender o consumo — não é cobrado diretamente (o modelo de cobrança é por crédito).
+
+---
+
+## 7. Fora de Escopo (MVP)
 
 - Portal de autoatendimento do gateway (Stripe Customer Portal / MP) — link externo por ora
 - NFS-e automática — roadmap
