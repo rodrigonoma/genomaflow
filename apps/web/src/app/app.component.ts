@@ -6,6 +6,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthService } from './core/auth/auth.service';
+import { ReviewQueueService } from './features/doctor/review-queue/review-queue.service';
 
 @Component({
   selector: 'app-root',
@@ -64,6 +65,18 @@ import { AuthService } from './core/auth/auth.service';
     .nav-item.active { background: #171f33; color: #c0c1ff; border-left-color: #494bd6; }
     ::ng-deep .nav-item .mat-icon { font-size: 18px !important; width: 18px !important; height: 18px !important; opacity: 0.7; }
     ::ng-deep .nav-item.active .mat-icon { opacity: 1; }
+
+    .nav-badge {
+      margin-left: auto;
+      background: #494bd6;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 10px;
+      min-width: 18px;
+      text-align: center;
+    }
 
     .sidebar-footer {
       padding: 1rem 1.5rem;
@@ -125,7 +138,17 @@ import { AuthService } from './core/auth/auth.service';
           @if (user.role === 'doctor') {
             <div class="nav-section-label">Clínica</div>
             <a class="nav-item" routerLink="/doctor/patients" routerLinkActive="active">
-              <mat-icon>people</mat-icon> Pacientes
+              <mat-icon>{{ user.module === 'veterinary' ? 'pets' : 'people' }}</mat-icon>
+              {{ user.module === 'veterinary' ? 'Animais' : 'Pacientes' }}
+            </a>
+            <a class="nav-item" routerLink="/doctor/review-queue" routerLinkActive="active">
+              <mat-icon>inbox</mat-icon>
+              <span>Fila de Revisão</span>
+              @if (reviewCount$ | async; as count) {
+                @if (count > 0) {
+                  <span class="nav-badge">{{ count }}</span>
+                }
+              }
             </a>
           }
           @if (user.role === 'lab_tech') {
@@ -171,4 +194,6 @@ import { AuthService } from './core/auth/auth.service';
 })
 export class AppComponent {
   auth = inject(AuthService);
+  reviewService = inject(ReviewQueueService);
+  reviewCount$ = this.reviewService.pendingCount$;
 }
