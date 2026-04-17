@@ -4,23 +4,60 @@ const Redis = require('ioredis');
 const { extractText } = require('../parsers/pdf');
 const { anonymize } = require('../anonymizer/patient');
 const { scrubText } = require('../anonymizer/text');
-const { classifyAgents } = require('../classifier/markers');
 const { retrieveGuidelines } = require('../rag/retriever');
 const { runMetabolicAgent } = require('../agents/metabolic');
 const { runCardiovascularAgent } = require('../agents/cardiovascular');
 const { runHematologyAgent } = require('../agents/hematology');
+const { runSmallAnimalsAgent } = require('../agents/small_animals');
+const { runEquineAgent } = require('../agents/equine');
+const { runBovineAgent } = require('../agents/bovine');
+const { runTherapeuticAgent } = require('../agents/therapeutic');
+const { runNutritionAgent } = require('../agents/nutrition');
 
-const AGENT_RUNNERS = {
-  metabolic: runMetabolicAgent,
-  cardiovascular: runCardiovascularAgent,
-  hematology: runHematologyAgent
+// Phase 1: specialty agents — routed by module + species
+const PHASE1_AGENTS = {
+  human: [
+    { type: 'metabolic',       runner: runMetabolicAgent },
+    { type: 'cardiovascular',  runner: runCardiovascularAgent },
+    { type: 'hematology',      runner: runHematologyAgent }
+  ],
+  veterinary: {
+    dog:    [{ type: 'small_animals', runner: runSmallAnimalsAgent }],
+    cat:    [{ type: 'small_animals', runner: runSmallAnimalsAgent }],
+    equine: [{ type: 'equine',        runner: runEquineAgent }],
+    bovine: [{ type: 'bovine',        runner: runBovineAgent }]
+  }
 };
+
+// Phase 2: synthesis agents — always run after phase 1
+const PHASE2_AGENTS = [
+  { type: 'therapeutic', runner: runTherapeuticAgent },
+  { type: 'nutrition',   runner: runNutritionAgent }
+];
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+async function persistResult(client, examId, tenantId, agentType, result) {
+  await client.query(
+    `INSERT INTO clinical_results
+       (exam_id, tenant_id, agent_type, interpretation, risk_scores, alerts,
+        recommendations, disclaimer, model_version)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      examId, tenantId, agentType,
+      result.interpretation,
+      JSON.stringify(result.risk_scores || {}),
+      JSON.stringify(result.alerts || []),
+      JSON.stringify(result.recommendations || []),
+      result.disclaimer,
+      'claude-opus-4-6'
+    ]
+  );
+}
+
 /**
  * Full exam processing pipeline:
- * parse → anonymize → classify → RAG → agents → persist → notify
+ * parse → anonymize → RAG → phase1 agents → phase2 agents → persist → notify
  *
  * @param {{ exam_id: string, tenant_id: string, file_path: string }} jobData
  */
@@ -37,51 +74,64 @@ async function processExam({ exam_id, tenant_id, file_path }) {
       [exam_id]
     );
 
+    // Fetch subject + tenant module
     const { rows } = await client.query(
-      `SELECT p.name, p.birth_date, p.sex
-       FROM exams e JOIN patients p ON p.id = e.patient_id
+      `SELECT s.name, s.birth_date, s.sex, s.subject_type, s.species,
+              t.module
+       FROM exams e
+       JOIN subjects s ON s.id = e.subject_id
+       JOIN tenants  t ON t.id = e.tenant_id
        WHERE e.id = $1`,
       [exam_id]
     );
-    const patient = rows[0];
+    const subject = rows[0];
+    const tenantModule = subject.module;
 
     if (!file_path) throw new Error('exam has no file_path — PDF download may have failed during ingest');
     const buffer = fs.readFileSync(file_path);
     const rawText = await extractText(buffer);
-    // Scrub PII from the raw PDF text before it leaves the system (LGPD)
     const examText = scrubText(rawText);
-    const anonPatient = anonymize(patient);
-    const agentNames = classifyAgents(examText);
+    const anonSubject = anonymize(subject);
 
-    if (agentNames.length === 0) {
+    // Determine Phase 1 agents
+    let phase1;
+    if (tenantModule === 'human') {
+      phase1 = PHASE1_AGENTS.human;
+    } else {
+      phase1 = PHASE1_AGENTS.veterinary[subject.species] || [];
+    }
+
+    if (phase1.length === 0) {
       await client.query(
         `UPDATE exams SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
-        ['No recognized clinical markers found', exam_id]
+        [`No agent configured for species: ${subject.species}`, exam_id]
       );
       await client.query('COMMIT');
       return;
     }
 
-    for (const agentName of agentNames) {
-      const runner = AGENT_RUNNERS[agentName];
-      if (!runner) continue;
+    // Phase 1 — specialty agents (sequential)
+    const specialtyResults = [];
+    for (const { type, runner } of phase1) {
+      const guidelines = await retrieveGuidelines(client, examText, 5, tenantModule, subject.species || null);
+      const result = await runner({ examText, patient: anonSubject, guidelines });
+      specialtyResults.push({ agent_type: type, ...result });
+      await persistResult(client, exam_id, tenant_id, type, result);
+    }
 
-      const guidelines = await retrieveGuidelines(client, examText);
-      const result = await runner({ examText, patient: anonPatient, guidelines });
-
-      await client.query(
-        `INSERT INTO clinical_results
-           (exam_id, tenant_id, agent_type, interpretation, risk_scores, alerts, disclaimer, model_version)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          exam_id, tenant_id, agentName,
-          result.interpretation,
-          JSON.stringify(result.risk_scores),
-          JSON.stringify(result.alerts),
-          result.disclaimer,
-          'claude-sonnet-4-6'
-        ]
-      );
+    // Phase 2 — synthesis agents (parallel)
+    const phase2Ctx = {
+      examText,
+      patient: anonSubject,
+      specialtyResults,
+      module: tenantModule,
+      species: subject.species || null
+    };
+    const phase2Results = await Promise.all(
+      PHASE2_AGENTS.map(({ runner }) => runner(phase2Ctx))
+    );
+    for (let i = 0; i < PHASE2_AGENTS.length; i++) {
+      await persistResult(client, exam_id, tenant_id, PHASE2_AGENTS[i].type, phase2Results[i]);
     }
 
     await client.query(
@@ -98,10 +148,6 @@ async function processExam({ exam_id, tenant_id, file_path }) {
     client.release();
   }
 
-  // If the pipeline failed, update exam status in a fresh transaction.
-  // A new connection is required because SET LOCAL was rolled back with the
-  // main transaction — without this, FORCE ROW LEVEL SECURITY would block
-  // the UPDATE since app.tenant_id would not be set.
   if (processingError) {
     const errorClient = await pool.connect();
     try {
@@ -121,14 +167,11 @@ async function processExam({ exam_id, tenant_id, file_path }) {
     throw processingError;
   }
 
-  // Notify API via Redis pub/sub — separate try/catch so a Redis failure
-  // doesn't corrupt the exam status after a successful COMMIT
   try {
     const pub = new Redis(process.env.REDIS_URL);
     await pub.publish(`exam:done:${tenant_id}`, JSON.stringify({ exam_id }));
     await pub.quit();
   } catch (redisErr) {
-    // Log but do not rethrow — exam is already successfully processed
     console.error(`[processor] Redis notify failed for exam ${exam_id}:`, redisErr.message);
   }
 }

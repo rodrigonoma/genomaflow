@@ -4,7 +4,7 @@ jest.mock('pg', () => {
       .mockResolvedValueOnce({}) // BEGIN
       .mockResolvedValueOnce({}) // SET LOCAL app.tenant_id
       .mockResolvedValueOnce({}) // UPDATE status = processing
-      .mockResolvedValue({ rows: [{ name: 'Maria', birth_date: '1975-03-20', sex: 'F' }] }),
+      .mockResolvedValue({ rows: [{ name: 'Test Subject', birth_date: '1990-01-01', sex: 'M', subject_type: 'human', species: null, module: 'human' }] }),
     release: jest.fn()
   };
   return {
@@ -23,20 +23,87 @@ jest.mock('../../src/parsers/pdf', () => ({
   extractText: jest.fn().mockResolvedValue('Glicemia: 126 mg/dL')
 }));
 
-jest.mock('../../src/classifier/markers', () => ({
-  classifyAgents: jest.fn().mockReturnValue(['metabolic'])
-}));
-
 jest.mock('../../src/rag/retriever', () => ({
   retrieveGuidelines: jest.fn().mockResolvedValue([{ title: 'ADA', content: '...', source: 'ADA' }])
 }));
 
 jest.mock('../../src/agents/metabolic', () => ({
   runMetabolicAgent: jest.fn().mockResolvedValue({
-    interpretation: 'Glicemia elevada.',
-    risk_scores: { metabolic: 'HIGH' },
+    interpretation: 'Test interpretation',
+    risk_scores: { test: 'LOW' },
     alerts: [],
-    disclaimer: 'Esta análise não substitui avaliação médica.'
+    recommendations: [],
+    disclaimer: 'Test disclaimer'
+  })
+}));
+
+jest.mock('../../src/agents/cardiovascular', () => ({
+  runCardiovascularAgent: jest.fn().mockResolvedValue({
+    interpretation: 'Test interpretation',
+    risk_scores: { test: 'LOW' },
+    alerts: [],
+    recommendations: [],
+    disclaimer: 'Test disclaimer'
+  })
+}));
+
+jest.mock('../../src/agents/hematology', () => ({
+  runHematologyAgent: jest.fn().mockResolvedValue({
+    interpretation: 'Test interpretation',
+    risk_scores: { test: 'LOW' },
+    alerts: [],
+    recommendations: [],
+    disclaimer: 'Test disclaimer'
+  })
+}));
+
+jest.mock('../../src/agents/small_animals', () => ({
+  runSmallAnimalsAgent: jest.fn().mockResolvedValue({
+    interpretation: 'Test interpretation',
+    risk_scores: { test: 'LOW' },
+    alerts: [],
+    recommendations: [],
+    disclaimer: 'Test disclaimer'
+  })
+}));
+
+jest.mock('../../src/agents/equine', () => ({
+  runEquineAgent: jest.fn().mockResolvedValue({
+    interpretation: 'Test interpretation',
+    risk_scores: { test: 'LOW' },
+    alerts: [],
+    recommendations: [],
+    disclaimer: 'Test disclaimer'
+  })
+}));
+
+jest.mock('../../src/agents/bovine', () => ({
+  runBovineAgent: jest.fn().mockResolvedValue({
+    interpretation: 'Test interpretation',
+    risk_scores: { test: 'LOW' },
+    alerts: [],
+    recommendations: [],
+    disclaimer: 'Test disclaimer'
+  })
+}));
+
+jest.mock('../../src/agents/therapeutic', () => ({
+  runTherapeuticAgent: jest.fn().mockResolvedValue({
+    interpretation: 'Test interpretation',
+    risk_scores: { test: 'LOW' },
+    alerts: [],
+    recommendations: [],
+    disclaimer: 'Test disclaimer'
+  })
+}));
+
+jest.mock('../../src/agents/nutrition', () => ({
+  runNutritionAgent: jest.fn().mockResolvedValue({
+    interpretation: 'Test interpretation',
+    risk_scores: { test: 'LOW' },
+    alerts: [],
+    recommendations: [],
+    disclaimer: 'Test disclaimer'
   })
 }));
 
