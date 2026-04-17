@@ -69,7 +69,7 @@ module.exports = async function (fastify) {
     const hash = hashCpf(owner_cpf);
     return withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
-        `SELECT id, name, sex, species, created_at
+        `SELECT id, name, sex, species, subject_type, created_at
          FROM subjects
          WHERE owner_cpf_hash = $1 AND subject_type = 'animal'
          ORDER BY name`,
