@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { DatePipe, NgClass } from '@angular/common';
@@ -704,15 +704,13 @@ export class PatientDetailComponent implements OnInit {
   selectedExamIds = signal(new Set<string>());
   comparison      = signal<ComparisonBlock[] | null>(null);
 
-  doneExams(): Exam[] {
-    return this.exams().filter(e => e.status === 'done' && !!e.results?.length);
-  }
+  doneExams = computed(() => this.exams().filter(e => e.status === 'done' && !!e.results?.length));
 
-  selectedSortedExams(): Exam[] {
-    return this.exams()
+  selectedSortedExams = computed(() =>
+    this.exams()
       .filter(e => this.selectedExamIds().has(e.id) && e.status === 'done')
-      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-  }
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  );
 
   readonly bloodTypes = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
 
@@ -797,10 +795,7 @@ export class PatientDetailComponent implements OnInit {
   }
 
   compareExams(): void {
-    const ids = this.selectedExamIds();
-    const sorted = this.exams()
-      .filter(e => ids.has(e.id) && e.status === 'done' && e.results?.length)
-      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const sorted = this.selectedSortedExams().filter(e => e.results?.length);
 
     if (sorted.length < 2) return;
 
@@ -814,8 +809,8 @@ export class PatientDetailComponent implements OnInit {
       const risk_trajectory: string[] = sorted.map(e => {
         const r = (e.results ?? []).find(r => r.agent_type === agent);
         if (!r) return '—';
-        const vals = Object.values(r.risk_scores ?? {});
-        return vals[0] ?? '—';
+        const entries = Object.entries(r.risk_scores ?? {});
+        return entries.length ? entries.map(([, v]) => v).join(' / ') : '—';
       });
 
       // Alert changes — compare consecutive pairs, keep most recent change per marker
@@ -863,27 +858,28 @@ export class PatientDetailComponent implements OnInit {
     this.comparison.set(blocks);
   }
 
-  agentLabel(type: string): string {
-    const labels: Record<string, string> = {
-      metabolic: 'Metabólico', cardiovascular: 'Cardiovascular',
-      hematology: 'Hematologia', therapeutic: 'Terapêutico',
-      nutrition: 'Nutrição', small_animals: 'Pequenos Animais',
-      equine: 'Equino', bovine: 'Bovino'
-    };
-    return labels[type] ?? type;
-  }
+  private readonly AGENT_LABELS: Record<string, string> = {
+    metabolic: 'Metabólico', cardiovascular: 'Cardiovascular',
+    hematology: 'Hematologia', therapeutic: 'Terapêutico',
+    nutrition: 'Nutrição', small_animals: 'Pequenos Animais',
+    equine: 'Equino', bovine: 'Bovino'
+  };
+  agentLabel(type: string): string { return this.AGENT_LABELS[type] ?? type; }
 
-  kindIcon(kind: string): string {
-    return { new: 'fiber_new', worsened: 'trending_up', improved: 'trending_down', resolved: 'check_circle' }[kind] ?? 'circle';
-  }
+  private readonly KIND_ICONS: Record<string, string> = {
+    new: 'fiber_new', worsened: 'trending_up', improved: 'trending_down', resolved: 'check_circle'
+  };
+  kindIcon(kind: string): string { return this.KIND_ICONS[kind] ?? 'circle'; }
 
-  kindColor(kind: string): string {
-    return { new: '#ffb4ab', worsened: '#ffcb6b', improved: '#4ad6a0', resolved: '#908fa0' }[kind] ?? '#908fa0';
-  }
+  private readonly KIND_COLORS: Record<string, string> = {
+    new: '#ffb4ab', worsened: '#ffcb6b', improved: '#4ad6a0', resolved: '#908fa0'
+  };
+  kindColor(kind: string): string { return this.KIND_COLORS[kind] ?? '#908fa0'; }
 
-  kindLabel(kind: string): string {
-    return { new: 'NOVO', worsened: 'PIOROU', improved: 'MELHOROU', resolved: 'RESOLVIDO' }[kind] ?? kind;
-  }
+  private readonly KIND_LABELS: Record<string, string> = {
+    new: 'NOVO', worsened: 'PIOROU', improved: 'MELHOROU', resolved: 'RESOLVIDO'
+  };
+  kindLabel(kind: string): string { return this.KIND_LABELS[kind] ?? kind; }
 
   onExamFile(event: Event): void {
     const file = (event.target as HTMLInputElement).files?.[0];
