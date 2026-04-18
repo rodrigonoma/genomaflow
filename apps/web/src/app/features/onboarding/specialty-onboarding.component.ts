@@ -74,7 +74,10 @@ export class SpecialtyOnboardingComponent {
     this.error.set('');
     this.http.put(`${environment.apiUrl}/auth/me/specialty`, { specialty: this.selectedSpecialty })
       .subscribe({
-        next: () => this.router.navigate(['/doctor/patients']),
+        next: () => {
+          this.saving.set(false);
+          this.router.navigate(['/doctor/patients']);
+        },
         error: () => {
           this.saving.set(false);
           this.error.set('Erro ao salvar. Tente novamente.');
