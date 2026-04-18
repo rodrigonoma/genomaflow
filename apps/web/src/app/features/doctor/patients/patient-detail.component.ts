@@ -12,9 +12,10 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ExamCardComponent } from '../../../shared/components/exam-card/exam-card.component';
 import { environment } from '../../../../environments/environment';
-import { Subject, Exam, TreatmentPlan, TreatmentItem, ClinicalResult } from '../../../shared/models/api.models';
+import { Subject, Exam, Alert, TreatmentPlan, TreatmentItem, ClinicalResult } from '../../../shared/models/api.models';
 
 interface AlertChange {
   marker: string;
@@ -37,7 +38,7 @@ interface ComparisonBlock {
     RouterModule, DatePipe, NgClass, FormsModule,
     MatTabsModule, MatButtonModule, MatIconModule,
     MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatChipsModule, MatDialogModule, MatCheckboxModule, ExamCardComponent
+    MatChipsModule, MatDialogModule, MatCheckboxModule, MatSnackBarModule, ExamCardComponent
   ],
   styles: [`
     :host { display: block; background: #0b1326; min-height: 100vh; }
@@ -168,35 +169,77 @@ interface ComparisonBlock {
     .exam-wrap.status-border-error      { border-left: 4px solid #ffb4ab; }
     .exam-wrap.status-border-pending    { border-left: 4px solid #908fa0; }
 
-    /* ── AI RESULTS ── */
-    .results-list { display: flex; flex-direction: column; gap: 1rem; max-width: 900px; }
-    .result-card {
+    /* ── AI RESULTS (redesign) ── */
+    .ai-exam-selector { margin-bottom: 1rem; }
+    .ai-select-field { width: 300px; }
+    .ai-status-strip { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem; }
+    .ai-agent-chip {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.4rem 0.75rem; background: #131b2e;
+      border: 1px solid rgba(70,69,84,0.2); border-left: 3px solid;
+      border-radius: 6px; cursor: pointer; transition: background 150ms;
+    }
+    .ai-agent-chip:hover { background: #1a2540; }
+    .ai-chip-name {
+      font-family: 'Space Grotesk', sans-serif; font-size: 12px;
+      font-weight: 700; color: #dae2fd; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .ai-chip-sev { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; }
+    .ai-chip-count { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #908fa0; }
+    .ai-cards { display: flex; flex-direction: column; gap: 0.5rem; max-width: 860px; }
+    .ai-card {
       background: #131b2e; border: 1px solid rgba(70,69,84,0.2);
-      border-radius: 6px; padding: 1.25rem;
+      border-left: 4px solid; border-radius: 8px; overflow: hidden;
     }
-    .result-header {
-      display: flex; justify-content: space-between;
-      align-items: center; margin-bottom: 1rem;
+    .ai-card-header {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.75rem 1rem; cursor: pointer; transition: background 150ms;
     }
-    .result-agent {
-      font-family: 'JetBrains Mono', monospace; font-size: 12px;
-      color: #c0c1ff; letter-spacing: 0.08em;
+    .ai-card-header:hover { background: #1a2540; }
+    .ai-expand-icon { font-size: 18px !important; width: 18px !important; height: 18px !important; color: #908fa0; }
+    .ai-card-name {
+      font-family: 'Space Grotesk', sans-serif; font-size: 13px;
+      font-weight: 700; color: #dae2fd; text-transform: uppercase; letter-spacing: 0.04em; flex: 1;
     }
-    .result-date { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #464554; }
-    .result-interpretation {
-      font-size: 13px; color: #c7c4d7; line-height: 1.6;
-      border-left: 2px solid rgba(192,193,255,0.3);
-      padding-left: 0.75rem; margin-bottom: 1rem;
-    }
-    .alerts-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 0.75rem; }
-    .alert-chip {
+    .ai-card-sev { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; }
+    .ai-card-count { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #908fa0; }
+    .ai-result-link {
       font-family: 'JetBrains Mono', monospace; font-size: 10px;
-      padding: 3px 10px; border-radius: 2px; text-transform: uppercase;
+      color: #c0c1ff; text-decoration: none; white-space: nowrap; margin-left: auto;
     }
-    .sev-critical { background: rgba(255,91,91,0.15); color: #ff5b5b; }
-    .sev-high     { background: rgba(255,180,171,0.15); color: #ffb4ab; }
-    .sev-medium   { background: rgba(245,193,74,0.15); color: #f5c14a; }
-    .sev-low      { background: rgba(74,214,160,0.15); color: #4ad6a0; }
+    .ai-result-link:hover { text-decoration: underline; }
+    .ai-card-body { padding: 0 1rem 1rem 1rem; border-top: 1px solid rgba(70,69,84,0.15); }
+    .ai-section-label {
+      font-family: 'JetBrains Mono', monospace; font-size: 9px;
+      text-transform: uppercase; letter-spacing: 0.1em; color: #464554;
+      margin: 1rem 0 0.5rem 0;
+    }
+    .ai-alerts { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.5rem; }
+    .ai-alert-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    }
+    .ai-alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .ai-alert-marker { color: #dae2fd; flex: 1; }
+    .ai-alert-value { color: #908fa0; }
+    .ai-alert-sev { font-size: 10px; font-weight: 700; min-width: 56px; text-align: right; }
+    .ai-interpretation { margin-bottom: 0.5rem; }
+    .ai-interpretation p {
+      font-family: 'Inter', sans-serif; font-size: 13px; color: #c7c4d7;
+      line-height: 1.6; margin: 0 0 0.5rem 0;
+      padding-left: 0.75rem; border-left: 2px solid rgba(192,193,255,0.2);
+    }
+    .ai-recs { display: flex; flex-direction: column; gap: 0.375rem; }
+    .ai-rec-item {
+      display: flex; gap: 0.5rem; align-items: flex-start;
+      padding: 0.5rem 0.75rem; border-radius: 4px;
+      background: rgba(70,69,84,0.08); border-left: 3px solid;
+    }
+    .ai-rec-type {
+      font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+      letter-spacing: 0.08em; color: #908fa0; flex-shrink: 0; padding-top: 2px; min-width: 88px;
+    }
+    .ai-rec-desc { font-family: 'Inter', sans-serif; font-size: 13px; color: #c7c4d7; line-height: 1.4; }
 
     /* ── TREATMENTS ── */
     .treatments-header {
@@ -483,32 +526,97 @@ interface ComparisonBlock {
           @if (aiResults().length === 0) {
             <p class="empty-state">Nenhuma análise de IA disponível.</p>
           } @else {
-            <div class="results-list">
-              @for (r of aiResults(); track r.id) {
-                @for (cr of r.results; track cr.agent_type) {
-                  <div class="result-card">
-                    <div class="result-header">
-                      <span class="result-agent">{{ cr.agent_type }}</span>
-                      <span class="result-date">{{ r.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
-                    </div>
-                    <div class="result-interpretation">{{ cr.interpretation }}</div>
+            <!-- Seletor de exame -->
+            <div class="ai-exam-selector">
+              <mat-form-field appearance="outline" class="ai-select-field">
+                <mat-label>Exame</mat-label>
+                <mat-select [value]="selectedAiExam()?.id"
+                            (selectionChange)="onAiExamSelect($event.value)">
+                  @for (e of sortedAiExams(); track e.id) {
+                    <mat-option [value]="e.id">
+                      {{ e.created_at | date:'dd/MM/yyyy HH:mm' }} · {{ e.results!.length }} {{ e.results!.length === 1 ? 'agente' : 'agentes' }}
+                    </mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            </div>
+
+            @if (selectedAiExam(); as exam) {
+              <!-- Faixa de status -->
+              <div class="ai-status-strip">
+                @for (cr of exam.results ?? []; track cr.agent_type) {
+                  @let sev = topSeverity(cr.alerts);
+                  <div class="ai-agent-chip" [style.border-left-color]="severityColor(sev)"
+                       (click)="toggleAgent(cr.agent_type)">
+                    <span class="ai-chip-name">{{ agentLabel(cr.agent_type) }}</span>
+                    <span class="ai-chip-sev" [style.color]="severityColor(sev)">{{ sev.toUpperCase() }}</span>
                     @if (cr.alerts?.length) {
-                      <div class="alerts-row">
-                        @for (a of cr.alerts; track a.marker) {
-                          <span class="alert-chip" [ngClass]="'sev-' + a.severity">
-                            {{ a.marker }}: {{ a.value }}
-                          </span>
+                      <span class="ai-chip-count">{{ cr.alerts.length }} alerta{{ cr.alerts.length !== 1 ? 's' : '' }}</span>
+                    }
+                  </div>
+                }
+              </div>
+
+              <!-- Cards colapsáveis -->
+              <div class="ai-cards">
+                @for (cr of exam.results ?? []; track cr.agent_type) {
+                  @let sev = topSeverity(cr.alerts);
+                  @let expanded = expandedAgents().has(cr.agent_type);
+                  <div class="ai-card" [style.border-left-color]="severityColor(sev)">
+                    <div class="ai-card-header" (click)="toggleAgent(cr.agent_type)">
+                      <mat-icon class="ai-expand-icon">{{ expanded ? 'expand_more' : 'chevron_right' }}</mat-icon>
+                      <span class="ai-card-name">{{ agentLabel(cr.agent_type) }}</span>
+                      <span class="ai-card-sev" [style.color]="severityColor(sev)">{{ sev.toUpperCase() }}</span>
+                      @if (cr.alerts?.length) {
+                        <span class="ai-card-count">{{ cr.alerts.length }} alerta{{ cr.alerts.length !== 1 ? 's' : '' }}</span>
+                      }
+                      <a class="ai-result-link" [routerLink]="['/doctor/results', exam.id]"
+                         (click)="$event.stopPropagation()">Ver resultado ↗</a>
+                    </div>
+
+                    @if (expanded) {
+                      <div class="ai-card-body">
+                        @if (cr.alerts?.length) {
+                          <div class="ai-section-label">ALERTAS</div>
+                          <div class="ai-alerts">
+                            @for (a of sortedAlerts(cr.alerts); track a.marker) {
+                              <div class="ai-alert-row">
+                                <span class="ai-alert-dot" [style.background]="severityColor(a.severity)"></span>
+                                <span class="ai-alert-marker">{{ a.marker }}</span>
+                                <span class="ai-alert-value">{{ a.value }}</span>
+                                <span class="ai-alert-sev" [style.color]="severityColor(a.severity)">{{ a.severity }}</span>
+                              </div>
+                            }
+                          </div>
+                        }
+
+                        <div class="ai-section-label">INTERPRETAÇÃO · AI · CLAUDE SONNET</div>
+                        <div class="ai-interpretation">
+                          @for (para of cr.interpretation.split('\n'); track $index) {
+                            @if (para.trim()) {
+                              <p>{{ para.trim() }}</p>
+                            }
+                          }
+                        </div>
+
+                        @if (cr.recommendations?.length) {
+                          <div class="ai-section-label">RECOMENDAÇÕES</div>
+                          <div class="ai-recs">
+                            @for (rec of cr.recommendations; track rec.description) {
+                              <div class="ai-rec-item"
+                                   [style.border-left-color]="severityColor(rec.priority === 'high' ? 'high' : rec.priority === 'medium' ? 'medium' : 'low')">
+                                <span class="ai-rec-type">{{ rec.type.toUpperCase() }}</span>
+                                <span class="ai-rec-desc">{{ rec.description }}</span>
+                              </div>
+                            }
+                          </div>
                         }
                       </div>
                     }
-                    <a mat-button style="font-size:11px;color:#c0c1ff;padding:0"
-                       [routerLink]="['/results', r.id]">
-                      Ver resultado completo →
-                    </a>
                   </div>
                 }
-              }
-            </div>
+              </div>
+            }
           }
         </mat-tab>
 
@@ -691,8 +799,9 @@ interface ComparisonBlock {
   `
 })
 export class PatientDetailComponent implements OnInit {
-  private http = inject(HttpClient);
-  private route = inject(ActivatedRoute);
+  private http   = inject(HttpClient);
+  private route  = inject(ActivatedRoute);
+  private snack  = inject(MatSnackBar);
 
   subject   = signal<Subject | null>(null);
   exams     = signal<Exam[]>([]);
@@ -701,8 +810,23 @@ export class PatientDetailComponent implements OnInit {
   showNewPlan = signal(false);
   uploading   = signal(false);
   uploadError = signal('');
+  selectedAiExamId = signal<string | null>(null);
+  expandedAgents   = signal<Set<string>>(new Set());
   selectedExamIds = signal(new Set<string>());
   comparison      = signal<ComparisonBlock[] | null>(null);
+
+  sortedAiExams = computed(() =>
+    [...this.aiResults()].sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+  );
+
+  selectedAiExam = computed<Exam | null>(() => {
+    const all = this.sortedAiExams();
+    if (!all.length) return null;
+    const id = this.selectedAiExamId();
+    return id ? (all.find(e => e.id === id) ?? all[0]) : all[0];
+  });
 
   doneExams = computed(() => this.exams().filter(e => e.status === 'done' && !!e.results?.length));
 
@@ -729,7 +853,10 @@ export class PatientDetailComponent implements OnInit {
   private loadSubject(id: string): void {
     this.http.get<Subject>(`${environment.apiUrl}/patients/${id}`).subscribe(s => {
       this.subject.set(s);
-      this.editForm = { ...s };
+      this.editForm = {
+        ...s,
+        birth_date: s.birth_date ? s.birth_date.toString().slice(0, 10) : undefined
+      };
     });
   }
 
@@ -737,7 +864,12 @@ export class PatientDetailComponent implements OnInit {
     this.http.get<Exam[]>(`${environment.apiUrl}/exams`).subscribe(all => {
       const mine = all.filter((e: any) => e.subject_id === id || e.patient_id === id);
       this.exams.set(mine);
-      this.aiResults.set(mine.filter(e => e.status === 'done' && e.results?.length));
+      const done = mine.filter(e => e.status === 'done' && e.results?.length);
+      this.aiResults.set(done);
+      const latest = [...done].sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )[0];
+      if (latest) this.initExpandedAgents(latest);
     });
   }
 
@@ -754,8 +886,14 @@ export class PatientDetailComponent implements OnInit {
 
   saveProfile(): void {
     const id = this.subject()!.id;
-    this.http.put<Subject>(`${environment.apiUrl}/patients/${id}`, this.editForm)
-      .subscribe(s => this.subject.set(s));
+    this.http.put<Subject>(`${environment.apiUrl}/patients/${id}`, this.editForm).subscribe({
+      next: s => {
+        this.subject.set(s);
+        this.editForm = { ...s, birth_date: s.birth_date ? s.birth_date.toString().slice(0, 10) : undefined };
+        this.snack.open('Perfil salvo com sucesso.', 'OK', { duration: 3000 });
+      },
+      error: () => this.snack.open('Erro ao salvar perfil. Tente novamente.', 'Fechar', { duration: 5000 })
+    });
   }
 
   toggleNewPlan(): void {
@@ -781,10 +919,53 @@ export class PatientDetailComponent implements OnInit {
       });
   }
 
-  private readonly SEV: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 };
+  private readonly SEV_COLORS: Record<string, string> = {
+    critical: '#ffb4ab', high: '#ffcb6b', medium: '#c0c1ff', low: '#4ad6a0', none: '#464554'
+  };
+
+  topSeverity(alerts: Alert[]): string {
+    if (!alerts?.length) return 'none';
+    for (const s of ['critical', 'high', 'medium', 'low']) {
+      if (alerts.some(a => a.severity?.toLowerCase() === s)) return s;
+    }
+    return 'none';
+  }
+
+  severityColor(sev: string): string {
+    return this.SEV_COLORS[sev?.toLowerCase()] ?? '#464554';
+  }
+
+  sortedAlerts(alerts: Alert[]): Alert[] {
+    return [...(alerts ?? [])].sort((a, b) =>
+      (this.SEV_RANK[b.severity] ?? 0) - (this.SEV_RANK[a.severity] ?? 0)
+    );
+  }
+
+  private readonly SEV_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, none: 0 };
 
   private severityOf(s: string): number {
-    return this.SEV[s?.toLowerCase()] ?? 0;
+    return this.SEV_RANK[s?.toLowerCase()] ?? 0;
+  }
+
+  onAiExamSelect(id: string): void {
+    this.selectedAiExamId.set(id);
+    const exam = this.selectedAiExam();
+    if (exam) this.initExpandedAgents(exam);
+  }
+
+  toggleAgent(agentType: string): void {
+    const s = new Set(this.expandedAgents());
+    s.has(agentType) ? s.delete(agentType) : s.add(agentType);
+    this.expandedAgents.set(s);
+  }
+
+  private initExpandedAgents(exam: Exam): void {
+    const results = exam.results ?? [];
+    if (!results.length) { this.expandedAgents.set(new Set()); return; }
+    const top = results.reduce((best, r) =>
+      (this.SEV_RANK[this.topSeverity(r.alerts)] ?? 0) > (this.SEV_RANK[this.topSeverity(best.alerts)] ?? 0) ? r : best
+    , results[0]);
+    this.expandedAgents.set(new Set([top.agent_type]));
   }
 
   toggleExamSelection(id: string): void {
