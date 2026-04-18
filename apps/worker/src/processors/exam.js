@@ -13,6 +13,8 @@ const { runEquineAgent } = require('../agents/equine');
 const { runBovineAgent } = require('../agents/bovine');
 const { runTherapeuticAgent } = require('../agents/therapeutic');
 const { runNutritionAgent } = require('../agents/nutrition');
+const { runClinicalCorrelationAgent } = require('../agents/clinical_correlation');
+const { indexExam } = require('../rag/indexer');
 
 // Phase 1: specialty agents — routed by module + species
 const PHASE1_AGENTS = {
@@ -29,10 +31,23 @@ const PHASE1_AGENTS = {
   }
 };
 
+function flattenCorrelationResult(result) {
+  const recs = [];
+  for (const se of result.suggested_exams || []) {
+    recs.push({ type: 'suggested_exam', _exam: se.exam, _rationale: se.rationale, description: `${se.exam}: ${se.rationale}`, priority: 'medium' });
+  }
+  for (const cf of result.contextual_factors || []) {
+    recs.push({ type: 'contextual_factor', description: cf, priority: 'low' });
+  }
+  return { ...result, recommendations: recs };
+}
+
 // Phase 2: synthesis agents — always run after phase 1
+// humanOnly: true means the agent is skipped for veterinary module
 const PHASE2_AGENTS = [
-  { type: 'therapeutic', runner: runTherapeuticAgent },
-  { type: 'nutrition',   runner: runNutritionAgent }
+  { type: 'therapeutic',          runner: runTherapeuticAgent },
+  { type: 'nutrition',            runner: runNutritionAgent },
+  { type: 'clinical_correlation', runner: runClinicalCorrelationAgent, humanOnly: true, flattenResult: flattenCorrelationResult }
 ];
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -182,8 +197,11 @@ async function processExam({ exam_id, tenant_id, file_path, selected_agents, chi
       return;
     }
 
+    // Filter phase2 agents by module
+    const activePhase2 = PHASE2_AGENTS.filter(a => !a.humanOnly || tenantModule === 'human');
+
     // Balance check before running agents
-    const allAgents = [...phase1, ...PHASE2_AGENTS];
+    const allAgents = [...phase1, ...activePhase2];
     const balance = await getBalance(tenant_id, client);
     if (balance < allAgents.length) {
       await client.query(
@@ -220,12 +238,14 @@ async function processExam({ exam_id, tenant_id, file_path, selected_agents, chi
       current_symptoms: current_symptoms || ''
     };
     const phase2Responses = await Promise.all(
-      PHASE2_AGENTS.map(({ runner }) => runner(phase2Ctx))
+      activePhase2.map(({ runner }) => runner(phase2Ctx))
     );
-    for (let i = 0; i < PHASE2_AGENTS.length; i++) {
+    for (let i = 0; i < activePhase2.length; i++) {
+      const agent = activePhase2[i];
       const { result, usage } = phase2Responses[i];
-      await persistResult(client, exam_id, tenant_id, PHASE2_AGENTS[i].type, result, usage);
-      await debitCredit(tenant_id, exam_id, PHASE2_AGENTS[i].type, client);
+      const persistableResult = agent.flattenResult ? agent.flattenResult(result) : result;
+      await persistResult(client, exam_id, tenant_id, agent.type, persistableResult, usage);
+      await debitCredit(tenant_id, exam_id, agent.type, client);
       await checkLowCreditAlert(tenant_id, client, billingRedis);
     }
 
@@ -275,6 +295,13 @@ async function processExam({ exam_id, tenant_id, file_path, selected_agents, chi
     await pub.quit();
   } catch (redisErr) {
     console.error(`[processor] Redis notify failed for exam ${exam_id}:`, redisErr.message);
+  }
+
+  // Index clinical chunks for the chatbot RAG (non-fatal)
+  try {
+    await indexExam(exam_id, tenant_id);
+  } catch (indexErr) {
+    console.error(`[processor] RAG indexing failed for exam ${exam_id}:`, indexErr.message);
   }
 }
 
