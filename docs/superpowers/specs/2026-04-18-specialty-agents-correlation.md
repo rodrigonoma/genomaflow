@@ -1,6 +1,6 @@
 # Especialidade Médica + Seleção de Agentes + Correlação Clínica — Design Spec
 
-**Goal:** Três melhorias relacionadas ao pipeline de processamento de exames: (1) cadastro obrigatório de especialidade médica, (2) seleção de agentes de especialidade no momento do upload baseada na especialidade configurada, (3) novo agente "Correlação Clínica" que sintetiza todos os resultados de um exame com foco em fatores subjacentes e exames complementares sugeridos.
+**Goal:** Quatro melhorias relacionadas ao pipeline de processamento de exames: (1) cadastro obrigatório de especialidade médica, (2) seleção de agentes de especialidade no momento do upload baseada na especialidade configurada, (3) novo agente "Correlação Clínica" que sintetiza todos os resultados de um exame com foco em fatores subjacentes e exames complementares sugeridos, (4) campos clínicos contextuais no perfil do paciente e no upload de exame para enriquecer a análise da IA.
 
 ---
 
@@ -85,6 +85,12 @@ Aparece abaixo do botão de upload após o médico selecionar o arquivo:
 ```
 Arquivo: exame_joao_17042026.pdf
 
+Queixa principal / motivo do exame  (opcional)
+[ campo de texto — ex: fadiga persistente há 3 meses ]
+
+Sintomas atuais  (opcional)
+[ campo de texto — ex: perda de peso, poliúria, visão turva ]
+
 Agentes de análise:
   ☑ Metabólico
   ☐ Cardiovascular
@@ -95,6 +101,7 @@ Agentes de análise:
 [ Cancelar ]   [ Enviar para análise ]
 ```
 
+- Queixa principal e sintomas são opcionais — não bloqueiam o envio
 - Checkboxes pré-selecionados conforme a especialidade do médico
 - Mínimo 1 agente Phase 1 obrigatório — botão "Enviar" desabilitado se todos desmarcados
 - "Cancelar" limpa o arquivo selecionado
@@ -107,21 +114,76 @@ Agentes de análise:
   "exam_id": "...",
   "tenant_id": "...",
   "file_path": "...",
-  "selected_agents": ["metabolic", "hematology"]
+  "selected_agents": ["metabolic", "hematology"],
+  "chief_complaint": "fadiga persistente há 3 meses",
+  "current_symptoms": "perda de peso, poliúria, visão turva"
 }
 ```
 
-O worker usa `selected_agents` para filtrar `PHASE1_AGENTS.human`. Se `selected_agents` estiver ausente (jobs antigos ou integração direta), assume todos os agentes — backwards compatible.
+O worker usa `selected_agents` para filtrar `PHASE1_AGENTS.human`. Se `selected_agents` estiver ausente (jobs antigos ou integração direta), assume todos os agentes — backwards compatible. `chief_complaint` e `current_symptoms` são opcionais — se ausentes, os agentes recebem string vazia.
 
 ---
 
-## Parte 4 — Agente "Correlação Clínica" (clinical_correlation)
+## Parte 4 — Campos Clínicos Contextuais do Paciente
+
+### Novos campos no perfil do paciente (persistentes)
+
+Migration `022_subject_clinical_context.sql` — colunas adicionais na tabela `subjects`:
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `medications` | TEXT | Medicamentos em uso (texto livre) |
+| `smoking` | VARCHAR(16) | `não_fumante` · `ex_fumante` · `fumante` |
+| `alcohol` | VARCHAR(16) | `não` · `social` · `abusivo` |
+| `diet_type` | VARCHAR(32) | `onívoro` · `vegetariano` · `vegano` · `outro` |
+| `physical_activity` | VARCHAR(16) | `sedentário` · `moderado` · `atleta` |
+| `family_history` | TEXT | Histórico familiar relevante (texto livre) |
+
+### UI — aba Perfil do paciente
+
+Seção adicional "Contexto Clínico" na aba Perfil, abaixo dos campos existentes:
+
+```
+CONTEXTO CLÍNICO
+
+Medicamentos em uso
+[ campo de texto — ex: metformina 850mg, atorvastatina 20mg ]
+
+Tabagismo       [ Não fumante ▼ ]
+Etilismo        [ Não ▼ ]
+Tipo de dieta   [ Onívoro ▼ ]
+Atividade física [ Sedentário ▼ ]
+
+Histórico familiar relevante
+[ campo de texto — ex: pai com DM2, mãe com cardiopatia ]
+```
+
+Todos os campos opcionais. Salvos via `PUT /patients/:id` junto com os demais campos do perfil.
+
+### Como são usados na análise
+
+O worker já busca o perfil do paciente (`subjects`) antes de processar. Com os novos campos, o contexto enviado a cada agente passa a incluir:
+
+```js
+patient: {
+  sex, age, weight, height, allergies, comorbidities,
+  // novos:
+  medications, smoking, alcohol, diet_type, physical_activity, family_history
+}
+```
+
+Os prompts dos agentes recebem esse contexto no bloco `Patient context`, permitindo que a IA interprete valores laboratoriais considerando, por exemplo, que o paciente usa metformina (B12 baixo esperado) ou é vegano (B12 e ferro heme baixos esperados).
+
+---
+
+## Parte 5 — Agente "Correlação Clínica" (clinical_correlation)
 
 ### Posição no pipeline
 
 Phase 2 — roda uma vez por exame após todos os agentes Phase 1 concluírem. Recebe:
 - Todos os resultados de Phase 1 do exame atual
-- Perfil do paciente: sexo, idade, peso, altura, alergias, comorbidades
+- Perfil completo do paciente (incluindo campos clínicos contextuais)
+- Queixa principal e sintomas atuais informados no upload (se presentes)
 
 ### Output JSON
 
@@ -174,5 +236,7 @@ Card adicional nas Análises IA com `agent_type = 'clinical_correlation'`, label
 - Módulo veterinário (não afetado)
 - Histórico de especialidades por usuário
 - Especialidade diferente por paciente (é do médico, não do paciente)
-- Armazenamento de dados de estilo de vida do paciente (dieta, etc.) — o agente infere do que está nos marcadores e no perfil existente
+- Campos de estilo de vida para pacientes veterinários
+- Cirurgias anteriores e histórico de viagens
 - Interface de administração de especialidades (o médico gerencia o próprio perfil)
+- Campos obrigatórios de contexto clínico — todos são opcionais exceto especialidade do médico
