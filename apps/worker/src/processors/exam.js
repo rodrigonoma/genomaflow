@@ -112,6 +112,9 @@ async function processExam({ exam_id, tenant_id, file_path, selected_agents, chi
     // Fetch subject + tenant module
     const { rows } = await client.query(
       `SELECT s.name, s.birth_date, s.sex, s.subject_type, s.species,
+              s.weight, s.height, s.allergies, s.comorbidities,
+              s.medications, s.smoking, s.alcohol, s.diet_type,
+              s.physical_activity, s.family_history,
               t.module
        FROM exams e
        JOIN subjects s ON s.id = e.subject_id
@@ -138,6 +141,19 @@ async function processExam({ exam_id, tenant_id, file_path, selected_agents, chi
     const rawText = await extractText(buffer);
     const examText = scrubText(rawText);
     const anonSubject = anonymize(subject);
+    const patientContext = {
+      ...anonSubject,
+      weight:            subject.weight            || null,
+      height:            subject.height            || null,
+      allergies:         subject.allergies          || null,
+      comorbidities:     subject.comorbidities      || null,
+      medications:       subject.medications        || null,
+      smoking:           subject.smoking            || null,
+      alcohol:           subject.alcohol            || null,
+      diet_type:         subject.diet_type          || null,
+      physical_activity: subject.physical_activity  || null,
+      family_history:    subject.family_history     || null
+    };
 
     // Determine Phase 1 agents
     let phase1;
@@ -186,7 +202,7 @@ async function processExam({ exam_id, tenant_id, file_path, selected_agents, chi
     const specialtyResults = [];
     for (const { type, runner } of phase1) {
       const guidelines = await retrieveGuidelines(client, examText, 5, tenantModule, subject.species || null);
-      const { result, usage } = await runner({ examText, patient: anonSubject, guidelines });
+      const { result, usage } = await runner({ examText, patient: patientContext, guidelines });
       specialtyResults.push({ agent_type: type, ...result });
       await persistResult(client, exam_id, tenant_id, type, result, usage);
       await debitCredit(tenant_id, exam_id, type, client);
@@ -196,7 +212,7 @@ async function processExam({ exam_id, tenant_id, file_path, selected_agents, chi
     // Phase 2 — synthesis agents (parallel)
     const phase2Ctx = {
       examText,
-      patient: anonSubject,
+      patient: patientContext,
       specialtyResults,
       module: tenantModule,
       species: subject.species || null,

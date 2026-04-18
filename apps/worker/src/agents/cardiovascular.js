@@ -23,19 +23,37 @@ async function runCardiovascularAgent(ctx) {
 
   const response = await client.messages.create({
     model: 'claude-opus-4-6',
-    max_tokens: 4096,
+    max_tokens: 8192,
     system: SYSTEM_PROMPT,
     messages: [{
       role: 'user',
-      content: `Patient: sex=${ctx.patient.sex}, age_range=${ctx.patient.age_range}\n\nLab Results:\n${ctx.examText}\n\nGuidelines:\n${guidelinesText}`
+      content: `Patient context:
+- sex: ${ctx.patient.sex}
+- age_range: ${ctx.patient.age_range}
+- weight: ${ctx.patient.weight || 'unknown'} kg
+- medications: ${ctx.patient.medications || 'none reported'}
+- smoking: ${ctx.patient.smoking || 'unknown'}
+- alcohol: ${ctx.patient.alcohol || 'unknown'}
+- diet_type: ${ctx.patient.diet_type || 'unknown'}
+- physical_activity: ${ctx.patient.physical_activity || 'unknown'}
+- allergies: ${ctx.patient.allergies || 'none reported'}
+- comorbidities: ${ctx.patient.comorbidities || 'none reported'}
+- family_history: ${ctx.patient.family_history || 'none reported'}
+
+Lab Results:
+${ctx.examText}
+
+Guidelines:
+${guidelinesText}`
     }]
   });
 
   const rawText = response.content?.[0]?.text;
   if (!rawText) throw new Error(`[cardiovascular] Claude returned empty response`);
-  const start = rawText.indexOf('{');
-  const end = rawText.lastIndexOf('}');
-  const jsonText = start !== -1 && end !== -1 ? rawText.slice(start, end + 1) : rawText;
+  const cleaned = rawText.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  const jsonText = start !== -1 && end !== -1 ? cleaned.slice(start, end + 1) : cleaned;
   let result;
   try {
     result = JSON.parse(jsonText);
