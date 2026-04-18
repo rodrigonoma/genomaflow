@@ -14,11 +14,20 @@ module.exports = async function (fastify) {
 
     let subject_id = null;
     let fileData = null;
+    let selected_agents = null;
+    let chief_complaint = '';
+    let current_symptoms = '';
 
     // Collect ALL parts before processing (field order may vary)
     for await (const part of parts) {
       if (part.type === 'field' && part.fieldname === 'patient_id') {
         subject_id = part.value;
+      } else if (part.type === 'field' && part.fieldname === 'selected_agents') {
+        try { selected_agents = JSON.parse(part.value); } catch (_) {}
+      } else if (part.type === 'field' && part.fieldname === 'chief_complaint') {
+        chief_complaint = part.value || '';
+      } else if (part.type === 'field' && part.fieldname === 'current_symptoms') {
+        current_symptoms = part.value || '';
       } else if (part.type === 'file' && part.fieldname === 'file') {
         fileData = part;
         // Must consume the stream to avoid hanging
@@ -43,14 +52,28 @@ module.exports = async function (fastify) {
 
     try {
       const exam = await withTenant(fastify.pg, tenant_id, async (client) => {
-        // Verify the subject belongs to this tenant before inserting the exam
+        // Verify subject belongs to this tenant and matches contracted module
         const { rows: subjectRows } = await client.query(
-          'SELECT id FROM subjects WHERE id = $1 AND tenant_id = $2',
+          `SELECT s.id, s.subject_type, t.module
+           FROM subjects s
+           JOIN tenants t ON t.id = s.tenant_id
+           WHERE s.id = $1 AND s.tenant_id = $2`,
           [subject_id, tenant_id]
         );
         if (subjectRows.length === 0) {
           const err = new Error('Patient not found');
           err.statusCode = 404;
+          throw err;
+        }
+
+        const { subject_type, module } = subjectRows[0];
+        const expectedType = module === 'human' ? 'human' : 'animal';
+        if (subject_type !== expectedType) {
+          const err = new Error(
+            `Module mismatch: tenant has module "${module}" but subject is "${subject_type}". ` +
+            `Only ${expectedType} subjects can be processed by this clinic.`
+          );
+          err.statusCode = 422;
           throw err;
         }
 
@@ -66,16 +89,18 @@ module.exports = async function (fastify) {
       await examQueue.add('process-exam', {
         exam_id: exam.id,
         tenant_id,
-        file_path: filePath
+        file_path: filePath,
+        selected_agents: selected_agents || null,
+        chief_complaint,
+        current_symptoms
       });
 
       return reply.status(202).send({ exam_id: exam.id, status: 'pending' });
     } catch (err) {
       // Clean up the uploaded file if DB operation failed
       fs.unlink(filePath, () => {});
-      if (err.statusCode === 404) {
-        return reply.status(404).send({ error: err.message });
-      }
+      if (err.statusCode === 404) return reply.status(404).send({ error: err.message });
+      if (err.statusCode === 422) return reply.status(422).send({ error: err.message });
       throw err;
     }
   });
