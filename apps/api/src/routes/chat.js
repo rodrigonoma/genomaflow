@@ -51,7 +51,7 @@ module.exports = async function (fastify) {
     const qHash      = hashText(question.trim());
     const resultKey  = `chat:result:${tenant_id}:${qHash}`;
     const embedKey   = `chat:embedding:${qHash}`;
-    const sessionKey = `chat:session:${session_id}`;
+    const sessionKey = `chat:session:${tenant_id}:${session_id}`;
 
     // --- Cache de resultado ---
     const cachedResult = await fastify.redis.get(resultKey);
@@ -106,11 +106,14 @@ module.exports = async function (fastify) {
     const top40 = rrf(semanticRes.rows, lexicalRes.rows);
 
     if (top40.length === 0) {
-      return reply.status(200).send({
-        session_id,
-        answer: 'Não encontrei dados clínicos relevantes no sistema para responder essa pergunta.',
-        sources: []
-      });
+      const emptyAnswer = 'Não encontrei dados clínicos relevantes no sistema para responder essa pergunta.';
+      await fastify.redis.lpush(sessionKey,
+        JSON.stringify({ role: 'user',      content: question }),
+        JSON.stringify({ role: 'assistant', content: emptyAnswer })
+      );
+      await fastify.redis.ltrim(sessionKey, 0, 19);
+      await fastify.redis.expire(sessionKey, SESSION_TTL);
+      return reply.status(200).send({ session_id, answer: emptyAnswer, sources: [] });
     }
 
     // --- LLM-as-judge: Haiku seleciona top-5 ---
@@ -136,8 +139,8 @@ module.exports = async function (fastify) {
       const idMap  = new Map(top40.map(c => [c.id, c]));
       const ranked = (parsed.ranked_ids || []).map(id => idMap.get(id)).filter(Boolean);
       if (ranked.length > 0) top5 = ranked;
-    } catch (_) {
-      // judge falhou — usa top-5 do RRF
+    } catch (judgeErr) {
+      fastify.log.warn({ err: judgeErr }, '[chat] LLM judge failed, falling back to RRF top-5');
     }
 
     // --- Histórico da sessão (últimas 10 msgs) ---
@@ -188,8 +191,9 @@ module.exports = async function (fastify) {
 
   // DELETE /chat/session/:session_id
   fastify.delete('/session/:session_id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { tenant_id } = request.user;
     const { session_id } = request.params;
-    await fastify.redis.del(`chat:session:${session_id}`);
+    await fastify.redis.del(`chat:session:${tenant_id}:${session_id}`);
     return reply.status(204).send();
   });
 };
