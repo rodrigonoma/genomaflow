@@ -96,7 +96,7 @@ async function checkLowCreditAlert(tenantId, pg, redis) {
  *
  * @param {{ exam_id: string, tenant_id: string, file_path: string }} jobData
  */
-async function processExam({ exam_id, tenant_id, file_path }) {
+async function processExam({ exam_id, tenant_id, file_path, selected_agents, chief_complaint, current_symptoms }) {
   const client = await pool.connect();
   let processingError = null;
 
@@ -122,6 +122,17 @@ async function processExam({ exam_id, tenant_id, file_path }) {
     const subject = rows[0];
     const tenantModule = subject.module;
 
+    // Guard: subject_type must match tenant module
+    const expectedType = tenantModule === 'human' ? 'human' : 'animal';
+    if (subject.subject_type !== expectedType) {
+      await client.query(
+        `UPDATE exams SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
+        [`Module mismatch: tenant module is "${tenantModule}" but subject type is "${subject.subject_type}"`, exam_id]
+      );
+      await client.query('COMMIT');
+      return;
+    }
+
     if (!file_path) throw new Error('exam has no file_path — PDF download may have failed during ingest');
     const buffer = fs.readFileSync(file_path);
     const rawText = await extractText(buffer);
@@ -131,7 +142,10 @@ async function processExam({ exam_id, tenant_id, file_path }) {
     // Determine Phase 1 agents
     let phase1;
     if (tenantModule === 'human') {
-      phase1 = PHASE1_AGENTS.human;
+      phase1 = selected_agents?.length
+        ? PHASE1_AGENTS.human.filter(a => selected_agents.includes(a.type))
+        : PHASE1_AGENTS.human;
+      if (!phase1.length) phase1 = PHASE1_AGENTS.human;
     } else {
       phase1 = PHASE1_AGENTS.veterinary[subject.species] || [];
     }
@@ -150,8 +164,8 @@ async function processExam({ exam_id, tenant_id, file_path }) {
     const balance = await getBalance(tenant_id, client);
     if (balance < allAgents.length) {
       await client.query(
-        "UPDATE exams SET status = 'failed', error_message = $1, updated_at = NOW() WHERE id = $2",
-        ['Saldo de créditos insuficiente', exam_id]
+        "UPDATE exams SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2",
+        ['Saldo de créditos insuficiente — recarregue seus créditos e envie novamente', exam_id]
       );
       await client.query('COMMIT');
       return;
@@ -178,7 +192,9 @@ async function processExam({ exam_id, tenant_id, file_path }) {
       patient: anonSubject,
       specialtyResults,
       module: tenantModule,
-      species: subject.species || null
+      species: subject.species || null,
+      chief_complaint: chief_complaint || '',
+      current_symptoms: current_symptoms || ''
     };
     const phase2Responses = await Promise.all(
       PHASE2_AGENTS.map(({ runner }) => runner(phase2Ctx))
@@ -222,6 +238,11 @@ async function processExam({ exam_id, tenant_id, file_path }) {
     } finally {
       errorClient.release();
     }
+    try {
+      const pub = new Redis(process.env.REDIS_URL);
+      await pub.publish(`exam:error:${tenant_id}`, JSON.stringify({ exam_id, error_message: processingError.message }));
+      await pub.quit();
+    } catch (_) {}
     throw processingError;
   }
 
