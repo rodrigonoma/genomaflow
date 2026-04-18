@@ -30,3 +30,27 @@ CREATE INDEX IF NOT EXISTS chat_embeddings_tsv_idx
 -- Filtro rápido por tenant
 CREATE INDEX IF NOT EXISTS chat_embeddings_tenant_idx
   ON chat_embeddings (tenant_id);
+
+-- Row Level Security (tenant isolation)
+ALTER TABLE chat_embeddings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_embeddings FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON chat_embeddings
+  FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE POLICY tenant_isolation_write ON chat_embeddings
+  FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE POLICY tenant_isolation_update ON chat_embeddings
+  FOR UPDATE USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
+  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE POLICY tenant_isolation_delete ON chat_embeddings
+  FOR DELETE USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+-- Composite index for subject-scoped queries (e.g. DELETE patient_profile by subject)
+CREATE INDEX IF NOT EXISTS chat_embeddings_tenant_subject_idx
+  ON chat_embeddings (tenant_id, subject_id);
+
+-- Grant access to app user
+GRANT SELECT, INSERT, UPDATE, DELETE ON chat_embeddings TO genomaflow_app;
