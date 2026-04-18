@@ -19,6 +19,9 @@ app.register(require('./routes/alerts'), { prefix: '/alerts' });
 app.register(require('./routes/users'), { prefix: '/users' });
 app.register(require('./routes/integrations'), { prefix: '/integrations' });
 app.register(require('./routes/billing'), { prefix: '' });
+app.register(require('./routes/feedback'), { prefix: '/feedback' });
+app.register(require('./routes/error-log'), { prefix: '/error-log' });
+app.register(require('./routes/chat'), { prefix: '/chat' });
 
 if (require.main === module) {
   app.listen({ port: 3000, host: '0.0.0.0' });
