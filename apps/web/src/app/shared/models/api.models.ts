@@ -57,6 +57,13 @@ export interface Subject {
   owner_phone?: string;
   owner_email?: string;
   created_at: string;
+  // clinical context (human only)
+  medications?: string;
+  smoking?: string;
+  alcohol?: string;
+  diet_type?: string;
+  physical_activity?: string;
+  family_history?: string;
 }
 
 /** @deprecated use Subject */
@@ -69,9 +76,12 @@ export interface Alert {
 }
 
 export interface Recommendation {
-  type: 'medication' | 'procedure' | 'referral' | 'diet' | 'habit' | 'supplement' | 'activity';
+  type: 'medication' | 'procedure' | 'referral' | 'diet' | 'habit' | 'supplement' | 'activity'
+      | 'suggested_exam' | 'contextual_factor';
   description: string;
   priority: 'low' | 'medium' | 'high';
+  _exam?: string;
+  _rationale?: string;
 }
 
 export interface ClinicalResult {
