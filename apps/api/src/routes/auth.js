@@ -97,4 +97,37 @@ module.exports = async function (fastify) {
     }
     return reply.status(200).send({ ok: true });
   });
+
+  fastify.get('/me', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { user_id } = request.user;
+    const { rows } = await fastify.pg.query(
+      `SELECT id, email, role, specialty, created_at FROM users WHERE id = $1`,
+      [user_id]
+    );
+    if (!rows[0]) return reply.status(404).send({ error: 'User not found' });
+    return rows[0];
+  });
+
+  fastify.put('/me/specialty', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { user_id } = request.user;
+    const { specialty } = request.body;
+
+    const VALID_SPECIALTIES = [
+      'endocrinologia','cardiologia','hematologia','clínica_geral','nutrição',
+      'nefrologia','hepatologia','gastroenterologia','ginecologia','urologia',
+      'pediatria','neurologia','ortopedia','pneumologia','reumatologia',
+      'oncologia','infectologia','dermatologia','psiquiatria','geriatria',
+      'medicina_esporte'
+    ];
+
+    if (!specialty || !VALID_SPECIALTIES.includes(specialty)) {
+      return reply.status(400).send({ error: 'Especialidade inválida', valid: VALID_SPECIALTIES });
+    }
+
+    const { rows } = await fastify.pg.query(
+      `UPDATE users SET specialty = $1 WHERE id = $2 RETURNING id, email, role, specialty`,
+      [specialty, user_id]
+    );
+    return rows[0];
+  });
 };
