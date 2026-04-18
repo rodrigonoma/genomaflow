@@ -142,10 +142,17 @@ async function processExam({ exam_id, tenant_id, file_path, selected_agents, chi
     // Determine Phase 1 agents
     let phase1;
     if (tenantModule === 'human') {
-      phase1 = selected_agents?.length
-        ? PHASE1_AGENTS.human.filter(a => selected_agents.includes(a.type))
-        : PHASE1_AGENTS.human;
-      if (!phase1.length) phase1 = PHASE1_AGENTS.human;
+      if (selected_agents?.length) {
+        const filtered = PHASE1_AGENTS.human.filter(a => Array.isArray(selected_agents) && selected_agents.includes(a.type));
+        if (filtered.length) {
+          phase1 = filtered;
+        } else {
+          console.warn('[processor] selected_agents contained no valid agent types; falling back to all agents', selected_agents);
+          phase1 = PHASE1_AGENTS.human;
+        }
+      } else {
+        phase1 = PHASE1_AGENTS.human;
+      }
     } else {
       phase1 = PHASE1_AGENTS.veterinary[subject.species] || [];
     }

@@ -23,7 +23,10 @@ module.exports = async function (fastify) {
       if (part.type === 'field' && part.fieldname === 'patient_id') {
         subject_id = part.value;
       } else if (part.type === 'field' && part.fieldname === 'selected_agents') {
-        try { selected_agents = JSON.parse(part.value); } catch (_) {}
+        try {
+          const parsed = JSON.parse(part.value);
+          if (Array.isArray(parsed)) selected_agents = parsed;
+        } catch (_) {}
       } else if (part.type === 'field' && part.fieldname === 'chief_complaint') {
         chief_complaint = part.value || '';
       } else if (part.type === 'field' && part.fieldname === 'current_symptoms') {

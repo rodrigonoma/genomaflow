@@ -2,6 +2,14 @@ const bcrypt = require('bcrypt');
 
 const DUMMY_HASH = '$2b$10$invalidhashfortimingprotection0000000000000000000000000';
 
+const VALID_SPECIALTIES = [
+  'endocrinologia','cardiologia','hematologia','clínica_geral','nutrição',
+  'nefrologia','hepatologia','gastroenterologia','ginecologia','urologia',
+  'pediatria','neurologia','ortopedia','pneumologia','reumatologia',
+  'oncologia','infectologia','dermatologia','psiquiatria','geriatria',
+  'medicina_esporte'
+];
+
 module.exports = async function (fastify) {
   fastify.post('/login', async (request, reply) => {
     const { email, password } = request.body;
@@ -112,14 +120,6 @@ module.exports = async function (fastify) {
     const { user_id } = request.user;
     const { specialty } = request.body;
 
-    const VALID_SPECIALTIES = [
-      'endocrinologia','cardiologia','hematologia','clínica_geral','nutrição',
-      'nefrologia','hepatologia','gastroenterologia','ginecologia','urologia',
-      'pediatria','neurologia','ortopedia','pneumologia','reumatologia',
-      'oncologia','infectologia','dermatologia','psiquiatria','geriatria',
-      'medicina_esporte'
-    ];
-
     if (!specialty || !VALID_SPECIALTIES.includes(specialty)) {
       return reply.status(400).send({ error: 'Especialidade inválida', valid: VALID_SPECIALTIES });
     }
@@ -128,6 +128,7 @@ module.exports = async function (fastify) {
       `UPDATE users SET specialty = $1 WHERE id = $2 RETURNING id, email, role, specialty`,
       [specialty, user_id]
     );
+    if (!rows[0]) return reply.status(404).send({ error: 'User not found' });
     return rows[0];
   });
 };
