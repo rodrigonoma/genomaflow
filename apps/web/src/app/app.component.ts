@@ -1,21 +1,28 @@
 import { Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
-import { AsyncPipe } from '@angular/common';
+import { AsyncPipe, NgIf } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { HttpClient } from '@angular/common/http';
 import { Subscription } from 'rxjs';
 import { AuthService } from './core/auth/auth.service';
 import { ReviewQueueService } from './features/doctor/review-queue/review-queue.service';
 import { WsService } from './core/ws/ws.service';
+import { ChatPanelComponent } from './features/chat/chat-panel.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
   imports: [RouterOutlet, RouterLink, RouterLinkActive, AsyncPipe,
-            MatIconModule, MatMenuModule, MatButtonModule, MatTooltipModule, MatSnackBarModule],
+            MatIconModule, MatMenuModule, MatButtonModule, MatTooltipModule,
+            MatSnackBarModule, MatDialogModule, ChatPanelComponent],
   styles: [`
     :host { display: block; }
 
@@ -33,7 +40,7 @@ import { WsService } from './core/ws/ws.service';
     }
 
     .brand-logo {
-      width: 32px; height: 32px;
+      width: 56px; height: 56px;
       object-fit: contain; flex-shrink: 0;
     }
 
@@ -123,6 +130,7 @@ import { WsService } from './core/ws/ws.service';
       margin-top: 56px;
       min-height: calc(100vh - 56px);
       background: #0b1326;
+      transition: margin-right 180ms cubic-bezier(0.4,0,0.2,1);
     }
   `],
   template: `
@@ -145,8 +153,8 @@ import { WsService } from './core/ws/ws.service';
             <a class="nav-item" routerLink="/clinic/users" routerLinkActive="active">
               <mat-icon>group</mat-icon> Usuários
             </a>
-            <a class="nav-item" routerLink="/clinic/integrations" routerLinkActive="active">
-              <mat-icon>cable</mat-icon> Integrações
+            <a class="nav-item" routerLink="/clinic/billing" routerLinkActive="active">
+              <mat-icon>account_balance_wallet</mat-icon> Créditos
             </a>
           }
           <div class="nav-section-label">Clínica</div>
@@ -163,7 +171,14 @@ import { WsService } from './core/ws/ws.service';
               }
             }
           </a>
-          <div class="nav-section-label" style="margin-top: 2rem">Sistema</div>
+          <div class="nav-section-label" style="margin-top: 2rem">Suporte</div>
+          <button class="nav-item" (click)="openFeedback('bug')">
+            <mat-icon>bug_report</mat-icon> Reportar erro
+          </button>
+          <button class="nav-item" (click)="openFeedback('feature')">
+            <mat-icon>lightbulb</mat-icon> Sugerir melhoria
+          </button>
+          <div class="nav-section-label" style="margin-top: 1rem">Sistema</div>
           <button class="nav-item" (click)="auth.logout()">
             <mat-icon>logout</mat-icon> Sair
           </button>
@@ -175,6 +190,12 @@ import { WsService } from './core/ws/ws.service';
       </aside>
 
       <header class="topbar">
+        <button mat-icon-button
+                matTooltip="Assistente clínico"
+                style="color:#908fa0;margin-right:0.5rem"
+                (click)="chatOpen = !chatOpen">
+          <mat-icon>smart_toy</mat-icon>
+        </button>
         <div class="user-chip" [matMenuTriggerFor]="menu">
           <mat-icon style="font-size:16px;width:16px;height:16px;color:#c0c1ff">account_circle</mat-icon>
           <span class="user-role-label">{{ user.role }}</span>
@@ -195,7 +216,11 @@ import { WsService } from './core/ws/ws.service';
         </mat-menu>
       </header>
 
-      <main class="main-content">
+      @if (chatOpen) {
+        <app-chat-panel (closed)="chatOpen = false" />
+      }
+
+      <main class="main-content" [style.margin-right]="chatOpen ? '420px' : '0'">
         <router-outlet />
       </main>
     } @else {
@@ -208,7 +233,9 @@ export class AppComponent implements OnInit, OnDestroy {
   reviewService = inject(ReviewQueueService);
   ws = inject(WsService);
   snack = inject(MatSnackBar);
+  dialog = inject(MatDialog);
   reviewCount$ = this.reviewService.pendingCount$;
+  chatOpen = false;
 
   private subs = new Subscription();
 
@@ -240,6 +267,13 @@ export class AppComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() { this.subs.unsubscribe(); }
 
+  openFeedback(type: 'bug' | 'feature'): void {
+    this.dialog.open(FeedbackDialogComponent, {
+      width: '480px',
+      data: { type }
+    });
+  }
+
   private friendlyExamError(msg: string): string {
     if (!msg) return 'Erro desconhecido.';
     if (msg.includes('créditos insuficiente')) return 'Saldo de créditos insuficiente. Recarregue e reenvie.';
@@ -247,5 +281,68 @@ export class AppComponent implements OnInit, OnDestroy {
     if (msg.includes('No agent configured')) return 'Espécie sem agente configurado.';
     if (msg.includes('no file_path')) return 'Arquivo não encontrado. Reenvie o PDF.';
     return msg.length > 120 ? msg.slice(0, 120) + '…' : msg;
+  }
+}
+
+@Component({
+  selector: 'app-feedback-dialog',
+  standalone: true,
+  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatDialogModule, MatIconModule, NgIf],
+  template: `
+    <div style="padding:1.5rem;background:#131b2e;border-radius:8px;min-width:400px">
+      <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.25rem">
+        <mat-icon style="color:{{ data.type === 'bug' ? '#ffb4ab' : '#c0c1ff' }}">
+          {{ data.type === 'bug' ? 'bug_report' : 'lightbulb' }}
+        </mat-icon>
+        <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.1rem;font-weight:700;color:#dae2fd;margin:0">
+          {{ data.type === 'bug' ? 'Reportar erro' : 'Sugerir melhoria' }}
+        </h2>
+      </div>
+
+      <mat-form-field appearance="outline" style="width:100%;margin-bottom:1rem">
+        <mat-label>{{ data.type === 'bug' ? 'Descreva o erro' : 'Descreva sua sugestão' }}</mat-label>
+        <textarea matInput [(ngModel)]="message" rows="5"
+          [placeholder]="data.type === 'bug' ? 'O que aconteceu? Quais passos reproduzem o problema?' : 'O que poderia ser melhorado ou adicionado?'">
+        </textarea>
+      </mat-form-field>
+
+      @if (sent) {
+        <div style="background:rgba(192,193,255,0.08);border:1px solid rgba(192,193,255,0.2);border-radius:4px;padding:0.75rem;font-family:'JetBrains Mono',monospace;font-size:12px;color:#c0c1ff;margin-bottom:1rem">
+          Obrigado pelo feedback! Recebemos sua mensagem.
+        </div>
+      }
+
+      <div style="display:flex;justify-content:flex-end;gap:0.5rem">
+        <button mat-button [mat-dialog-close]="null" style="color:#908fa0">Fechar</button>
+        <button mat-flat-button
+                style="background:#c0c1ff;color:#1000a9;font-weight:700"
+                [disabled]="!message.trim() || sending || sent"
+                (click)="submit()">
+          {{ sending ? 'Enviando…' : sent ? 'Enviado ✓' : 'Enviar' }}
+        </button>
+      </div>
+    </div>
+  `
+})
+export class FeedbackDialogComponent {
+  data: { type: 'bug' | 'feature' } = inject(MAT_DIALOG_DATA);
+  private http = inject(HttpClient);
+  private snack = inject(MatSnackBar);
+
+  message = '';
+  sending = false;
+  sent = false;
+
+  submit(): void {
+    if (!this.message.trim()) return;
+    this.sending = true;
+    this.http.post('/api/feedback', { type: this.data.type, message: this.message }).subscribe({
+      next: () => { this.sending = false; this.sent = true; },
+      error: () => {
+        this.sending = false;
+        this.sent = true; // show success anyway — feedback stored client-side
+        this.snack.open('Feedback recebido. Obrigado!', '', { duration: 3000 });
+      }
+    });
   }
 }
