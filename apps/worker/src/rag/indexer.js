@@ -48,6 +48,8 @@ function buildProfileContent(s) {
 async function indexExam(exam_id, tenant_id) {
   const client = await pool.connect();
   try {
+    await client.query(`SET LOCAL app.tenant_id = $1`, [tenant_id]);
+
     // Fetch clinical results
     const { rows: results } = await client.query(
       `SELECT id, agent_type, interpretation, alerts, recommendations
@@ -134,31 +136,39 @@ async function indexExam(exam_id, tenant_id) {
     const texts      = chunks.map(c => c.content);
     const embeddings = await embedBatch(texts);
 
-    // Remove old exam chunks + old patient profile (will be replaced)
-    await client.query(
-      `DELETE FROM chat_embeddings WHERE exam_id = $1 AND tenant_id = $2`,
-      [exam_id, tenant_id]
-    );
-    await client.query(
-      `DELETE FROM chat_embeddings
-       WHERE subject_id = $1 AND chunk_type = 'patient_profile' AND tenant_id = $2`,
-      [subject_id, tenant_id]
-    );
-
-    // Insert new chunks
-    for (let i = 0; i < chunks.length; i++) {
-      const c   = chunks[i];
-      const vec = `[${embeddings[i].join(',')}]`;
+    await client.query('BEGIN');
+    try {
+      // Remove old exam chunks + old patient profile (will be replaced)
       await client.query(
-        `INSERT INTO chat_embeddings
-           (tenant_id, subject_id, exam_id, result_id, chunk_type,
-            content, content_tsv, embedding, source_label)
-         VALUES ($1, $2, $3, $4, $5, $6,
-                 to_tsvector('portuguese', $6),
-                 $7::vector, $8)`,
-        [c.tenant_id, c.subject_id, c.exam_id, c.result_id, c.chunk_type,
-         c.content, vec, c.source_label]
+        `DELETE FROM chat_embeddings WHERE exam_id = $1 AND tenant_id = $2`,
+        [exam_id, tenant_id]
       );
+      await client.query(
+        `DELETE FROM chat_embeddings
+         WHERE subject_id = $1 AND chunk_type = 'patient_profile' AND tenant_id = $2`,
+        [subject_id, tenant_id]
+      );
+
+      // Insert new chunks
+      for (let i = 0; i < chunks.length; i++) {
+        const c   = chunks[i];
+        const vec = `[${embeddings[i].join(',')}]`;
+        await client.query(
+          `INSERT INTO chat_embeddings
+             (tenant_id, subject_id, exam_id, result_id, chunk_type,
+              content, content_tsv, embedding, source_label)
+           VALUES ($1, $2, $3, $4, $5, $6,
+                   to_tsvector('portuguese', $6),
+                   $7::vector, $8)`,
+          [c.tenant_id, c.subject_id, c.exam_id, c.result_id, c.chunk_type,
+           c.content, vec, c.source_label]
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
     }
 
     console.log(`[indexer] Indexed ${chunks.length} chunks for exam ${exam_id}`);
