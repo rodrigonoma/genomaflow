@@ -1,18 +1,21 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AsyncPipe } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { Subscription } from 'rxjs';
 import { AuthService } from './core/auth/auth.service';
 import { ReviewQueueService } from './features/doctor/review-queue/review-queue.service';
+import { WsService } from './core/ws/ws.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
   imports: [RouterOutlet, RouterLink, RouterLinkActive, AsyncPipe,
-            MatIconModule, MatMenuModule, MatButtonModule, MatTooltipModule],
+            MatIconModule, MatMenuModule, MatButtonModule, MatTooltipModule, MatSnackBarModule],
   styles: [`
     :host { display: block; }
 
@@ -26,7 +29,15 @@ import { ReviewQueueService } from './features/doctor/review-queue/review-queue.
     .sidebar-brand {
       padding: 1.25rem 1.5rem;
       border-bottom: 1px solid rgba(70,69,84,0.15);
+      display: flex; align-items: center; gap: 0.75rem;
     }
+
+    .brand-logo {
+      width: 32px; height: 32px;
+      object-fit: contain; flex-shrink: 0;
+    }
+
+    .brand-text { display: flex; flex-direction: column; }
 
     .brand-name {
       font-family: 'Space Grotesk', sans-serif;
@@ -118,8 +129,11 @@ import { ReviewQueueService } from './features/doctor/review-queue/review-queue.
     @if (auth.currentUser$ | async; as user) {
       <aside class="sidebar">
         <div class="sidebar-brand">
-          <div class="brand-name">GenomaFlow</div>
-          <div class="brand-badge">Clinical AI &middot; v1.0</div>
+          <img class="brand-logo" src="logo_genoma.png" alt="GenomaFlow"/>
+          <div class="brand-text">
+            <div class="brand-name">GenomaFlow</div>
+            <div class="brand-badge">Clinical AI &middot; v1.0</div>
+          </div>
         </div>
 
         <nav class="sidebar-nav">
@@ -135,28 +149,20 @@ import { ReviewQueueService } from './features/doctor/review-queue/review-queue.
               <mat-icon>cable</mat-icon> Integrações
             </a>
           }
-          @if (user.role === 'doctor') {
-            <div class="nav-section-label">Clínica</div>
-            <a class="nav-item" routerLink="/doctor/patients" routerLinkActive="active">
-              <mat-icon>{{ user.module === 'veterinary' ? 'pets' : 'people' }}</mat-icon>
-              {{ user.module === 'veterinary' ? 'Animais' : 'Pacientes' }}
-            </a>
-            <a class="nav-item" routerLink="/doctor/review-queue" routerLinkActive="active">
-              <mat-icon>inbox</mat-icon>
-              <span>Fila de Revisão</span>
-              @if (reviewCount$ | async; as count) {
-                @if (count > 0) {
-                  <span class="nav-badge">{{ count }}</span>
-                }
+          <div class="nav-section-label">Clínica</div>
+          <a class="nav-item" routerLink="/doctor/patients" routerLinkActive="active">
+            <mat-icon>{{ user.module === 'veterinary' ? 'pets' : 'people' }}</mat-icon>
+            {{ user.module === 'veterinary' ? 'Animais' : 'Pacientes' }}
+          </a>
+          <a class="nav-item" routerLink="/doctor/review-queue" routerLinkActive="active">
+            <mat-icon>inbox</mat-icon>
+            <span>Fila de Revisão</span>
+            @if (reviewCount$ | async; as count) {
+              @if (count > 0) {
+                <span class="nav-badge">{{ count }}</span>
               }
-            </a>
-          }
-          @if (user.role === 'lab_tech') {
-            <div class="nav-section-label">Laboratório</div>
-            <a class="nav-item" routerLink="/lab/uploads" routerLinkActive="active">
-              <mat-icon>upload_file</mat-icon> Upload de Exames
-            </a>
-          }
+            }
+          </a>
           <div class="nav-section-label" style="margin-top: 2rem">Sistema</div>
           <button class="nav-item" (click)="auth.logout()">
             <mat-icon>logout</mat-icon> Sair
@@ -178,6 +184,11 @@ import { ReviewQueueService } from './features/doctor/review-queue/review-queue.
           <div style="padding:0.5rem 1rem;font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:#908fa0;border-bottom:1px solid rgba(70,69,84,0.2);margin-bottom:4px;">
             {{ user.role }}
           </div>
+          @if (user.module === 'human') {
+            <button mat-menu-item routerLink="/onboarding/specialty">
+              <mat-icon>school</mat-icon> Minha especialidade
+            </button>
+          }
           <button mat-menu-item (click)="auth.logout()">
             <mat-icon>logout</mat-icon> Sair
           </button>
@@ -192,8 +203,49 @@ import { ReviewQueueService } from './features/doctor/review-queue/review-queue.
     }
   `
 })
-export class AppComponent {
+export class AppComponent implements OnInit, OnDestroy {
   auth = inject(AuthService);
   reviewService = inject(ReviewQueueService);
+  ws = inject(WsService);
+  snack = inject(MatSnackBar);
   reviewCount$ = this.reviewService.pendingCount$;
+
+  private subs = new Subscription();
+
+  ngOnInit() {
+    this.subs.add(
+      this.ws.examError$.subscribe(({ error_message }) => {
+        const msg = this.friendlyExamError(error_message);
+        this.snack.open(`Falha no processamento do exame: ${msg}`, 'Fechar',
+          { duration: 10000, panelClass: ['snack-error'] });
+      })
+    );
+    this.subs.add(
+      this.ws.billingAlert$.subscribe(({ balance }) => {
+        this.snack.open(
+          `Atenção: saldo baixo de créditos (${balance} restantes). Recarregue para continuar processando exames.`,
+          'Fechar', { duration: 8000, panelClass: ['snack-warn'] }
+        );
+      })
+    );
+    this.subs.add(
+      this.ws.billingExhausted$.subscribe(() => {
+        this.snack.open(
+          'Créditos esgotados. Novos exames não serão processados até você recarregar.',
+          'Recarregar', { duration: 0, panelClass: ['snack-error'] }
+        );
+      })
+    );
+  }
+
+  ngOnDestroy() { this.subs.unsubscribe(); }
+
+  private friendlyExamError(msg: string): string {
+    if (!msg) return 'Erro desconhecido.';
+    if (msg.includes('créditos insuficiente')) return 'Saldo de créditos insuficiente. Recarregue e reenvie.';
+    if (msg.includes('Module mismatch')) return 'Tipo de exame incompatível com o módulo contratado.';
+    if (msg.includes('No agent configured')) return 'Espécie sem agente configurado.';
+    if (msg.includes('no file_path')) return 'Arquivo não encontrado. Reenvie o PDF.';
+    return msg.length > 120 ? msg.slice(0, 120) + '…' : msg;
+  }
 }
