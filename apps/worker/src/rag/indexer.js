@@ -48,8 +48,6 @@ function buildProfileContent(s) {
 async function indexExam(exam_id, tenant_id) {
   const client = await pool.connect();
   try {
-    await client.query(`SET LOCAL app.tenant_id = $1`, [tenant_id]);
-
     // Fetch clinical results
     const { rows: results } = await client.query(
       `SELECT id, agent_type, interpretation, alerts, recommendations
@@ -138,6 +136,7 @@ async function indexExam(exam_id, tenant_id) {
 
     await client.query('BEGIN');
     try {
+      await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [tenant_id]);
       // Remove old exam chunks + old patient profile (will be replaced)
       await client.query(
         `DELETE FROM chat_embeddings WHERE exam_id = $1 AND tenant_id = $2`,

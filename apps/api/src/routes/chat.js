@@ -1,7 +1,8 @@
 // apps/api/src/routes/chat.js
-const crypto    = require('crypto');
-const OpenAI    = require('openai');
-const Anthropic = require('@anthropic-ai/sdk').default;
+const crypto      = require('crypto');
+const OpenAI      = require('openai');
+const Anthropic   = require('@anthropic-ai/sdk').default;
+const { withTenant } = require('../db/tenant');
 
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -43,6 +44,7 @@ module.exports = async function (fastify) {
     const { tenant_id } = request.user;
     const { question, session_id: incomingSessionId } = request.body || {};
 
+    if (!tenant_id) return reply.status(401).send({ error: 'Token inválido: tenant_id ausente' });
     if (!question?.trim()) {
       return reply.status(400).send({ error: 'question é obrigatório' });
     }
@@ -82,26 +84,26 @@ module.exports = async function (fastify) {
 
     const vecStr = `[${embedding.join(',')}]`;
 
-    // --- Busca dual paralela ---
-    const [semanticRes, lexicalRes] = await Promise.all([
-      fastify.pg.query(
-        `SELECT id, source_label, content, chunk_type
-         FROM chat_embeddings
-         WHERE tenant_id = $1
-         ORDER BY embedding <=> $2::vector
-         LIMIT 20`,
-        [tenant_id, vecStr]
-      ),
-      fastify.pg.query(
-        `SELECT id, source_label, content, chunk_type
-         FROM chat_embeddings
-         WHERE tenant_id = $1
-           AND content_tsv @@ plainto_tsquery('portuguese', $2)
-         ORDER BY ts_rank(content_tsv, plainto_tsquery('portuguese', $2)) DESC
-         LIMIT 20`,
-        [tenant_id, question]
-      )
-    ]);
+    // --- Busca dual paralela com contexto RLS ---
+    const [semanticRes, lexicalRes] = await withTenant(fastify.pg, tenant_id, async (client) => {
+      return Promise.all([
+        client.query(
+          `SELECT id, source_label, content, chunk_type
+           FROM chat_embeddings
+           ORDER BY embedding <=> $1::vector
+           LIMIT 20`,
+          [vecStr]
+        ),
+        client.query(
+          `SELECT id, source_label, content, chunk_type
+           FROM chat_embeddings
+           WHERE content_tsv @@ plainto_tsquery('portuguese', $1)
+           ORDER BY ts_rank(content_tsv, plainto_tsquery('portuguese', $1)) DESC
+           LIMIT 20`,
+          [question]
+        )
+      ]);
+    });
 
     const top40 = rrf(semanticRes.rows, lexicalRes.rows);
 
