@@ -1,0 +1,118 @@
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    env:
+      AWS_REGION: us-east-1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            us-east-1
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        run: echo "IMAGE_TAG=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Build & push API
+        run: |
+          IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/api
+          docker build -f docker/api.Dockerfile -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest .
+          docker push $IMAGE:${{ env.IMAGE_TAG }}
+          docker push $IMAGE:latest
+
+      - name: Build & push Worker
+        run: |
+          IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/worker
+          docker build -f docker/worker.Dockerfile -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest .
+          docker push $IMAGE:${{ env.IMAGE_TAG }}
+          docker push $IMAGE:latest
+
+      - name: Build & push Web
+        run: |
+          IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/web
+          docker build -f docker/web.Dockerfile -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest .
+          docker push $IMAGE:${{ env.IMAGE_TAG }}
+          docker push $IMAGE:latest
+
+      - name: Force new ECS deployment
+        run: |
+          for svc in genomaflow-api genomaflow-worker genomaflow-web; do
+            echo "Redeploy: $svc"
+            aws ecs update-service \
+              --cluster genomaflow \
+              --service  $svc \
+              --force-new-deployment \
+              --query 'service.serviceName' \
+              --output text
+          done
+
+      - name: Run migrations
+        run: |
+          CLUSTER="genomaflow"
+
+          TASK_DEF=$(aws ecs list-task-definitions \
+            --family-prefix genomaflow-prod-migrate \
+            --sort DESC \
+            --query "taskDefinitionArns[0]" \
+            --output text)
+          echo "Task def: $TASK_DEF"
+
+          SUBNET=$(aws cloudformation describe-stacks \
+            --stack-name genomaflow-vpc \
+            --query 'Stacks[0].Outputs[?OutputKey==`PublicSubnet1`].OutputValue' \
+            --output text)
+          SG=$(aws cloudformation describe-stacks \
+            --stack-name genomaflow-vpc \
+            --query 'Stacks[0].Outputs[?OutputKey==`SgEcsId`].OutputValue' \
+            --output text)
+          echo "Subnet: $SUBNET | SG: $SG"
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$CLUSTER" \
+            --task-definition "$TASK_DEF" \
+            --launch-type FARGATE \
+            --network-configuration \
+              "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SG],assignPublicIp=ENABLED}" \
+            --query "tasks[0].taskArn" \
+            --output text)
+          echo "Migration task: $TASK_ARN"
+
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$CLUSTER" --tasks "$TASK_ARN" \
+            --query "tasks[0].containers[0].exitCode" \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "❌ Migration falhou (exit $EXIT_CODE)"
+            TASK_ID=$(echo "$TASK_ARN" | awk -F'/' '{print $NF}')
+            aws logs get-log-events \
+              --log-group-name /genomaflow/prod \
+              --log-stream-name "migrate/migrate/$TASK_ID" \
+              --query 'events[*].message' --output text || true
+            exit 1
+          fi
+          echo "✅ Migration concluída"
+
+      - name: Wait for services stable
+        run: |
+          aws ecs wait services-stable \
+            --cluster genomaflow \
+            --services genomaflow-api genomaflow-web
+          echo "✅ Serviços estáveis"
