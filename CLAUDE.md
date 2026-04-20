@@ -65,6 +65,7 @@ docker compose exec api node src/db/migrate.js
 - **Landing**: HTML estático (`apps/landing`)
 - **DB**: PostgreSQL 15 + pgvector (`db`, porta 5432)
 - **Cache**: Redis 7.2 (`redis`, porta 6379)
+- **Storage**: S3 (`genomaflow-uploads-prod`, `us-east-1`) — único storage persistente entre containers
 
 ## Arquitetura Multi-tenant
 
@@ -157,6 +158,51 @@ Quando nenhum tenant está configurado, o SELECT é livre. Com `withTenant`, res
 - Embedding model é configurável via `EMBEDDING_MODEL` env var (fallback: `text-embedding-3-small`)
 - Claim `module` no JWT nunca é `null` — fallback para `'human'` no sign
 
+## Dados de Usuário — Normalização (OBRIGATÓRIO)
+
+- **Emails devem ser sempre salvos em lowercase** — aplicar `.toLowerCase().trim()` antes de qualquer INSERT ou UPDATE em `email`
+- **Login deve usar `LOWER(u.email) = $1`** com o input já lowercased — nunca comparação direta case-sensitive
+- **Nunca confiar no input do usuário como veio** — campos de identidade (email, CPF, código) devem ser normalizados na camada de aplicação antes de persistir
+- Violação causa falha silenciosa de login: usuário existe no banco mas não consegue autenticar
+
+---
+
+## Infraestrutura de Produção (OBRIGATÓRIO)
+
+### Isolamento de containers ECS
+
+- **API e Worker são containers separados no ECS — nunca compartilham filesystem**
+- Qualquer arquivo que precise ser lido por mais de um container (ex: PDF de exame) **obrigatoriamente vai para o S3**
+- `/tmp` e qualquer path local são efêmeros: somem ao reiniciar o container ou em novo deploy
+- Bucket de uploads: `genomaflow-uploads-prod` (região `us-east-1`, privado, lifecycle 7 dias)
+- Path padrão de uploads: `uploads/{tenant_id}/{timestamp}-{filename}`
+- IAM: task role do ECS tem `s3:PutObject + GetObject + DeleteObject` em `uploads/*`
+
+### Permissões IAM para novos serviços AWS
+
+- **Ao adicionar qualquer novo serviço AWS** (S3, SQS, SNS, Secrets Manager, etc.), a task role do ECS (`genomaflow-ecs-TaskRole*`) precisa receber permissão explícita
+- Sem a permissão IAM o container falha silenciosamente ou com erro de `AccessDenied` em produção
+- Verificar sempre: task role → inline policies → escopo mínimo necessário
+
+### CI/CD e deploys
+
+- **O arquivo `.github/workflows/deploy.yml` deve estar sempre commitado no repositório**
+- Sem o workflow no git, nenhum push dispara o pipeline — código local nunca chega a produção
+- O deploy automaticamente: build Docker → push ECR → run migrations → force-deploy ECS → wait stable
+- **Nunca assumir que o código em produção é o mais recente sem verificar** — checar timestamp da imagem no ECR:
+  ```bash
+  aws ecr describe-images --repository-name genomaflow/api \
+    --query 'sort_by(imageDetails,&imagePushedAt)[-1].imagePushedAt'
+  ```
+- Após um push para main, aguardar o pipeline completar (~10-15 min) antes de testar em produção
+
+### Variáveis de ambiente em novos task definitions
+
+- Ao registrar nova revisão de task definition no ECS, incluir **todas** as env vars necessárias — ECS não herda do container anterior automaticamente
+- Variáveis secretas (API keys, passwords) devem estar em SSM Parameter Store ou Secrets Manager, referenciadas via `secrets` na task definition
+
+---
+
 ## Comportamentos NÃO Esperados (Red Flags)
 
 - Query em tabela com FORCE RLS **fora** de `withTenant` → resultado vazio ou erro de policy (não é bug do banco, é falta de contexto)
@@ -165,6 +211,10 @@ Quando nenhum tenant está configurado, o SELECT é livre. Com `withTenant`, res
 - SQL com template literal (``` `SELECT ... WHERE id = ${req.params.id}` ```) → SQL Injection
 - Hash de senha hardcoded em migration → credencial exposta no git history
 - `rag_documents` com RLS → quebra o chatbot para todos os tenants (tabela é propositalmente global)
+- Email salvo com case misto + login com comparação exata → usuário não consegue autenticar mesmo com credenciais corretas
+- Worker lendo arquivo de `/tmp` → `ENOENT` em produção porque containers ECS não compartilham filesystem
+- `.github/workflows/deploy.yml` não commitado → push para main não dispara CI/CD, produção nunca atualiza
+- Assumir que código em produção é o mais recente sem verificar timestamp no ECR → debug em código errado
 
 ---
 
