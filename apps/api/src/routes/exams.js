@@ -314,6 +314,31 @@ module.exports = async function (fastify) {
     return exam;
   });
 
+  fastify.post('/:id/reprocess', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { id } = request.params;
+    const { tenant_id } = request.user;
+
+    const exam = await withTenant(fastify.pg, tenant_id, async (client) => {
+      const { rows } = await client.query(
+        `SELECT id, file_path, status FROM exams WHERE id = $1 AND tenant_id = $2`,
+        [id, tenant_id]
+      );
+      return rows[0];
+    });
+
+    if (!exam) return reply.status(404).send({ error: 'Exam not found' });
+    if (exam.status !== 'error') return reply.status(409).send({ error: 'Only exams with status error can be reprocessed' });
+    if (!exam.file_path) return reply.status(422).send({ error: 'Exam has no file — please upload again' });
+
+    await withTenant(fastify.pg, tenant_id, async (client) => {
+      await client.query(`UPDATE exams SET status = 'pending' WHERE id = $1`, [id]);
+    });
+
+    await examQueue.add('process-exam', { exam_id: exam.id, tenant_id, file_path: exam.file_path });
+
+    return { ok: true, exam_id: exam.id, status: 'pending' };
+  });
+
   fastify.get('/subscribe', {
     websocket: true,
     preHandler: [fastify.authenticate]
