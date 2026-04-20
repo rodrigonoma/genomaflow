@@ -130,6 +130,34 @@ module.exports = async function masterRoutes(fastify) {
     return { items: rows.rows, total: parseInt(countRes.rows[0].count), page, limit };
   });
 
+  // ── Exams ─────────────────────────────────────────────────────────────────
+
+  fastify.get('/tenants/:id/exams', auth(), async (request, reply) => {
+    const { id } = request.params;
+    const { rows } = await fastify.pg.query(
+      `SELECT e.id, e.status, e.file_path, e.created_at,
+              p.name AS patient_name, p.species
+       FROM exams e
+       JOIN patients p ON p.id = e.patient_id
+       WHERE p.tenant_id = $1
+       ORDER BY e.created_at DESC
+       LIMIT 100`,
+      [id]
+    );
+    return rows;
+  });
+
+  fastify.patch('/exams/:examId/reset', auth(), async (request, reply) => {
+    const { examId } = request.params;
+    const { rows } = await fastify.pg.query(
+      `UPDATE exams SET status = 'error' WHERE id = $1
+       RETURNING id, status, patient_id`,
+      [examId]
+    );
+    if (!rows[0]) return reply.status(404).send({ error: 'Exam not found' });
+    return { ok: true, exam_id: rows[0].id, status: rows[0].status };
+  });
+
   // ── Credits ──────────────────────────────────────────────────────────────
 
   fastify.post('/credits', auth(), async (request, reply) => {

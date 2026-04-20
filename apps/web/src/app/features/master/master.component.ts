@@ -11,7 +11,11 @@ interface Tenant {
   active: boolean; created_at: string;
   user_count: number; balance: number;
   last_purchase_at: string | null; specialties: string[];
-  _expanded?: boolean; _users?: TenantUser[];
+  _expanded?: boolean; _users?: TenantUser[]; _exams?: TenantExam[];
+}
+interface TenantExam {
+  id: string; status: string; file_path: string; created_at: string;
+  patient_name: string; species: string;
 }
 interface TenantUser {
   id: string; email: string; role: string; specialty: string; active: boolean; created_at: string;
@@ -152,6 +156,13 @@ interface Stats {
       background:#ffb4ab; color:#1a0000; border-radius:10px;
       font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700;
       min-width:18px; height:18px; padding:0 5px; margin-left:auto; }
+    .badge-analyzing { background:rgba(251,191,36,0.15); color:#fbbf24; }
+    .badge-done { background:rgba(16,185,129,0.15); color:#10b981; }
+    .badge-error { background:rgba(255,180,171,0.12); color:#ffb4ab; }
+    .badge-pending { background:rgba(192,193,255,0.1); color:#a09fb2; }
+    .exam-row { display:flex; align-items:center; gap:1rem; padding:0.375rem 0;
+      font-size:12px; border-bottom:1px solid rgba(192,193,255,0.04); }
+    .exam-row:last-child { border-bottom:none; }
     .err-msg-cell { max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
       font-family:'JetBrains Mono',monospace; font-size:11px; color:#ffb4ab; }
     .msg-cell { max-width:400px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -294,6 +305,38 @@ interface Stats {
                                 {{ u.active ? 'Desativar' : 'Ativar' }}
                               </button>
                             </div>
+                          }
+                        }
+                        <!-- Exams section -->
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:#6e6d80;margin:1rem 0 0.625rem">
+                          Exames
+                          @if (!t._exams) {
+                            <button class="btn btn-sm-ghost" style="font-size:9px;padding:1px 8px;margin-left:0.5rem;text-transform:none" (click)="loadExams(t)">carregar</button>
+                          }
+                        </div>
+                        @if (t._exams) {
+                          @if (t._exams.length === 0) {
+                            <div class="mono text-muted" style="font-size:12px">Nenhum exame</div>
+                          } @else {
+                            @for (ex of t._exams; track ex.id) {
+                              <div class="exam-row">
+                                <span style="flex:1;font-size:12px">{{ ex.patient_name }}</span>
+                                <span class="mono text-muted" style="font-size:10px;min-width:80px">{{ ex.species || '—' }}</span>
+                                <span class="mono text-muted" style="font-size:10px;min-width:110px">{{ ex.created_at | date:'dd/MM/yy HH:mm' }}</span>
+                                <span class="badge" style="min-width:70px;text-align:center"
+                                  [class.badge-analyzing]="ex.status==='analyzing'"
+                                  [class.badge-done]="ex.status==='done'"
+                                  [class.badge-error]="ex.status==='error'"
+                                  [class.badge-pending]="ex.status==='pending'">
+                                  {{ ex.status }}
+                                </span>
+                                @if (ex.status === 'analyzing' || ex.status === 'pending') {
+                                  <button class="btn btn-sm-red" style="font-size:9px;padding:2px 8px" (click)="resetExam(t, ex)">Reset</button>
+                                } @else {
+                                  <span style="width:58px"></span>
+                                }
+                              </div>
+                            }
                           }
                         }
                       </div>
@@ -537,6 +580,18 @@ export class MasterComponent implements OnInit {
     } else {
       this.tenants.set([...this.tenants()]);
     }
+  }
+
+  loadExams(t: Tenant): void {
+    this.http.get<TenantExam[]>(this.api(`/tenants/${t.id}/exams`)).subscribe({
+      next: exams => { t._exams = exams; this.tenants.set([...this.tenants()]); }
+    });
+  }
+
+  resetExam(t: Tenant, ex: TenantExam): void {
+    this.http.patch(this.api(`/exams/${ex.id}/reset`), {}).subscribe({
+      next: () => { ex.status = 'error'; this.tenants.set([...this.tenants()]); }
+    });
   }
 
   toggleUser(t: Tenant, u: TenantUser): void {
