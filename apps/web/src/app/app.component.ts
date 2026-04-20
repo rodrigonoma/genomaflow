@@ -11,7 +11,7 @@ import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angu
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { HttpClient } from '@angular/common/http';
-import { Subscription } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { AuthService } from './core/auth/auth.service';
 import { ReviewQueueService } from './features/doctor/review-queue/review-queue.service';
 import { WsService } from './core/ws/ws.service';
@@ -234,7 +234,7 @@ export class AppComponent implements OnInit, OnDestroy {
   ws = inject(WsService);
   snack = inject(MatSnackBar);
   dialog = inject(MatDialog);
-  reviewCount$ = this.reviewService.pendingCount$;
+  reviewCount$: Observable<number> = this.reviewService.pendingCount$;
   chatOpen = false;
 
   private subs = new Subscription();

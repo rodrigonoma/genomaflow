@@ -8,7 +8,10 @@ export class WsService {
   private destroyed = false;
   private token: string | null = null;
 
-  examUpdates$ = new Subject<{ exam_id: string }>();
+  examUpdates$     = new Subject<{ exam_id: string }>();
+  examError$       = new Subject<{ exam_id: string; error_message: string }>();
+  billingAlert$    = new Subject<{ balance: number }>();
+  billingExhausted$ = new Subject<void>();
 
   connect(token: string): void {
     this.disconnect();
@@ -29,7 +32,16 @@ export class WsService {
 
     this.ws.onmessage = (event) => {
       try {
-        this.examUpdates$.next(JSON.parse(event.data));
+        const msg = JSON.parse(event.data) as Record<string, unknown>;
+        if (msg['type'] === 'exam:error') {
+          this.examError$.next({ exam_id: msg['exam_id'] as string, error_message: msg['error_message'] as string });
+        } else if (msg['type'] === 'billing:alert') {
+          this.billingAlert$.next({ balance: msg['balance'] as number });
+        } else if (msg['type'] === 'billing:exhausted') {
+          this.billingExhausted$.next();
+        } else {
+          this.examUpdates$.next(msg as { exam_id: string });
+        }
       } catch { /* ignore malformed */ }
     };
 
