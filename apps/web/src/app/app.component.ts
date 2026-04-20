@@ -279,7 +279,7 @@ export class AppComponent implements OnInit, OnDestroy {
     if (msg.includes('créditos insuficiente')) return 'Saldo de créditos insuficiente. Recarregue e reenvie.';
     if (msg.includes('Module mismatch')) return 'Tipo de exame incompatível com o módulo contratado.';
     if (msg.includes('No agent configured')) return 'Espécie sem agente configurado.';
-    if (msg.includes('no file_path')) return 'Arquivo não encontrado. Reenvie o PDF.';
+    if (msg.includes('no file_path') || msg.includes('não encontrado') || msg.includes('NoSuchKey')) return 'Arquivo não encontrado. Reenvie o PDF.';
     return msg.length > 120 ? msg.slice(0, 120) + '…' : msg;
   }
 }

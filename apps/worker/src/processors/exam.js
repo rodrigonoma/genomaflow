@@ -152,7 +152,15 @@ async function processExam({ exam_id, tenant_id, file_path, selected_agents, chi
     }
 
     if (!file_path) throw new Error('exam has no file_path — PDF download may have failed during ingest');
-    const buffer = await downloadFile(keyFromPath(file_path));
+    let buffer;
+    try {
+      buffer = await downloadFile(keyFromPath(file_path));
+    } catch (s3Err) {
+      if (s3Err.name === 'NoSuchKey' || s3Err.$metadata?.httpStatusCode === 404) {
+        throw new Error('Arquivo do exame não encontrado. Reenvie o PDF para reprocessar.');
+      }
+      throw s3Err;
+    }
     const rawText = await extractText(buffer);
     const examText = scrubText(rawText);
     const anonSubject = anonymize(subject);
