@@ -1,0 +1,1 @@
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS cpf_last4 TEXT;
