@@ -17,21 +17,64 @@ module.exports = async function billingRoutes(fastify) {
   // GET /billing/history
   fastify.get('/billing/history', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { tenant_id } = request.user;
-    const page = Math.max(1, parseInt(request.query.page) || 1);
-    const limit = Math.min(100, parseInt(request.query.limit) || 20);
-    const offset = (page - 1) * limit;
+    const page      = Math.max(1, parseInt(request.query.page)  || 1);
+    const limit     = Math.min(100, parseInt(request.query.limit) || 20);
+    const offset    = (page - 1) * limit;
+    const dateFrom  = request.query.date_from || null;
+    const dateTo    = request.query.date_to   || null;
 
-    const [itemsRes, countRes] = await Promise.all([
+    const itemsFilter = `
+      AND ($4::date IS NULL OR cl.created_at >= $4::date)
+      AND ($5::date IS NULL OR cl.created_at <  ($5::date + INTERVAL '1 day'))
+    `;
+    const aggFilter = `
+      AND ($2::date IS NULL OR cl.created_at >= $2::date)
+      AND ($3::date IS NULL OR cl.created_at <  ($3::date + INTERVAL '1 day'))
+    `;
+
+    const [itemsRes, countRes, summaryRes] = await Promise.all([
       fastify.pg.query(
-        `SELECT id, amount, kind, description, exam_id, created_at
-         FROM credit_ledger WHERE tenant_id = $1
-         ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
-        [tenant_id, limit, offset]
+        `SELECT cl.id, cl.amount::int AS amount, cl.kind, cl.description,
+                cl.exam_id, cl.created_at,
+                s.name AS subject_name,
+                split_part(e.file_path, '/', -1) AS file_name
+         FROM credit_ledger cl
+         LEFT JOIN exams    e ON e.id = cl.exam_id
+         LEFT JOIN subjects s ON s.id = e.subject_id
+         WHERE cl.tenant_id = $1 ${itemsFilter}
+         ORDER BY cl.created_at DESC LIMIT $2 OFFSET $3`,
+        [tenant_id, limit, offset, dateFrom, dateTo]
       ),
-      fastify.pg.query('SELECT COUNT(*) FROM credit_ledger WHERE tenant_id = $1', [tenant_id])
+      fastify.pg.query(
+        `SELECT COUNT(*) FROM credit_ledger cl
+         WHERE cl.tenant_id = $1 ${aggFilter}`,
+        [tenant_id, dateFrom, dateTo]
+      ),
+      fastify.pg.query(
+        `SELECT
+           COALESCE(SUM(cl.amount) FILTER (WHERE cl.amount < 0), 0)::int AS credits_consumed,
+           COALESCE(SUM(cl.amount) FILTER (WHERE cl.amount > 0), 0)::int AS credits_added,
+           COUNT(*) FILTER (WHERE cl.kind = 'agent_usage')::int         AS agent_events,
+           COUNT(*) FILTER (WHERE cl.kind = 'ocr_usage')::int           AS ocr_events
+         FROM credit_ledger cl
+         WHERE cl.tenant_id = $1 ${aggFilter}`,
+        [tenant_id, dateFrom, dateTo]
+      )
     ]);
 
-    return { items: itemsRes.rows, total: parseInt(countRes.rows[0].count), page, limit };
+    const s = summaryRes.rows[0];
+    return {
+      items:   itemsRes.rows,
+      total:   parseInt(countRes.rows[0].count),
+      page,
+      limit,
+      summary: {
+        credits_consumed: s.credits_consumed,
+        credits_added:    s.credits_added,
+        agent_events:     s.agent_events,
+        ocr_events:       s.ocr_events
+      }
+    };
   });
 
   // GET /billing/specialties

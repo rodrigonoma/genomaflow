@@ -2,12 +2,42 @@ import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
-import { BillingService, LedgerItem, UsageReport } from './billing.service';
+import { BillingService, LedgerItem, LedgerSummary, UsageReport } from './billing.service';
 
 @Component({
   selector: 'app-billing',
   standalone: true,
   imports: [CommonModule, FormsModule, RouterModule, DatePipe, DecimalPipe],
+  styles: [`
+    .gf-tooltip {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 0;
+      width: 260px;
+      background: #060d20;
+      border: 1px solid rgba(192,193,255,0.2);
+      border-radius: 4px;
+      padding: 0.625rem 0.75rem;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.75rem;
+      color: #dbe2fd;
+      line-height: 1.5;
+      z-index: 100;
+      pointer-events: none;
+      white-space: normal;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    .gf-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 12px;
+      border: 6px solid transparent;
+      border-top-color: rgba(192,193,255,0.2);
+    }
+    div:hover > .gf-tooltip { display: block; }
+  `],
   template: `
 <div style="padding:1.5rem;max-width:1200px;">
 
@@ -64,11 +94,17 @@ import { BillingService, LedgerItem, UsageReport } from './billing.service';
           </div>
           <div>
             <div style="font-family:'JetBrains Mono',monospace;font-size:0.875rem;color:#dbe2fd;">{{ usage()!.input_tokens | number }}</div>
-            <div style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#c7c5d0;text-transform:uppercase;letter-spacing:0.08em;margin-top:0.25rem;">Tokens de Entrada</div>
+            <div style="position:relative;display:inline-block;">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#c7c5d0;text-transform:uppercase;letter-spacing:0.08em;margin-top:0.25rem;cursor:help;border-bottom:1px dashed rgba(199,197,208,0.4);">Tokens de Entrada &#9432;</div>
+              <div class="gf-tooltip">Quantidade de texto enviada aos modelos de IA para análise — inclui o laudo do exame, contexto clínico do paciente e diretrizes de referência. Mais tokens de entrada indicam laudos maiores ou contexto mais rico.</div>
+            </div>
           </div>
           <div>
             <div style="font-family:'JetBrains Mono',monospace;font-size:0.875rem;color:#dbe2fd;">{{ usage()!.output_tokens | number }}</div>
-            <div style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#c7c5d0;text-transform:uppercase;letter-spacing:0.08em;margin-top:0.25rem;">Tokens de Saída</div>
+            <div style="position:relative;display:inline-block;">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#c7c5d0;text-transform:uppercase;letter-spacing:0.08em;margin-top:0.25rem;cursor:help;border-bottom:1px dashed rgba(199,197,208,0.4);">Tokens de Saída &#9432;</div>
+              <div class="gf-tooltip">Quantidade de texto gerada pelos modelos de IA — inclui interpretações, alertas, recomendações terapêuticas e correlação clínica. Representa o resultado da análise produzido por cada agente.</div>
+            </div>
           </div>
           <div>
             <div style="font-family:'JetBrains Mono',monospace;font-size:0.875rem;color:#c7c5d0;">R$ {{ usage()!.estimated_api_cost_brl.toFixed(2) }}</div>
@@ -86,30 +122,85 @@ import { BillingService, LedgerItem, UsageReport } from './billing.service';
 
   <!-- History table -->
   <div>
-    <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.125rem;font-weight:600;color:#dbe2fd;margin-bottom:1rem;">Histórico de Créditos</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;">
+      <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.125rem;font-weight:600;color:#dbe2fd;margin:0;">Histórico de Créditos</h2>
+      <!-- Period filters -->
+      <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+          <label style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#c7c5d0;text-transform:uppercase;letter-spacing:0.08em;">De</label>
+          <input type="date" [(ngModel)]="filterFrom"
+                 style="background:#222a3e;color:#dbe2fd;font-family:'JetBrains Mono',monospace;font-size:0.7rem;padding:0.25rem 0.5rem;border:1px solid rgba(70,70,79,0.4);border-radius:0.25rem;outline:none;" />
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+          <label style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#c7c5d0;text-transform:uppercase;letter-spacing:0.08em;">Até</label>
+          <input type="date" [(ngModel)]="filterTo"
+                 style="background:#222a3e;color:#dbe2fd;font-family:'JetBrains Mono',monospace;font-size:0.7rem;padding:0.25rem 0.5rem;border:1px solid rgba(70,70,79,0.4);border-radius:0.25rem;outline:none;" />
+        </div>
+        <button (click)="applyFilter()"
+                style="padding:0.25rem 0.75rem;background:#c0c1ff;color:#4b4d83;font-family:'JetBrains Mono',monospace;font-size:0.65rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;border:none;border-radius:0.25rem;cursor:pointer;">
+          Filtrar
+        </button>
+        @if (filterFrom || filterTo) {
+          <button (click)="clearFilter()"
+                  style="padding:0.25rem 0.75rem;background:transparent;color:#c7c5d0;font-family:'JetBrains Mono',monospace;font-size:0.65rem;border:1px solid rgba(70,70,79,0.4);border-radius:0.25rem;cursor:pointer;">
+            Limpar
+          </button>
+        }
+      </div>
+    </div>
+
+    <!-- Consolidated summary -->
+    @if (summary()) {
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;background:#1a2236;border:1px solid rgba(70,70,79,0.3);border-radius:0.25rem;padding:1rem;margin-bottom:1rem;">
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1.25rem;color:#ffb4ab;">{{ summary()!.credits_consumed }}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#c7c5d0;text-transform:uppercase;letter-spacing:0.08em;margin-top:0.25rem;">Créditos consumidos</div>
+        </div>
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1.25rem;color:#c0c1ff;">+{{ summary()!.credits_added }}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#c7c5d0;text-transform:uppercase;letter-spacing:0.08em;margin-top:0.25rem;">Créditos adicionados</div>
+        </div>
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1.25rem;color:#dbe2fd;">{{ summary()!.agent_events }}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#c7c5d0;text-transform:uppercase;letter-spacing:0.08em;margin-top:0.25rem;">Execuções de agente</div>
+        </div>
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1.25rem;color:#dbe2fd;">{{ summary()!.ocr_events }}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#c7c5d0;text-transform:uppercase;letter-spacing:0.08em;margin-top:0.25rem;">OCR utilizados</div>
+        </div>
+      </div>
+    }
+
     <div style="background:#222a3e;border-radius:0.25rem;overflow:hidden;">
       <table style="width:100%;border-collapse:collapse;">
         <thead>
           <tr style="border-bottom:1px solid rgba(70,70,79,0.2);">
-            <th style="text-align:left;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:#c7c5d0;font-weight:500;">Data</th>
-            <th style="text-align:left;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:#c7c5d0;font-weight:500;">Descrição</th>
-            <th style="text-align:left;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:#c7c5d0;font-weight:500;">Tipo</th>
-            <th style="text-align:right;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:#c7c5d0;font-weight:500;">Quantidade</th>
+            <th style="text-align:left;padding:0.75rem 1rem;font-family:'JetBrains Mono',monospace;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:#c7c5d0;font-weight:500;">Data</th>
+            <th style="text-align:left;padding:0.75rem 1rem;font-family:'JetBrains Mono',monospace;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:#c7c5d0;font-weight:500;">Tipo</th>
+            <th style="text-align:left;padding:0.75rem 1rem;font-family:'JetBrains Mono',monospace;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:#c7c5d0;font-weight:500;">Detalhes</th>
+            <th style="text-align:right;padding:0.75rem 1rem;font-family:'JetBrains Mono',monospace;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:#c7c5d0;font-weight:500;">Créditos</th>
           </tr>
         </thead>
         <tbody>
           @for (item of history(); track item.id) {
             <tr style="border-bottom:1px solid rgba(70,70,79,0.1);">
-              <td style="padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#c7c5d0;">{{ item.created_at | date:'dd/MM/yy HH:mm' }}</td>
-              <td style="padding:1rem;font-size:0.875rem;color:#dbe2fd;">{{ item.description || kindLabel(item.kind) }}</td>
-              <td style="padding:1rem;">
+              <td style="padding:0.75rem 1rem;font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#c7c5d0;white-space:nowrap;">{{ item.created_at | date:'dd/MM/yy HH:mm' }}</td>
+              <td style="padding:0.75rem 1rem;">
                 <span style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;text-transform:uppercase;letter-spacing:0.08em;padding:0.125rem 0.5rem;border-radius:2px;"
                       [style.background]="item.amount > 0 ? 'rgba(192,193,255,0.1)' : 'rgba(147,0,10,0.2)'"
                       [style.color]="item.amount > 0 ? '#c0c1ff' : '#ffb4ab'">
                   {{ kindLabel(item.kind) }}
                 </span>
               </td>
-              <td style="padding:1rem;text-align:right;font-family:'JetBrains Mono',monospace;font-size:0.875rem;"
+              <td style="padding:0.75rem 1rem;">
+                @if (item.subject_name || item.file_name) {
+                  <div style="font-size:0.8rem;color:#dbe2fd;">{{ item.subject_name }}</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;color:#c7c5d0;margin-top:0.125rem;">{{ item.file_name }}</div>
+                } @else {
+                  <span style="font-size:0.8rem;color:#dbe2fd;">{{ item.description || '—' }}</span>
+                }
+              </td>
+              <td style="padding:0.75rem 1rem;text-align:right;font-family:'JetBrains Mono',monospace;font-size:0.875rem;white-space:nowrap;"
                   [style.color]="item.amount > 0 ? '#c0c1ff' : '#ffb4ab'">
                 {{ item.amount > 0 ? '+' : '' }}{{ item.amount }}
               </td>
@@ -198,10 +289,13 @@ export class BillingComponent implements OnInit {
   balance = signal<number>(0);
   balancePct = signal<number>(0);
   history = signal<LedgerItem[]>([]);
+  summary = signal<LedgerSummary | null>(null);
   usage = signal<UsageReport | null>(null);
   usageDays = 30;
   currentPage = signal<number>(1);
   totalPages = signal<number>(1);
+  filterFrom = '';
+  filterTo = '';
   openTopup = false;
   selectedCredits: number | null = null;
   topupGateway: 'stripe' | 'mercadopago' | '' = '';
@@ -230,10 +324,24 @@ export class BillingComponent implements OnInit {
   }
 
   loadHistory(): void {
-    this.billingService.getHistory(this.currentPage(), 20).subscribe(({ items, total, limit }) => {
-      this.history.set(items);
-      this.totalPages.set(Math.ceil(total / limit) || 1);
-    });
+    this.billingService.getHistory(this.currentPage(), 20, this.filterFrom || undefined, this.filterTo || undefined)
+      .subscribe(({ items, total, limit, summary }) => {
+        this.history.set(items);
+        this.totalPages.set(Math.ceil(total / limit) || 1);
+        this.summary.set(summary);
+      });
+  }
+
+  applyFilter(): void {
+    this.currentPage.set(1);
+    this.loadHistory();
+  }
+
+  clearFilter(): void {
+    this.filterFrom = '';
+    this.filterTo = '';
+    this.currentPage.set(1);
+    this.loadHistory();
   }
 
   loadUsage(): void {

@@ -10,6 +10,15 @@ export interface LedgerItem {
   description: string;
   exam_id: string | null;
   created_at: string;
+  subject_name: string | null;
+  file_name: string | null;
+}
+
+export interface LedgerSummary {
+  credits_consumed: number;
+  credits_added: number;
+  agent_events: number;
+  ocr_events: number;
 }
 
 export interface UsageReport {
@@ -32,8 +41,11 @@ export class BillingService {
     return this.http.get<{ balance: number }>(`${this.api}/billing/balance`);
   }
 
-  getHistory(page = 1, limit = 20): Observable<{ items: LedgerItem[]; total: number; page: number; limit: number }> {
-    return this.http.get<any>(`${this.api}/billing/history?page=${page}&limit=${limit}`);
+  getHistory(page = 1, limit = 20, dateFrom?: string, dateTo?: string): Observable<{ items: LedgerItem[]; total: number; page: number; limit: number; summary: LedgerSummary }> {
+    let url = `${this.api}/billing/history?page=${page}&limit=${limit}`;
+    if (dateFrom) url += `&date_from=${dateFrom}`;
+    if (dateTo)   url += `&date_to=${dateTo}`;
+    return this.http.get<any>(url);
   }
 
   getUsage(days: number): Observable<UsageReport> {
