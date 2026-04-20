@@ -29,7 +29,7 @@ module.exports = async function (fastify) {
     }
 
     if (!user.tenant_active) {
-      return reply.status(403).send({ error: 'Conta pendente de ativação. Verifique seu pagamento.' });
+      return reply.status(403).send({ error: 'Conta pendente de ativação. Aguarde a liberação pelo administrador.' });
     }
 
     const valid = await bcrypt.compare(password, user.password_hash);
