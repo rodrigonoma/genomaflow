@@ -10,8 +10,24 @@ module.exports = fp(async function (fastify) {
   fastify.decorate('registerWsClient', (tenantId, ws) => {
     if (!connections.has(tenantId)) connections.set(tenantId, new Set());
     connections.get(tenantId).add(ws);
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
     ws.on('close', () => connections.get(tenantId)?.delete(ws));
   });
+
+  // Heartbeat — detecta conexões mortas a cada 30s
+  const heartbeatInterval = setInterval(() => {
+    for (const clients of connections.values()) {
+      for (const ws of clients) {
+        if (ws.isAlive === false) {
+          ws.terminate();
+          continue;
+        }
+        ws.isAlive = false;
+        ws.ping();
+      }
+    }
+  }, 30_000);
 
   fastify.decorate('notifyTenant', (tenantId, data) => {
     const clients = connections.get(tenantId);
@@ -22,14 +38,32 @@ module.exports = fp(async function (fastify) {
     }
   });
 
-  subscriber.psubscribe('exam:done:*', (err) => {
+  subscriber.psubscribe('exam:done:*', 'exam:error:*', 'billing:alert:*', 'billing:exhausted:*', (err) => {
     if (err) fastify.log.error('Redis psubscribe error:', err);
   });
 
   subscriber.on('pmessage', (_pattern, channel, message) => {
-    const tenantId = channel.replace('exam:done:', '');
-    fastify.notifyTenant(tenantId, { event: 'exam:done', ...JSON.parse(message) });
+    let tenantId, event;
+    if (channel.startsWith('exam:done:')) {
+      tenantId = channel.replace('exam:done:', '');
+      event = 'exam:done';
+    } else if (channel.startsWith('exam:error:')) {
+      tenantId = channel.replace('exam:error:', '');
+      event = 'exam:error';
+    } else if (channel.startsWith('billing:alert:')) {
+      tenantId = channel.replace('billing:alert:', '');
+      event = 'billing:alert';
+    } else if (channel.startsWith('billing:exhausted:')) {
+      tenantId = channel.replace('billing:exhausted:', '');
+      event = 'billing:exhausted';
+    } else {
+      return;
+    }
+    fastify.notifyTenant(tenantId, { event, ...JSON.parse(message) });
   });
 
-  fastify.addHook('onClose', async () => subscriber.quit());
+  fastify.addHook('onClose', (_instance, done) => {
+    clearInterval(heartbeatInterval);
+    subscriber.quit().then(() => done()).catch(done);
+  });
 });
