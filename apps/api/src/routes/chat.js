@@ -58,14 +58,7 @@ module.exports = async function (fastify) {
     const embedKey   = `chat:embedding:${qHash}`;
     const sessionKey = `chat:session:${tenant_id}:${session_id}`;
 
-    // --- Verifica saldo (cache hits são gratuitos) ---
-    const balanceRes = await fastify.pg.query(
-      'SELECT COALESCE(balance, 0) AS balance FROM tenant_credit_balance WHERE tenant_id = $1',
-      [tenant_id]
-    );
-    const balance = Number(balanceRes.rows[0]?.balance ?? 0);
-
-    // --- Cache de resultado ---
+    // --- Cache de resultado (gratuito — sem consulta ao banco) ---
     const cachedResult = await fastify.redis.get(resultKey);
     if (cachedResult) {
       const parsed = JSON.parse(cachedResult);
@@ -78,7 +71,14 @@ module.exports = async function (fastify) {
       return { session_id, ...parsed };
     }
 
-    // --- Bloqueia se saldo insuficiente (cache hits já retornaram acima) ---
+    // --- Verifica saldo (apenas para requisições não cacheadas) ---
+    const balanceRes = await fastify.pg.query(
+      'SELECT COALESCE(balance, 0) AS balance FROM tenant_credit_balance WHERE tenant_id = $1',
+      [tenant_id]
+    );
+    const balance = Number(balanceRes.rows[0]?.balance ?? 0);
+
+    // --- Bloqueia se saldo insuficiente ---
     if (balance < 0.25) {
       return reply.status(402).send({ error: 'Créditos insuficientes. Recarregue seu saldo para continuar.' });
     }

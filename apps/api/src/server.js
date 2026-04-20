@@ -1,7 +1,7 @@
 require('dotenv').config();
 const Fastify = require('fastify');
 
-const app = Fastify({ logger: true });
+const app = Fastify({ logger: true, trustProxy: true });
 
 app.register(require('./plugins/postgres'));
 app.register(require('./plugins/redis'));
@@ -12,7 +12,13 @@ app.register(require('@fastify/multipart'), {
 app.register(require('@fastify/websocket'));
 app.register(require('@fastify/rate-limit'), {
   global: false,
-  keyGenerator: (request) => request.ip
+  keyGenerator: (request) =>
+    request.headers['x-forwarded-for']?.split(',')[0]?.trim() || request.ip,
+  errorResponseBuilder: (_request, context) => {
+    const err = new Error(`Muitas tentativas. Tente novamente em ${context.after}.`);
+    err.statusCode = 429;
+    return err;
+  }
 });
 app.register(require('./plugins/pubsub'));
 
