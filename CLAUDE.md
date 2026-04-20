@@ -19,6 +19,30 @@ Em toda análise, brainstorm, desenvolvimento, arquitetura, modelagem de dados, 
 
 ---
 
+## Compatibilidade Multi-módulo (OBRIGATÓRIO)
+
+**Todo ajuste, correção de bug ou nova feature deve ser desenvolvido considerando os dois módulos existentes: `human` e `veterinary`.**
+
+- Os mundos são diferentes — terminologia, fluxos, agentes de IA, espécies, campos de paciente e contexto clínico variam entre módulos — mas nenhum pode ser negligenciado
+- Ao implementar qualquer mudança, perguntar explicitamente: *"isso funciona igualmente para o módulo human e veterinary?"*
+- Se a implementação correta para um módulo não for óbvia (ex: campo sem equivalente no outro módulo, comportamento ambíguo), **questionar o usuário antes de prosseguir** — nunca assumir
+- **Premissa universal: nenhum ajuste pode quebrar ou impactar funcionalidade pré-existente** em nenhum dos dois módulos
+- Mudanças de schema, API ou componente que afetem apenas um módulo devem ser explicitamente marcadas como intencionais e não devem causar regressão no outro
+
+### Diferenças relevantes entre módulos
+
+| Aspecto | `human` | `veterinary` |
+|---|---|---|
+| Sujeito | Paciente (humano) | Animal (cão, gato, equino, bovino…) |
+| Proprietário | N/A | Owner (dono do animal) |
+| Agentes IA Fase 1 | metabolic, cardiovascular, hematology | small_animals, equine, bovine |
+| Agentes IA Fase 2 | therapeutic, nutrition, clinical_correlation | therapeutic, nutrition (sem clinical_correlation) |
+| Campos clínicos extras | especialidade médica do usuário | espécie, raça, peso do animal |
+| Ícone na UI | `people` | `pets` |
+| Label na UI | "Pacientes" | "Animais" |
+
+---
+
 ## Fluxo de Desenvolvimento (OBRIGATÓRIO)
 
 1. **Branch de desenvolvimento**: todo trabalho começa em uma branch criada a partir da `main`. Nunca commitar direto na main.
