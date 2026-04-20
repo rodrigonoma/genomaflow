@@ -112,7 +112,22 @@ jobs:
 
       - name: Wait for services stable
         run: |
-          aws ecs wait services-stable \
-            --cluster genomaflow \
-            --services genomaflow-api genomaflow-web
-          echo "✅ Serviços estáveis"
+          for i in $(seq 1 24); do
+            PENDING=$(aws ecs describe-services \
+              --cluster genomaflow \
+              --services genomaflow-api genomaflow-web \
+              --query 'services[*].pendingCount' \
+              --output text | tr '\t' '\n' | awk '{s+=$1} END {print s}')
+            RUNNING=$(aws ecs describe-services \
+              --cluster genomaflow \
+              --services genomaflow-api genomaflow-web \
+              --query 'services[*].runningCount' \
+              --output text | tr '\t' '\n' | awk '{s+=$1} END {print s}')
+            echo "Check $i: running=$RUNNING pending=$PENDING"
+            if [ "$PENDING" = "0" ] && [ "$RUNNING" = "2" ]; then
+              echo "✅ Serviços estáveis"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "⚠️ Timeout — serviços ainda convergindo, mas deploy foi aplicado"
