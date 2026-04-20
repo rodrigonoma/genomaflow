@@ -40,7 +40,10 @@ function rrf(semanticRows, lexicalRows, k = 60) {
 module.exports = async function (fastify) {
 
   // POST /chat/message
-  fastify.post('/message', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/message', {
+    preHandler: [fastify.authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
     const { tenant_id } = request.user;
     const { question, session_id: incomingSessionId } = request.body || {};
 
@@ -55,6 +58,13 @@ module.exports = async function (fastify) {
     const embedKey   = `chat:embedding:${qHash}`;
     const sessionKey = `chat:session:${tenant_id}:${session_id}`;
 
+    // --- Verifica saldo (cache hits são gratuitos) ---
+    const balanceRes = await fastify.pg.query(
+      'SELECT COALESCE(balance, 0) AS balance FROM tenant_credit_balance WHERE tenant_id = $1',
+      [tenant_id]
+    );
+    const balance = Number(balanceRes.rows[0]?.balance ?? 0);
+
     // --- Cache de resultado ---
     const cachedResult = await fastify.redis.get(resultKey);
     if (cachedResult) {
@@ -66,6 +76,11 @@ module.exports = async function (fastify) {
       await fastify.redis.ltrim(sessionKey, 0, 19);
       await fastify.redis.expire(sessionKey, SESSION_TTL);
       return { session_id, ...parsed };
+    }
+
+    // --- Bloqueia se saldo insuficiente (cache hits já retornaram acima) ---
+    if (balance < 0.25) {
+      return reply.status(402).send({ error: 'Créditos insuficientes. Recarregue seu saldo para continuar.' });
     }
 
     // --- Embedding da query (com cache) ---
@@ -156,13 +171,16 @@ module.exports = async function (fastify) {
 
     const genMsg = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
+      max_tokens: 768,
       system:
-        'Você é um assistente clínico do GenomaFlow. ' +
-        'Responda perguntas sobre pacientes, exames e análises usando APENAS os dados fornecidos. ' +
-        'Use linguagem clínica objetiva em português. ' +
-        'Cite as fontes inline no formato [Fonte]. ' +
-        'Nunca invente dados que não estejam no contexto.',
+        'Você é um assistente clínico do GenomaFlow. Seja direto e conciso.\n' +
+        'Regras:\n' +
+        '- Responda em no máximo 4 frases ou use bullet points curtos quando listar itens\n' +
+        '- Use APENAS os dados fornecidos no contexto\n' +
+        '- Para perguntas numéricas/simples, responda em 1-2 frases\n' +
+        '- Cite a fonte inline só quando relevante: [Fonte]\n' +
+        '- Nunca invente dados\n' +
+        '- Sem introduções, sem conclusões longas, vá direto ao ponto',
       messages: [
         ...history,
         {
@@ -178,6 +196,17 @@ module.exports = async function (fastify) {
       source_label:  c.source_label,
       chunk_excerpt: c.content.slice(0, 200)
     }));
+
+    // --- Debita 0.25 crédito por pergunta RAG (não cacheada) ---
+    try {
+      await fastify.pg.query(
+        `INSERT INTO credit_ledger (tenant_id, amount, kind, description)
+         VALUES ($1, -0.25, 'chat_query', 'Consulta RAG')`,
+        [tenant_id]
+      );
+    } catch (billingErr) {
+      fastify.log.warn({ err: billingErr }, '[chat] billing debit failed');
+    }
 
     // --- Cacheia resultado + atualiza sessão ---
     await fastify.redis.setex(resultKey, RESULT_TTL, JSON.stringify({ answer, sources }));

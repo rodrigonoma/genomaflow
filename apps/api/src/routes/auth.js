@@ -12,7 +12,9 @@ const VALID_SPECIALTIES = [
 ];
 
 module.exports = async function (fastify) {
-  fastify.post('/login', async (request, reply) => {
+  fastify.post('/login', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
     const { email, password } = request.body;
 
     const { rows } = await fastify.pg.query(
@@ -52,7 +54,9 @@ module.exports = async function (fastify) {
     return { token };
   });
 
-  fastify.post('/register', async (request, reply) => {
+  fastify.post('/register', {
+    config: { rateLimit: { max: 5, timeWindow: '10 minutes' } }
+  }, async (request, reply) => {
     const { clinic_name, email, password, module: mod } = request.body || {};
 
     if (!clinic_name || !email || !password || !mod) {
