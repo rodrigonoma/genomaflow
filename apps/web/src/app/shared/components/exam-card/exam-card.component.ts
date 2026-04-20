@@ -1,11 +1,13 @@
-import { Component, Input, Output, EventEmitter, signal } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, signal } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { DatePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
+import { Subscription } from 'rxjs';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ExamStatusComponent } from '../exam-status/exam-status.component';
+import { WsService } from '../../../core/ws/ws.service';
 import { Exam } from '../../models/api.models';
 import { environment } from '../../../../environments/environment';
 
@@ -39,13 +41,35 @@ import { environment } from '../../../../environments/environment';
     </mat-card>
   `
 })
-export class ExamCardComponent {
+export class ExamCardComponent implements OnInit, OnDestroy {
   @Input() exam!: Exam;
   @Output() reprocessed = new EventEmitter<string>();
 
   reprocessing = signal(false);
+  private sub = new Subscription();
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private ws: WsService) {}
+
+  ngOnInit(): void {
+    this.sub.add(
+      this.ws.examError$.subscribe(({ exam_id }) => {
+        if (exam_id === this.exam.id) {
+          this.exam = { ...this.exam, status: 'error' };
+          this.reprocessing.set(false);
+        }
+      })
+    );
+    this.sub.add(
+      this.ws.examUpdates$.subscribe((msg) => {
+        if ((msg as any).exam_id === this.exam.id) {
+          this.exam = { ...this.exam, status: 'done' };
+          this.reprocessing.set(false);
+        }
+      })
+    );
+  }
+
+  ngOnDestroy(): void { this.sub.unsubscribe(); }
 
   get filename(): string {
     return this.exam.file_path?.split('/').pop() ?? 'exame.pdf';
@@ -55,8 +79,7 @@ export class ExamCardComponent {
     this.reprocessing.set(true);
     this.http.post(`${environment.apiUrl}/exams/${this.exam.id}/reprocess`, {}).subscribe({
       next: () => {
-        this.exam.status = 'pending';
-        this.reprocessing.set(false);
+        this.exam = { ...this.exam, status: 'pending' };
         this.reprocessed.emit(this.exam.id);
       },
       error: () => this.reprocessing.set(false)
