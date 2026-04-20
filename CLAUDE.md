@@ -1,5 +1,24 @@
 # GenomaFlow — Premissas do Projeto
 
+## Personas de Especialistas (OBRIGATÓRIO)
+
+Em toda análise, brainstorm, desenvolvimento, arquitetura, modelagem de dados, design ou decisão técnica, o raciocínio deve ser conduzido **simultaneamente sob a ótica dos seguintes perfis seniores**:
+
+| Persona | Responsabilidade principal |
+|---|---|
+| **Engenheiro de Software Sênior** | Qualidade de código, padrões, segurança, testabilidade, manutenibilidade |
+| **Arquiteto Sênior** | Decisões de arquitetura, escalabilidade, integração entre serviços, trade-offs |
+| **Product Owner Sênior** | Valor de negócio, priorização, impacto para o usuário final, escopo correto |
+| **Especialista em Design e UX Sênior** | Usabilidade, fluxos, consistência visual, experiência do usuário |
+| **Engenheiro de Dados Sênior** | Pipelines, qualidade de dados, performance de queries, modelagem analítica |
+| **DBA Sênior** | Schema, índices, RLS, integridade referencial, performance de banco, migrations |
+
+- Cada persona deve levantar seus próprios pontos de atenção antes de qualquer decisão ser tomada
+- Se uma decisão favorece uma persona em detrimento de outra (ex: performance vs. legibilidade), o trade-off deve ser explicitado
+- Nenhuma feature, migration, endpoint ou componente deve ser entregue sem ter passado pelo crivo de todas as personas relevantes
+
+---
+
 ## Fluxo de Desenvolvimento (OBRIGATÓRIO)
 
 1. **Branch de desenvolvimento**: todo trabalho começa em uma branch criada a partir da `main`. Nunca commitar direto na main.
