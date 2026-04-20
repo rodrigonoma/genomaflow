@@ -1,5 +1,5 @@
-const fs = require('fs');
 const { Pool } = require('pg');
+const { downloadFile, deleteFile, keyFromPath } = require('../storage/s3');
 const Redis = require('ioredis');
 const { extractText } = require('../parsers/pdf');
 const { anonymize } = require('../anonymizer/patient');
@@ -152,7 +152,7 @@ async function processExam({ exam_id, tenant_id, file_path, selected_agents, chi
     }
 
     if (!file_path) throw new Error('exam has no file_path — PDF download may have failed during ingest');
-    const buffer = fs.readFileSync(file_path);
+    const buffer = await downloadFile(keyFromPath(file_path));
     const rawText = await extractText(buffer);
     const examText = scrubText(rawText);
     const anonSubject = anonymize(subject);

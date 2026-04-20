@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
+    "@aws-sdk/client-s3": "^3.1033.0",
     "bullmq": "^5.7.0",
     "dotenv": "^16.0.0",
     "ioredis": "^5.3.2",

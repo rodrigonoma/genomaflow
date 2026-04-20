@@ -1,9 +1,6 @@
-const path = require('path');
-const fs = require('fs');
 const { Queue } = require('bullmq');
 const { withTenant } = require('../db/tenant');
-
-const UPLOADS_DIR = process.env.UPLOADS_DIR || '/tmp/uploads';
+const { uploadFile } = require('../storage/s3');
 
 module.exports = async function (fastify) {
   const examQueue = new Queue('exam-processing', { connection: fastify.redis });
@@ -46,12 +43,8 @@ module.exports = async function (fastify) {
       return reply.status(400).send({ error: 'Only PDF files are accepted' });
     }
 
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-    const filename = `${Date.now()}-${fileData.filename}`;
-    const filePath = path.join(UPLOADS_DIR, filename);
-
-    // Write file to disk
-    fs.writeFileSync(filePath, fileData._buffer);
+    const key = `uploads/${tenant_id}/${Date.now()}-${fileData.filename}`;
+    const s3Path = await uploadFile(key, fileData._buffer, 'application/pdf');
 
     try {
       const exam = await withTenant(fastify.pg, tenant_id, async (client) => {
@@ -84,7 +77,7 @@ module.exports = async function (fastify) {
           `INSERT INTO exams (tenant_id, subject_id, uploaded_by, file_path, status, source)
            VALUES ($1, $2, $3, $4, 'pending', 'upload')
            RETURNING id, status`,
-          [tenant_id, subject_id, user_id, filePath]
+          [tenant_id, subject_id, user_id, s3Path]
         );
         return rows[0];
       });
@@ -92,7 +85,7 @@ module.exports = async function (fastify) {
       await examQueue.add('process-exam', {
         exam_id: exam.id,
         tenant_id,
-        file_path: filePath,
+        file_path: s3Path,
         selected_agents: selected_agents || null,
         chief_complaint,
         current_symptoms
@@ -100,8 +93,6 @@ module.exports = async function (fastify) {
 
       return reply.status(202).send({ exam_id: exam.id, status: 'pending' });
     } catch (err) {
-      // Clean up the uploaded file if DB operation failed
-      fs.unlink(filePath, () => {});
       if (err.statusCode === 404) return reply.status(404).send({ error: err.message });
       if (err.statusCode === 422) return reply.status(422).send({ error: err.message });
       throw err;
