@@ -31,21 +31,21 @@ jobs:
       - name: Build & push API
         run: |
           IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/api
-          docker build -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest apps/api
+          docker build --build-arg CACHEBUST=${{ env.IMAGE_TAG }} -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest apps/api
           docker push $IMAGE:${{ env.IMAGE_TAG }}
           docker push $IMAGE:latest
 
       - name: Build & push Worker
         run: |
           IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/worker
-          docker build -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest apps/worker
+          docker build --build-arg CACHEBUST=${{ env.IMAGE_TAG }} -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest apps/worker
           docker push $IMAGE:${{ env.IMAGE_TAG }}
           docker push $IMAGE:latest
 
       - name: Build & push Web
         run: |
           IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/web
-          docker build --no-cache -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest apps/web
+          docker build --build-arg CACHEBUST=${{ env.IMAGE_TAG }} -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest apps/web
           docker push $IMAGE:${{ env.IMAGE_TAG }}
           docker push $IMAGE:latest
 
