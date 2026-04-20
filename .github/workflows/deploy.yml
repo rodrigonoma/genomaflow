@@ -31,21 +31,21 @@ jobs:
       - name: Build & push API
         run: |
           IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/api
-          docker build -f apps/api/Dockerfile -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest .
+          docker build -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest apps/api
           docker push $IMAGE:${{ env.IMAGE_TAG }}
           docker push $IMAGE:latest
 
       - name: Build & push Worker
         run: |
           IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/worker
-          docker build -f apps/worker/Dockerfile -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest .
+          docker build -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest apps/worker
           docker push $IMAGE:${{ env.IMAGE_TAG }}
           docker push $IMAGE:latest
 
       - name: Build & push Web
         run: |
           IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/web
-          docker build -f apps/web/Dockerfile -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest .
+          docker build -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest apps/web
           docker push $IMAGE:${{ env.IMAGE_TAG }}
           docker push $IMAGE:latest
 
