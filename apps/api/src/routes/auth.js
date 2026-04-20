@@ -1,4 +1,5 @@
 const bcrypt = require('bcrypt');
+const { withTenant } = require('../db/tenant');
 
 const DUMMY_HASH = '$2b$10$invalidhashfortimingprotection0000000000000000000000000';
 
@@ -15,7 +16,7 @@ module.exports = async function (fastify) {
     const { email, password } = request.body;
 
     const { rows } = await fastify.pg.query(
-      `SELECT u.id, u.tenant_id, u.password_hash, u.role, t.module, t.active
+      `SELECT u.id, u.tenant_id, u.password_hash, u.role, u.active AS user_active, t.module, t.active AS tenant_active
        FROM users u JOIN tenants t ON t.id = u.tenant_id
        WHERE u.email = $1`,
       [email]
@@ -28,7 +29,11 @@ module.exports = async function (fastify) {
 
     const user = rows[0];
 
-    if (!user.active) {
+    if (!user.user_active) {
+      return reply.status(403).send({ error: 'Usuário desativado. Entre em contato com o suporte.' });
+    }
+
+    if (!user.tenant_active) {
       return reply.status(403).send({ error: 'Conta pendente de ativação. Verifique seu pagamento.' });
     }
 
@@ -41,7 +46,7 @@ module.exports = async function (fastify) {
       user_id: user.id,
       tenant_id: user.tenant_id,
       role: user.role,
-      module: user.module
+      module: user.module || 'human'
     });
 
     return { token };
@@ -80,37 +85,25 @@ module.exports = async function (fastify) {
     );
     const tenant_id = tenantRes.rows[0].id;
 
-    const userRes = await fastify.pg.query(
-      "INSERT INTO users (tenant_id, email, password_hash, role) VALUES ($1, $2, $3, 'admin') RETURNING id",
-      [tenant_id, email, password_hash]
-    );
-    const user_id = userRes.rows[0].id;
+    const { rows: userRows } = await withTenant(fastify.pg, tenant_id, async (client) => {
+      return client.query(
+        "INSERT INTO users (tenant_id, email, password_hash, role) VALUES ($1, $2, $3, 'admin') RETURNING id",
+        [tenant_id, email, password_hash]
+      );
+    });
+    const user_id = userRows[0].id;
 
     return reply.status(201).send({ tenant_id, user_id, email });
   });
 
-  fastify.post('/activate', async (request, reply) => {
-    const { tenant_id } = request.body || {};
-
-    if (!tenant_id) {
-      return reply.status(400).send({ error: 'tenant_id é obrigatório' });
-    }
-
-    const res = await fastify.pg.query(
-      'UPDATE tenants SET active = true WHERE id = $1 RETURNING id',
-      [tenant_id]
-    );
-    if (res.rowCount === 0) {
-      return reply.status(404).send({ error: 'Tenant não encontrado' });
-    }
-    return reply.status(200).send({ ok: true });
-  });
-
   fastify.get('/me', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { user_id } = request.user;
+    const { user_id, tenant_id } = request.user;
     const { rows } = await fastify.pg.query(
-      `SELECT id, email, role, specialty, created_at FROM users WHERE id = $1`,
-      [user_id]
+      `SELECT u.id, u.email, u.role, u.specialty, u.created_at, t.module
+       FROM users u
+       JOIN tenants t ON t.id = u.tenant_id
+       WHERE u.id = $1 AND u.tenant_id = $2`,
+      [user_id, tenant_id]
     );
     if (!rows[0]) return reply.status(404).send({ error: 'User not found' });
     return rows[0];
