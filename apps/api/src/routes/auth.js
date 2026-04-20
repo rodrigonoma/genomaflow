@@ -8,12 +8,13 @@ module.exports = async function (fastify) {
   fastify.post('/login', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } }
   }, async (request, reply) => {
-    const { email, password } = request.body;
+    const { email: rawEmail, password } = request.body;
+    const email = rawEmail?.toLowerCase().trim();
 
     const { rows } = await fastify.pg.query(
       `SELECT u.id, u.tenant_id, u.password_hash, u.role, u.active AS user_active, t.module, t.active AS tenant_active
        FROM users u JOIN tenants t ON t.id = u.tenant_id
-       WHERE u.email = $1`,
+       WHERE LOWER(u.email) = $1`,
       [email]
     );
 
@@ -50,9 +51,10 @@ module.exports = async function (fastify) {
   fastify.post('/register', {
     config: { rateLimit: { max: 5, timeWindow: '10 minutes' } }
   }, async (request, reply) => {
-    const { clinic_name, email, password, module: mod } = request.body || {};
+    const { clinic_name, email: rawEmail, password, module: mod } = request.body || {};
+    const email = rawEmail?.toLowerCase().trim();
 
-    if (!clinic_name || !email || !password || !mod) {
+    if (!clinic_name || !rawEmail || !password || !mod) {
       return reply.status(400).send({ error: 'Campos obrigatórios: clinic_name, email, password, module' });
     }
 
