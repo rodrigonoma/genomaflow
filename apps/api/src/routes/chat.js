@@ -90,7 +90,7 @@ module.exports = async function (fastify) {
       embedding = JSON.parse(cachedEmbed);
     } else {
       const res = await openai.embeddings.create({
-        model: 'text-embedding-3-small',
+        model: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
         input: question.trim().slice(0, 8000)
       });
       embedding = res.data[0].embedding;
