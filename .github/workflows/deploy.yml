@@ -45,7 +45,7 @@ jobs:
       - name: Build & push Web
         run: |
           IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/web
-          docker build -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest apps/web
+          docker build --no-cache -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest apps/web
           docker push $IMAGE:${{ env.IMAGE_TAG }}
           docker push $IMAGE:latest
 
