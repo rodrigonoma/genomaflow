@@ -8,7 +8,7 @@ const MIN_TEXT_LENGTH = 100;
 
 async function extractTextViaOcr(buffer) {
   const response = await anthropic.messages.create({
-    model: process.env.OCR_MODEL || 'claude-opus-4-6',
+    model: process.env.OCR_MODEL || 'claude-haiku-4-5-20251001',
     max_tokens: 4096,
     messages: [{
       role: 'user',
@@ -40,16 +40,17 @@ async function extractTextViaOcr(buffer) {
  * Extracts raw text from a PDF buffer.
  * Falls back to Claude Vision OCR for scanned/image-only PDFs.
  * @param {Buffer} buffer
- * @returns {Promise<string>}
+ * @returns {Promise<{ text: string, usedOcr: boolean }>}
  */
 async function extractText(buffer) {
   const result = await pdfParse(buffer);
   if (result.text && result.text.trim().length >= MIN_TEXT_LENGTH) {
-    return result.text;
+    return { text: result.text, usedOcr: false };
   }
 
   console.log('[pdf] Digital text extraction insufficient, falling back to OCR');
-  return extractTextViaOcr(buffer);
+  const text = await extractTextViaOcr(buffer);
+  return { text, usedOcr: true };
 }
 
 module.exports = { extractText };

@@ -161,7 +161,14 @@ async function processExam({ exam_id, tenant_id, file_path, selected_agents, chi
       }
       throw s3Err;
     }
-    const rawText = await extractText(buffer);
+    const { text: rawText, usedOcr } = await extractText(buffer);
+    if (usedOcr) {
+      await client.query(
+        `INSERT INTO credit_ledger (tenant_id, amount, kind, exam_id, description)
+         VALUES ($1, -1, 'ocr_usage', $2, 'OCR: scanned PDF text extraction')`,
+        [tenant_id, exam_id]
+      );
+    }
     const examText = scrubText(rawText);
     const anonSubject = anonymize(subject);
     const patientContext = {

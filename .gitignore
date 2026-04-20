@@ -3,3 +3,19 @@
 .env
 .env.*
 !.env.example
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# API keys and credentials
+APIKEY*.txt
+"APIKEY*.txt"
+
+# OS / editor
+.DS_Store
+*.Zone.Identifier
+
+# Build output
+dist/
+.angular/

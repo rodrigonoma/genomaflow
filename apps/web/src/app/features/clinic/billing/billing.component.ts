@@ -251,7 +251,7 @@ export class BillingComponent implements OnInit {
   kindLabel(kind: string): string {
     const labels: Record<string, string> = {
       subscription_bonus: 'Bônus', topup: 'Recarga', topup_recurring: 'Recorrente',
-      agent_usage: 'Consumo', adjustment: 'Ajuste'
+      agent_usage: 'Consumo', ocr_usage: 'OCR', adjustment: 'Ajuste'
     };
     return labels[kind] ?? kind;
   }
