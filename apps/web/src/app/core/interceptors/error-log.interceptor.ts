@@ -13,11 +13,15 @@ export const errorLogInterceptor: HttpInterceptorFn = (req, next) => {
 
       if (!skipLog && error.status >= 400) {
         const token = auth.getToken();
+        const backendMsg = error.error?.error || error.error?.message || null;
+        const errorMessage = backendMsg
+          ? `[${error.status}] ${backendMsg}`
+          : `[${error.status}] ${error.statusText || 'Unknown error'}`;
         const body = {
           url,
           method: req.method,
           status_code: error.status,
-          error_message: error.message ?? String(error.status)
+          error_message: errorMessage
         };
         fetch('/api/error-log', {
           method: 'POST',
