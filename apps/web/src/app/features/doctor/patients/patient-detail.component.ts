@@ -1,8 +1,10 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, OnDestroy, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { Subscription } from 'rxjs';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { DatePipe, NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { WsService } from '../../../core/ws/ws.service';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -798,10 +800,12 @@ interface ComparisonBlock {
     </div>
   `
 })
-export class PatientDetailComponent implements OnInit {
+export class PatientDetailComponent implements OnInit, OnDestroy {
   private http   = inject(HttpClient);
   private route  = inject(ActivatedRoute);
   private snack  = inject(MatSnackBar);
+  private ws     = inject(WsService);
+  private wsSub  = new Subscription();
 
   subject   = signal<Subject | null>(null);
   exams     = signal<Exam[]>([]);
@@ -848,6 +852,35 @@ export class PatientDetailComponent implements OnInit {
     this.loadSubject(id);
     this.loadExams(id);
     this.loadPlans(id);
+    this.subscribeToExamUpdates(id);
+  }
+
+  ngOnDestroy(): void { this.wsSub.unsubscribe(); }
+
+  private subscribeToExamUpdates(subjectId: string): void {
+    this.wsSub.add(
+      this.ws.examUpdates$.subscribe(({ exam_id }) => {
+        const match = this.exams().find(e => e.id === exam_id);
+        if (!match) return;
+        // Reload exam details to get results then update signals
+        this.http.get<Exam>(`${environment.apiUrl}/exams/${exam_id}`).subscribe(updated => {
+          this.exams.update(list => list.map(e => e.id === exam_id ? updated : e));
+          if (updated.status === 'done') {
+            this.aiResults.update(list => {
+              const exists = list.some(e => e.id === exam_id);
+              return exists ? list.map(e => e.id === exam_id ? updated : e) : [updated, ...list];
+            });
+          }
+        });
+      })
+    );
+    this.wsSub.add(
+      this.ws.examError$.subscribe(({ exam_id }) => {
+        if (this.exams().some(e => e.id === exam_id)) {
+          this.exams.update(list => list.map(e => e.id === exam_id ? { ...e, status: 'error' } : e));
+        }
+      })
+    );
   }
 
   private loadSubject(id: string): void {

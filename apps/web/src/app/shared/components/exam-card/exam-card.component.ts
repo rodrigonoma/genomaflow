@@ -1,13 +1,11 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, signal } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges, signal } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { DatePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { Subscription } from 'rxjs';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ExamStatusComponent } from '../exam-status/exam-status.component';
-import { WsService } from '../../../core/ws/ws.service';
 import { Exam } from '../../models/api.models';
 import { environment } from '../../../../environments/environment';
 
@@ -41,35 +39,25 @@ import { environment } from '../../../../environments/environment';
     </mat-card>
   `
 })
-export class ExamCardComponent implements OnInit, OnDestroy {
+export class ExamCardComponent implements OnChanges {
   @Input() exam!: Exam;
   @Output() reprocessed = new EventEmitter<string>();
 
   reprocessing = signal(false);
-  private sub = new Subscription();
 
-  constructor(private http: HttpClient, private ws: WsService) {}
+  constructor(private http: HttpClient) {}
 
-  ngOnInit(): void {
-    this.sub.add(
-      this.ws.examError$.subscribe(({ exam_id }) => {
-        if (exam_id === this.exam.id) {
-          this.exam = { ...this.exam, status: 'error' };
-          this.reprocessing.set(false);
-        }
-      })
-    );
-    this.sub.add(
-      this.ws.examUpdates$.subscribe((msg) => {
-        if ((msg as any).exam_id === this.exam.id) {
-          this.exam = { ...this.exam, status: 'done' };
-          this.reprocessing.set(false);
-        }
-      })
-    );
+  ngOnChanges(changes: SimpleChanges): void {
+    // Reset spinner when parent updates exam status (WS event resolved)
+    const exam = changes['exam'];
+    if (exam && !exam.firstChange) {
+      const prev: Exam = exam.previousValue;
+      const curr: Exam = exam.currentValue;
+      if (prev?.status !== curr?.status && curr?.status !== 'pending' && curr?.status !== 'processing') {
+        this.reprocessing.set(false);
+      }
+    }
   }
-
-  ngOnDestroy(): void { this.sub.unsubscribe(); }
 
   get filename(): string {
     return this.exam.file_path?.split('/').pop() ?? 'exame.pdf';
@@ -78,10 +66,7 @@ export class ExamCardComponent implements OnInit, OnDestroy {
   reprocess(): void {
     this.reprocessing.set(true);
     this.http.post(`${environment.apiUrl}/exams/${this.exam.id}/reprocess`, {}).subscribe({
-      next: () => {
-        this.exam = { ...this.exam, status: 'pending' };
-        this.reprocessed.emit(this.exam.id);
-      },
+      next: () => this.reprocessed.emit(this.exam.id),
       error: () => this.reprocessing.set(false)
     });
   }
