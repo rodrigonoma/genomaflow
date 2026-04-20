@@ -1,7 +1,7 @@
 require('dotenv').config();
 const Fastify = require('fastify');
 
-const app = Fastify({ logger: true });
+const app = Fastify({ logger: true, trustProxy: true });
 
 app.register(require('./plugins/postgres'));
 app.register(require('./plugins/redis'));
@@ -10,18 +10,34 @@ app.register(require('@fastify/multipart'), {
   limits: { fileSize: 20 * 1024 * 1024 }
 });
 app.register(require('@fastify/websocket'));
+app.register(require('@fastify/rate-limit'), {
+  global: false,
+  keyGenerator: (request) =>
+    request.headers['x-forwarded-for']?.split(',')[0]?.trim() || request.ip,
+  errorResponseBuilder: (_request, context) => {
+    const err = new Error(`Muitas tentativas. Tente novamente em ${context.after}.`);
+    err.statusCode = 429;
+    return err;
+  }
+});
 app.register(require('./plugins/pubsub'));
 
-app.register(require('./routes/auth'), { prefix: '/auth' });
-app.register(require('./routes/patients'), { prefix: '/patients' });
-app.register(require('./routes/exams'), { prefix: '/exams' });
-app.register(require('./routes/alerts'), { prefix: '/alerts' });
-app.register(require('./routes/users'), { prefix: '/users' });
-app.register(require('./routes/integrations'), { prefix: '/integrations' });
-app.register(require('./routes/billing'), { prefix: '' });
-app.register(require('./routes/feedback'), { prefix: '/feedback' });
-app.register(require('./routes/error-log'), { prefix: '/error-log' });
-app.register(require('./routes/chat'), { prefix: '/chat' });
+const API_PREFIX = process.env.API_PREFIX || '';
+
+app.register((fastify, _opts, done) => {
+  fastify.register(require('./routes/auth'),        { prefix: '/auth' });
+  fastify.register(require('./routes/patients'),    { prefix: '/patients' });
+  fastify.register(require('./routes/exams'),       { prefix: '/exams' });
+  fastify.register(require('./routes/alerts'),      { prefix: '/alerts' });
+  fastify.register(require('./routes/users'),       { prefix: '/users' });
+  fastify.register(require('./routes/integrations'),{ prefix: '/integrations' });
+  fastify.register(require('./routes/billing'),     { prefix: '' });
+  fastify.register(require('./routes/feedback'),    { prefix: '/feedback' });
+  fastify.register(require('./routes/error-log'),   { prefix: '/error-log' });
+  fastify.register(require('./routes/chat'),        { prefix: '/chat' });
+  fastify.register(require('./routes/master'),     { prefix: '/master' });
+  done();
+}, { prefix: API_PREFIX });
 
 if (require.main === module) {
   app.listen({ port: 3000, host: '0.0.0.0' });
