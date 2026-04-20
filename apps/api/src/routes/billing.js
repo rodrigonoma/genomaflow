@@ -1,5 +1,7 @@
 'use strict';
 
+const { VALID_AGENT_TYPES, VALID_CREDIT_PACKAGES } = require('../constants');
+
 module.exports = async function billingRoutes(fastify) {
 
   // GET /billing/balance
@@ -52,8 +54,7 @@ module.exports = async function billingRoutes(fastify) {
       return reply.status(400).send({ error: 'Mínimo 1 especialidade obrigatória' });
     }
 
-    const valid = ['metabolic','cardiovascular','hematology','small_animals','equine','bovine','therapeutic','nutrition'];
-    const invalid = specialties.filter(s => !valid.includes(s));
+    const invalid = specialties.filter(s => !VALID_AGENT_TYPES.includes(s));
     if (invalid.length > 0) {
       return reply.status(400).send({ error: `Especialidades inválidas: ${invalid.join(', ')}` });
     }
@@ -108,7 +109,15 @@ module.exports = async function billingRoutes(fastify) {
       }
     }
 
-    // TODO: integrate real Stripe/MP SDK — for now return dev redirect
+    // Grant starter credits immediately (real gateway webhook will do this in production)
+    const starterCredits = 100;
+    await fastify.pg.query(
+      `INSERT INTO credit_ledger (tenant_id, amount, kind, description)
+       VALUES ($1, $2, 'purchase', 'Créditos iniciais do plano')`,
+      [tenant_id, starterCredits]
+    );
+
+    fastify.redis.publish(`billing:updated:${tenant_id}`, '{}').catch(() => {});
     const appUrl = process.env.APP_URL || 'http://localhost:4200';
     const checkout_url = `${appUrl}/login?activated=true`;
     return reply.status(200).send({ checkout_url });
@@ -122,13 +131,20 @@ module.exports = async function billingRoutes(fastify) {
     const { gateway, credits } = request.body || {};
     if (!gateway || !credits) return reply.status(400).send({ error: 'gateway e credits são obrigatórios' });
 
-    const validPackages = [100, 250, 500];
-    if (!validPackages.includes(Number(credits))) {
+    if (!VALID_CREDIT_PACKAGES.includes(Number(credits))) {
       return reply.status(400).send({ error: 'Pacote inválido. Use: 100, 250 ou 500 créditos' });
     }
 
+    // Grant credits immediately (real gateway webhook will do this in production)
+    await fastify.pg.query(
+      `INSERT INTO credit_ledger (tenant_id, amount, kind, description)
+       VALUES ($1, $2, 'purchase', $3)`,
+      [tenant_id, Number(credits), `Recarga de ${credits} créditos`]
+    );
+
+    fastify.redis.publish(`billing:updated:${tenant_id}`, '{}').catch(() => {});
     const appUrl = process.env.APP_URL || 'http://localhost:4200';
-    const checkout_url = `${appUrl}/clinic/billing?topup_pending=true`;
+    const checkout_url = `${appUrl}/clinic/billing?topup_success=true`;
     return reply.status(200).send({ checkout_url });
   });
 

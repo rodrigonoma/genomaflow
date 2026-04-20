@@ -1,15 +1,8 @@
 const bcrypt = require('bcrypt');
 const { withTenant } = require('../db/tenant');
+const { VALID_DOCTOR_SPECIALTIES, VALID_MODULES } = require('../constants');
 
 const DUMMY_HASH = '$2b$10$invalidhashfortimingprotection0000000000000000000000000';
-
-const VALID_SPECIALTIES = [
-  'endocrinologia','cardiologia','hematologia','clínica_geral','nutrição',
-  'nefrologia','hepatologia','gastroenterologia','ginecologia','urologia',
-  'pediatria','neurologia','ortopedia','pneumologia','reumatologia',
-  'oncologia','infectologia','dermatologia','psiquiatria','geriatria',
-  'medicina_esporte'
-];
 
 module.exports = async function (fastify) {
   fastify.post('/login', {
@@ -72,7 +65,7 @@ module.exports = async function (fastify) {
       return reply.status(400).send({ error: 'Senha deve ter no mínimo 8 caracteres' });
     }
 
-    if (!['human', 'veterinary'].includes(mod)) {
+    if (!VALID_MODULES.includes(mod)) {
       return reply.status(400).send({ error: 'Módulo inválido. Use: human ou veterinary' });
     }
 
@@ -117,8 +110,8 @@ module.exports = async function (fastify) {
     const { user_id } = request.user;
     const { specialty } = request.body;
 
-    if (!specialty || !VALID_SPECIALTIES.includes(specialty)) {
-      return reply.status(400).send({ error: 'Especialidade inválida', valid: VALID_SPECIALTIES });
+    if (!specialty || !VALID_DOCTOR_SPECIALTIES.includes(specialty)) {
+      return reply.status(400).send({ error: 'Especialidade inválida', valid: VALID_DOCTOR_SPECIALTIES });
     }
 
     const { rows } = await fastify.pg.query(
