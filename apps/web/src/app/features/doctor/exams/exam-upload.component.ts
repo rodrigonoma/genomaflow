@@ -123,7 +123,7 @@ import { Exam } from '../../../shared/models/api.models';
     <div class="page">
       <div class="page-header">
         <h1 class="page-title">Enviar exame</h1>
-        <span class="page-sub">Upload de laudo laboratorial · PDF</span>
+        <span class="page-sub">Laudo laboratorial (PDF) · Imagem médica (DICOM, JPG, PNG)</span>
       </div>
 
       <!-- Credit balance -->
@@ -141,7 +141,7 @@ import { Exam } from '../../../shared/models/api.models';
       </div>
 
       <!-- Drop zone -->
-      <input #fileInput type="file" accept=".pdf" class="hidden-input" (change)="onFileSelected($event)" />
+      <input #fileInput type="file" accept=".pdf,.dcm,.dicom,.jpg,.jpeg,.png" class="hidden-input" (change)="onFileSelected($event)" />
       <div class="drop-zone" [class.has-file]="!!selectedFile" [class.drag-over]="dragging"
            (click)="fileInput.click()"
            (dragover)="$event.preventDefault(); dragging = true"
@@ -149,9 +149,9 @@ import { Exam } from '../../../shared/models/api.models';
            (drop)="onDrop($event)">
         <mat-icon class="drop-icon">{{ selectedFile ? 'check_circle' : 'upload_file' }}</mat-icon>
         @if (!selectedFile) {
-          <p class="drop-title">Arraste o PDF aqui</p>
-          <p class="drop-sub">ou clique para selecionar o arquivo</p>
-          <span class="browse-hint">Selecionar PDF</span>
+          <p class="drop-title">Arraste o arquivo aqui</p>
+          <p class="drop-sub">PDF, DICOM (.dcm), JPG ou PNG</p>
+          <span class="browse-hint">Selecionar arquivo</span>
         } @else {
           <p class="file-chosen">
             <mat-icon>description</mat-icon>
@@ -233,8 +233,8 @@ export class ExamUploadComponent implements OnInit, OnDestroy {
 
   onFileSelected(event: Event): void {
     const file = (event.target as HTMLInputElement).files?.[0] ?? null;
-    if (file && file.type !== 'application/pdf') {
-      this.snackBar.open('Apenas arquivos PDF são aceitos.', '', { duration: 3000 });
+    if (file && !this.isAllowedFile(file)) {
+      this.snackBar.open('Formato não suportado. Use PDF, DICOM (.dcm), JPG ou PNG.', '', { duration: 4000 });
       return;
     }
     this.selectedFile = file;
@@ -244,11 +244,18 @@ export class ExamUploadComponent implements OnInit, OnDestroy {
     event.preventDefault();
     this.dragging = false;
     const file = event.dataTransfer?.files?.[0] ?? null;
-    if (file && file.type !== 'application/pdf') {
-      this.snackBar.open('Apenas arquivos PDF são aceitos.', '', { duration: 3000 });
+    if (file && !this.isAllowedFile(file)) {
+      this.snackBar.open('Formato não suportado. Use PDF, DICOM (.dcm), JPG ou PNG.', '', { duration: 4000 });
       return;
     }
     this.selectedFile = file;
+  }
+
+  private isAllowedFile(file: File): boolean {
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'application/dicom', 'application/octet-stream'];
+    const allowedExts  = ['pdf', 'dcm', 'dicom', 'jpg', 'jpeg', 'png', 'tiff'];
+    const ext = file.name.toLowerCase().split('.').pop() ?? '';
+    return allowedTypes.includes(file.type) || allowedExts.includes(ext);
   }
 
   clearFile(event: Event): void {

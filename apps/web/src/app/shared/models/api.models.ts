@@ -118,6 +118,26 @@ export interface ClinicProfile {
   clinic_logo_url: string | null;
 }
 
+export interface ImagingFinding {
+  id: number;
+  label: string;
+  box?: [number, number, number, number];
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  description: string;
+}
+
+export interface ImagingMetadata {
+  original_image_url?: string;
+  findings: ImagingFinding[];
+  measurements?: {
+    rate?: string;
+    pr_interval?: string;
+    qrs_duration?: string;
+    qt_interval?: string;
+    axis?: string;
+  } | null;
+}
+
 export interface ClinicalResult {
   agent_type: string;
   interpretation: string;
@@ -125,6 +145,7 @@ export interface ClinicalResult {
   alerts: Alert[];
   recommendations: Recommendation[];
   disclaimer: string;
+  metadata?: ImagingMetadata;
 }
 
 export interface Exam {
@@ -135,6 +156,7 @@ export interface Exam {
   status: 'pending' | 'processing' | 'done' | 'error';
   source: string;
   file_path: string;
+  file_type?: 'pdf' | 'dicom' | 'image' | 'unknown';
   created_at: string;
   updated_at: string;
   results: ClinicalResult[] | null;
