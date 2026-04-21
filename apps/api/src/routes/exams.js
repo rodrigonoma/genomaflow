@@ -114,7 +114,8 @@ module.exports = async function (fastify) {
 
     const exams = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
-        `SELECT e.id, e.subject_id, e.status, e.source, e.file_path, e.created_at, e.updated_at,
+        `SELECT e.id, e.subject_id, e.status, e.source, e.file_path, e.error_message,
+                e.created_at, e.updated_at,
                 json_agg(
                   json_build_object(
                     'agent_type', cr.agent_type,
@@ -127,7 +128,8 @@ module.exports = async function (fastify) {
          FROM exams e
          LEFT JOIN clinical_results cr ON cr.exam_id = e.id
          WHERE e.tenant_id = $1
-         GROUP BY e.id, e.subject_id, e.status, e.source, e.file_path, e.created_at, e.updated_at
+         GROUP BY e.id, e.subject_id, e.status, e.source, e.file_path, e.error_message,
+                  e.created_at, e.updated_at
          ORDER BY e.created_at DESC`,
         [tenant_id]
       );

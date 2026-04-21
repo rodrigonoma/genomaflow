@@ -104,7 +104,7 @@ import { environment } from '../../../../environments/environment';
           @if (exam.status === 'error') {
             <div class="error-msg">
               <mat-icon>warning</mat-icon>
-              Falha ao processar o laudo. Verifique se o PDF é legível e tente novamente.
+              {{ exam.error_message || 'Falha ao processar o laudo. Verifique se o arquivo é legível e tente novamente.' }}
             </div>
           }
           @if (exam.status === 'processing') {

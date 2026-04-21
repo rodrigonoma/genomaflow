@@ -7,10 +7,11 @@ const DICOM_MODALITY_MAP = {
   DX:  'rx',
   RG:  'rx',
   CT:  'rx',
-  MR:  'rx',
+  MR:  'mri',
   US:  'ultrasound',
   ECG: 'ecg',
   EG:  'ecg',
+  PT:  'mri',
 };
 
 /**
@@ -49,12 +50,12 @@ async function classifyModality(imageBase64, imageMeta) {
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageBase64 } },
-          { type: 'text', text: 'Classify this medical image type. Respond with ONLY one word: rx | ecg | ultrasound | other' }
+          { type: 'text', text: 'Classify this medical image type. Respond with ONLY one word: rx | ecg | ultrasound | mri | other' }
         ]
       }]
     });
     const text = response.content[0]?.text?.trim().toLowerCase() ?? '';
-    const valid = ['rx', 'ecg', 'ultrasound'];
+    const valid = ['rx', 'ecg', 'ultrasound', 'mri'];
     return valid.includes(text) ? text : null;
   } catch (_) {
     return null;

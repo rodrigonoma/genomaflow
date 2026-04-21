@@ -157,6 +157,7 @@ export interface Exam {
   source: string;
   file_path: string;
   file_type?: 'pdf' | 'dicom' | 'image' | 'unknown';
+  error_message?: string | null;
   created_at: string;
   updated_at: string;
   results: ClinicalResult[] | null;

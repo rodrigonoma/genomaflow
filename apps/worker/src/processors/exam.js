@@ -6,6 +6,7 @@ const { classifyModality } = require('../classifiers/imaging');
 const { runImagingRxAgent } = require('../agents/imaging-rx');
 const { runImagingEcgAgent } = require('../agents/imaging-ecg');
 const { runImagingUltrasoundAgent } = require('../agents/imaging-ultrasound');
+const { runImagingMriAgent } = require('../agents/imaging-mri');
 const { extractText } = require('../parsers/pdf');
 const { anonymize } = require('../anonymizer/patient');
 const { scrubText } = require('../anonymizer/text');
@@ -139,6 +140,7 @@ const IMAGING_AGENT_MAP = {
   rx:         { type: 'imaging_rx',         runner: runImagingRxAgent },
   ecg:        { type: 'imaging_ecg',        runner: runImagingEcgAgent },
   ultrasound: { type: 'imaging_ultrasound', runner: runImagingUltrasoundAgent },
+  mri:        { type: 'imaging_mri',        runner: runImagingMriAgent },
 };
 
 async function processImagingExam({ exam_id, tenant_id, file_path, file_type }) {

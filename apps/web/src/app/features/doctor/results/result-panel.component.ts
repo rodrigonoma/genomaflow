@@ -700,6 +700,7 @@ export class ResultPanelComponent implements OnInit, OnDestroy {
       imaging_rx:           'RADIOGRAFIA (IA)',
       imaging_ecg:          'ECG (IA)',
       imaging_ultrasound:   'ULTRASSOM (IA)',
+      imaging_mri:          'RESSONÂNCIA (IA)',
     };
     return labels[type] || type.toUpperCase();
   }
