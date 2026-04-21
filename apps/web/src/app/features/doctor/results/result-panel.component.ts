@@ -1,4 +1,6 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy } from '@angular/core';
+import { Chart, registerables } from 'chart.js';
+Chart.register(...registerables);
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { DatePipe, NgTemplateOutlet, UpperCasePipe } from '@angular/common';
@@ -109,8 +111,17 @@ import { ReviewQueueService } from '../review-queue/review-queue.service';
 
             @if (compareExam) {
               <div class="compare-header">
-                <span class="compare-label">Comparando: {{ compareExam.created_at | date:'dd/MM/yyyy' }}</span>
+                <span class="compare-label">Comparando: {{ exam.created_at | date:'dd/MM/yyyy' }} vs {{ compareExam.created_at | date:'dd/MM/yyyy' }}</span>
               </div>
+              <!-- Comparison charts per agent -->
+              @for (agentType of sharedAgents(); track agentType) {
+                <div class="compare-chart-block">
+                  <div class="compare-chart-agent">{{ agentLabel(agentType) }} — Scores comparados</div>
+                  <div class="compare-chart-wrap">
+                    <canvas [id]="'cmp-chart-' + agentType"></canvas>
+                  </div>
+                </div>
+              }
               <ng-container [ngTemplateOutlet]="resultTpl" [ngTemplateOutletContext]="{ $implicit: compareExam }" />
             }
           </main>
@@ -120,7 +131,7 @@ import { ReviewQueueService } from '../review-queue/review-queue.service';
           @for (result of e.results ?? []; track result.agent_type) {
             <div class="agent-card" [class]="'severity-' + getTopSeverity(result.alerts)">
               <div class="agent-header">
-                <span class="agent-badge">{{ result.agent_type | uppercase }}</span>
+                <span class="agent-badge">{{ agentLabel(result.agent_type) }}</span>
                 @if (result.risk_scores && objectKeys(result.risk_scores).length) {
                   <div class="risk-scores">
                     @for (key of objectKeys(result.risk_scores); track key) {
@@ -150,12 +161,41 @@ import { ReviewQueueService } from '../review-queue/review-queue.service';
                 <p class="interpretation-text">{{ result.interpretation }}</p>
               </div>
 
-              @if (result.recommendations && result.recommendations.length > 0) {
+              @if (getStandardRecs(result.recommendations).length > 0) {
                 <div class="recommendations-section">
                   <h4 class="rec-title">Recomendações</h4>
-                  @for (rec of result.recommendations; track rec.description) {
+                  @for (rec of getStandardRecs(result.recommendations); track rec.description) {
                     <div class="rec-item" [class]="'priority-' + rec.priority">
                       <span class="rec-type">{{ rec.type | uppercase }}</span>
+                      <span class="rec-desc">{{ rec.description }}</span>
+                    </div>
+                  }
+                </div>
+              }
+
+              @if (getSuggestedExams(result.recommendations).length > 0) {
+                <div class="recommendations-section">
+                  <h4 class="rec-title">Exames Sugeridos</h4>
+                  @for (rec of getSuggestedExams(result.recommendations); track rec.description) {
+                    <div class="rec-item priority-medium">
+                      <span class="rec-type">EXAME</span>
+                      <div class="rec-body">
+                        <span class="rec-desc">{{ rec._exam }}</span>
+                        @if (rec._rationale) {
+                          <p class="rec-rationale">{{ rec._rationale }}</p>
+                        }
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+
+              @if (getContextualFactors(result.recommendations).length > 0) {
+                <div class="recommendations-section">
+                  <h4 class="rec-title">Fatores Contextuais</h4>
+                  @for (rec of getContextualFactors(result.recommendations); track rec.description) {
+                    <div class="rec-item priority-low">
+                      <span class="rec-type">CONTEXTO</span>
                       <span class="rec-desc">{{ rec.description }}</span>
                     </div>
                   }
@@ -185,298 +225,207 @@ import { ReviewQueueService } from '../review-queue/review-queue.service';
     }
 
     .loading-state {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 50vh;
+      display: flex; justify-content: center; align-items: center;
+      min-height: 50vh; flex-direction: column; gap: 1rem;
     }
-
     .loading-text {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
-      color: #c0c1ff;
+      font-size: 13px; color: #7c7b8f;
     }
 
     .result-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      margin-bottom: 2rem;
-      flex-wrap: wrap;
-      gap: 1rem;
+      display: flex; align-items: flex-start; justify-content: space-between;
+      margin-bottom: 1.75rem; flex-wrap: wrap; gap: 1rem;
     }
-
     .patient-title {
-      font-family: 'Space Grotesk', sans-serif;
-      font-weight: 700;
-      font-size: 1.5rem;
-      color: #dae2fd;
-      margin: 0 0 0.25rem 0;
+      font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+      font-size: 1.5rem; color: #dae2fd; margin: 0 0 0.25rem 0;
     }
-
     .exam-date {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      color: #908fa0;
+      font-size: 11px; color: #7c7b8f;
     }
-
     .exam-status-badge {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      padding: 4px 10px;
-      border-radius: 4px;
+      font-size: 10px; padding: 4px 10px;
+      border-radius: 4px; letter-spacing: 0.05em;
     }
-
-    .status-done { background: rgba(16,185,129,0.1); color: #10b981; }
-    .status-processing { background: rgba(192,193,255,0.1); color: #c0c1ff; }
-    .status-error { background: rgba(255,180,171,0.1); color: #ffb4ab; }
-    .status-pending { background: #2d3449; color: #908fa0; }
+    .status-done { background: rgba(16,185,129,0.12); color: #10b981; border: 1px solid rgba(16,185,129,0.2); }
+    .status-processing { background: rgba(192,193,255,0.1); color: #c0c1ff; border: 1px solid rgba(192,193,255,0.2); }
+    .status-error { background: rgba(255,180,171,0.1); color: #ffb4ab; border: 1px solid rgba(255,180,171,0.2); }
+    .status-pending { background: rgba(70,69,84,0.15); color: #a09fb2; border: 1px solid rgba(70,69,84,0.25); }
 
     .content-layout {
-      display: grid;
-      grid-template-columns: 240px 1fr;
-      gap: 1.5rem;
-      align-items: start;
+      display: grid; grid-template-columns: 220px 1fr;
+      gap: 1.5rem; align-items: start;
     }
-
     .sidebar-card {
-      background: #131b2e;
-      border: 1px solid rgba(70, 69, 84, 0.15);
-      border-radius: 8px;
-      padding: 1.25rem;
-      position: sticky;
-      top: 1rem;
+      background: #111929; border: 1px solid rgba(70,69,84,0.2);
+      border-radius: 8px; padding: 1.25rem;
+      position: sticky; top: 1rem;
     }
-
     .sidebar-title {
-      font-family: 'Space Grotesk', sans-serif;
-      font-weight: 600;
-      font-size: 0.875rem;
-      color: #dae2fd;
-      margin: 0 0 1rem 0;
+      font-family: 'Space Grotesk', sans-serif; font-weight: 600;
+      font-size: 0.875rem; color: #dae2fd; margin: 0 0 1rem 0;
+      padding-bottom: 0.75rem; border-bottom: 1px solid rgba(70,69,84,0.15);
     }
-
     .sidebar-meta {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      margin-bottom: 0.75rem;
+      display: flex; flex-direction: column; gap: 2px; margin-bottom: 0.875rem;
     }
-
     .meta-label {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
-      text-transform: uppercase;
-      color: #464554;
-      letter-spacing: 0.08em;
+      font-family: 'JetBrains Mono', monospace; font-size: 9px;
+      text-transform: uppercase; color: #6e6d80; letter-spacing: 0.1em;
     }
-
     .meta-value {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      color: #c7c4d7;
+      font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #c8c7d9;
     }
-
     .review-btn {
-      width: 100%;
-      margin-top: 1rem;
-      background: #16a34a !important;
-      color: #fff !important;
-      font-family: 'Space Grotesk', sans-serif;
-      font-weight: 600;
-      font-size: 13px;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 4px;
+      width: 100%; margin-top: 1rem;
+      background: #16a34a !important; color: #fff !important;
+      font-family: 'Space Grotesk', sans-serif; font-weight: 600;
+      font-size: 13px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center; gap: 4px;
     }
-
     .reviewed-badge {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 1rem;
+      display: flex; align-items: center; gap: 6px; margin-top: 1rem;
       padding: 6px 10px;
-      background: rgba(16, 185, 129, 0.1);
-      border: 1px solid rgba(16, 185, 129, 0.25);
-      border-radius: 6px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      color: #10b981;
+      background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25);
+      border-radius: 6px; font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; color: #10b981;
     }
-
-    .reviewed-badge mat-icon {
-      font-size: 15px;
-      width: 15px;
-      height: 15px;
-    }
-
-    .compare-section {
-      margin-top: 1rem;
-    }
-
-    .compare-field {
-      width: 100%;
-      margin-top: 1rem;
-    }
-
+    .reviewed-badge mat-icon { font-size: 15px; width: 15px; height: 15px; }
+    .compare-section { margin-top: 1rem; }
+    .compare-field { width: 100%; margin-top: 0.25rem; padding-top: 0.75rem; }
     .full-width { width: 100%; }
 
     .ai-section-header {
-      margin-bottom: 1.25rem;
-      padding-left: 0.75rem;
-      border-left: 2px solid #494bd6;
+      margin-bottom: 1.25rem; padding-left: 0.75rem;
+      border-left: 3px solid #494bd6;
     }
-
     .ai-section-title {
-      font-family: 'Space Grotesk', sans-serif;
-      font-weight: 700;
-      font-size: 1rem;
-      color: #dae2fd;
-      margin: 0;
+      font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+      font-size: 1rem; color: #dae2fd; margin: 0;
     }
-
     .compare-header {
-      margin: 1.5rem 0 1rem 0;
-      padding-bottom: 0.5rem;
+      margin: 1.5rem 0 1rem 0; padding-bottom: 0.5rem;
       border-bottom: 1px solid rgba(70,69,84,0.2);
     }
-
     .compare-label {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      color: #908fa0;
-      text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      color: #7c7b8f; text-transform: uppercase;
     }
 
     .agent-card {
-      background: #131b2e;
-      border: 1px solid rgba(70, 69, 84, 0.15);
-      border-radius: 8px;
-      padding: 1.25rem;
+      background: #111929; border: 1px solid rgba(70,69,84,0.2);
+      border-left: 3px solid rgba(70,69,84,0.3);
+      border-radius: 8px; padding: 1.5rem;
       margin-bottom: 1rem;
-      transition: border-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+      transition: border-color 150ms ease;
+      animation: fadeInUp 200ms cubic-bezier(0.4,0,0.2,1) both;
     }
-
-    .agent-card.severity-CRITICAL { border-left: 4px solid #ffb4ab; }
-    .agent-card.severity-HIGH { border-left: 4px solid #ffb783; }
-    .agent-card.severity-MEDIUM { border-left: 4px solid #c0c1ff; }
-    .agent-card.severity-LOW { border-left: 4px solid #10b981; }
-    .agent-card.severity-none { border-left: 4px solid rgba(70,69,84,0.3); }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .agent-card.severity-CRITICAL { border-left-color: #ffb4ab; }
+    .agent-card.severity-HIGH { border-left-color: #ffb783; }
+    .agent-card.severity-MEDIUM { border-left-color: #c0c1ff; }
+    .agent-card.severity-LOW { border-left-color: #10b981; }
+    .agent-card.severity-none { border-left-color: rgba(70,69,84,0.25); }
 
     .agent-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
-      gap: 0.75rem;
+      display: flex; align-items: flex-start; justify-content: space-between;
+      margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;
     }
-
     .agent-badge {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #c7c4d7;
-      border: 1px solid rgba(70, 69, 84, 0.15);
-      padding: 2px 6px;
-      border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      text-transform: uppercase; letter-spacing: 0.08em; color: #a09fb2;
+      border: 1px solid rgba(70,69,84,0.25); padding: 3px 8px; border-radius: 4px;
+      background: rgba(70,69,84,0.1);
     }
-
-    .risk-scores {
-      display: flex;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-
-    .risk-score-item {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 2px;
-    }
-
+    .risk-scores { display: flex; gap: 1.25rem; flex-wrap: wrap; }
+    .risk-score-item { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
     .risk-label {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
-      text-transform: uppercase;
-      color: #464554;
+      font-family: 'JetBrains Mono', monospace; font-size: 9px;
+      text-transform: uppercase; color: #6e6d80; letter-spacing: 0.08em;
     }
+    .risk-value { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 1.25rem; }
 
-    .risk-value {
-      font-family: 'JetBrains Mono', monospace;
-      font-weight: 700;
-      font-size: 1.25rem;
-    }
-
-    .alerts-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
-    }
-
+    .alerts-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
     .alert-pill {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      padding: 3px 9px; border-radius: 4px; border: 1px solid transparent;
     }
-
-    .alert-pill.alert-critical { background: rgba(255,180,171,0.1); color: #ffb4ab; }
-    .alert-pill.alert-high { background: rgba(255,183,131,0.1); color: #ffb783; }
-    .alert-pill.alert-medium { background: rgba(192,193,255,0.1); color: #c0c1ff; }
-    .alert-pill.alert-low { background: rgba(16,185,129,0.1); color: #10b981; }
+    .alert-pill.alert-critical { background: rgba(255,180,171,0.1); color: #ffb4ab; border-color: rgba(255,180,171,0.2); }
+    .alert-pill.alert-high { background: rgba(255,183,131,0.1); color: #ffb783; border-color: rgba(255,183,131,0.2); }
+    .alert-pill.alert-medium { background: rgba(192,193,255,0.1); color: #c0c1ff; border-color: rgba(192,193,255,0.2); }
+    .alert-pill.alert-low { background: rgba(16,185,129,0.1); color: #10b981; border-color: rgba(16,185,129,0.2); }
 
     .interpretation-block {
-      padding: 0.75rem 1rem;
-      border-left: 2px solid #494bd6;
+      padding: 0.875rem 1rem; background: rgba(73,75,214,0.06);
+      border-left: 2px solid #494bd6; border-radius: 0 4px 4px 0;
       margin-bottom: 1rem;
     }
-
     .ai-marker-label {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
-      text-transform: uppercase;
-      color: #494bd6;
-      letter-spacing: 0.1em;
-      display: block;
-      margin-bottom: 0.5rem;
+      font-family: 'JetBrains Mono', monospace; font-size: 9px;
+      text-transform: uppercase; color: rgba(192,193,255,0.6);
+      letter-spacing: 0.1em; display: block; margin-bottom: 0.625rem;
     }
-
     .interpretation-text {
-      font-family: 'Inter', sans-serif;
-      font-size: 14px;
-      color: #c7c4d7;
-      line-height: 1.6;
-      white-space: pre-wrap;
-      margin: 0;
+      font-family: 'Inter', sans-serif; font-size: 14px;
+      color: #c8c7d9; line-height: 1.7; white-space: pre-wrap; margin: 0;
     }
 
     .disclaimer-footer {
-      font-family: 'Inter', sans-serif;
-      font-size: 12px;
-      font-style: italic;
-      color: #464554;
-      margin-top: 2rem;
-      padding-top: 1rem;
+      font-family: 'Inter', sans-serif; font-size: 12px; font-style: italic;
+      color: #6e6d80; margin-top: 2rem; padding-top: 1rem;
       border-top: 1px solid rgba(70,69,84,0.15);
     }
 
     .subject-identity { margin-bottom: 1rem; display: flex; gap: 0.5rem; }
-    .identity-chip { display: flex; align-items: center; gap: 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #c0c1ff; background: rgba(73,75,214,0.1); border: 1px solid rgba(73,75,214,0.25); padding: 3px 8px; border-radius: 4px; }
-    .recommendations-section { margin-top: 1rem; }
-    .rec-title { font-family: 'Space Grotesk', sans-serif; font-size: 0.875rem; font-weight: 600; color: #c0c1ff; margin: 0 0 0.5rem 0; }
-    .rec-item { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.375rem; background: rgba(70,69,84,0.08); }
-    .rec-item.priority-high { background: rgba(255,183,131,0.08); }
-    .rec-item.priority-medium { background: rgba(192,193,255,0.08); }
-    .rec-type { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; color: #908fa0; flex-shrink: 0; padding-top: 2px; }
-    .rec-desc { font-family: 'Inter', sans-serif; font-size: 13px; color: #c7c4d7; line-height: 1.4; }
+    .identity-chip {
+      display: flex; align-items: center; gap: 4px;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      color: #c0c1ff; background: rgba(73,75,214,0.1);
+      border: 1px solid rgba(73,75,214,0.25); padding: 4px 10px; border-radius: 4px;
+    }
+    .recommendations-section { margin-top: 1.25rem; }
+    .rec-title {
+      font-family: 'Space Grotesk', sans-serif; font-size: 0.8125rem;
+      font-weight: 600; color: #a09fb2; margin: 0 0 0.625rem 0;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .rec-item {
+      display: flex; gap: 0.625rem; align-items: flex-start;
+      padding: 0.5rem 0.75rem; border-radius: 4px; margin-bottom: 0.375rem;
+      background: rgba(70,69,84,0.08); border: 1px solid rgba(70,69,84,0.12);
+    }
+    .rec-item.priority-high { background: rgba(255,183,131,0.06); border-color: rgba(255,183,131,0.15); }
+    .rec-item.priority-medium { background: rgba(192,193,255,0.06); border-color: rgba(192,193,255,0.12); }
+    .rec-type {
+      font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+      letter-spacing: 0.08em; color: #7c7b8f; flex-shrink: 0; padding-top: 2px;
+    }
+    .rec-desc { font-family: 'Inter', sans-serif; font-size: 13px; color: #c8c7d9; line-height: 1.5; }
+    .rec-body { display: flex; flex-direction: column; gap: 4px; }
+    .rec-rationale {
+      font-family: 'Inter', sans-serif; font-size: 11px; color: #7c7b8f;
+      line-height: 1.4; margin: 0; font-style: italic;
+    }
+    .compare-chart-block {
+      background: #0f1928; border: 1px solid rgba(70,69,84,0.2);
+      border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem;
+    }
+    .compare-chart-agent {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      letter-spacing: 0.1em; text-transform: uppercase; color: #c0c1ff;
+      margin-bottom: 0.75rem;
+    }
+    .compare-chart-wrap { height: 180px; position: relative; }
+    .compare-chart-wrap canvas { height: 100% !important; }
   `]
 })
-export class ResultPanelComponent implements OnInit {
+export class ResultPanelComponent implements OnInit, OnDestroy {
   private http = inject(HttpClient);
   private route = inject(ActivatedRoute);
   private reviewService = inject(ReviewQueueService);
@@ -486,8 +435,15 @@ export class ResultPanelComponent implements OnInit {
   compareExamId: string | null = null;
   allExams: Exam[] = [];
   subject: Subject | null = null;
+  private cmpCharts: Chart[] = [];
 
   objectKeys = Object.keys;
+
+  sharedAgents(): string[] {
+    if (!this.exam || !this.compareExam) return [];
+    const aTypes = new Set((this.exam.results ?? []).map(r => r.agent_type));
+    return (this.compareExam.results ?? []).map(r => r.agent_type).filter(t => aTypes.has(t));
+  }
 
   ngOnInit(): void {
     const examId = this.route.snapshot.paramMap.get('examId')!;
@@ -513,9 +469,107 @@ export class ResultPanelComponent implements OnInit {
   }
 
   loadCompare(): void {
+    this.cmpCharts.forEach(c => c.destroy());
+    this.cmpCharts = [];
     if (!this.compareExamId) { this.compareExam = null; return; }
     this.http.get<Exam>(`${environment.apiUrl}/exams/${this.compareExamId}`)
-      .subscribe(e => this.compareExam = e);
+      .subscribe(e => {
+        this.compareExam = e;
+        setTimeout(() => this.renderCompareCharts(), 0);
+      });
+  }
+
+  ngOnDestroy(): void {
+    this.cmpCharts.forEach(c => c.destroy());
+  }
+
+  private renderCompareCharts(): void {
+    if (!this.exam || !this.compareExam) return;
+    const GRID = 'rgba(70,69,84,0.18)';
+    const TICK = '#7c7b8f';
+    const baseDate = new Date(this.exam.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    const cmpDate  = new Date(this.compareExam.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+    for (const agentType of this.sharedAgents()) {
+      const canvas = document.getElementById(`cmp-chart-${agentType}`) as HTMLCanvasElement | null;
+      if (!canvas) continue;
+
+      const baseResult = (this.exam.results ?? []).find(r => r.agent_type === agentType);
+      const cmpResult  = (this.compareExam.results ?? []).find(r => r.agent_type === agentType);
+
+      // Collect numeric keys present in at least one exam
+      const allKeys = new Set([
+        ...Object.keys(baseResult?.risk_scores ?? {}),
+        ...Object.keys(cmpResult?.risk_scores ?? {}),
+      ].filter(k => {
+        const bv = parseFloat(baseResult?.risk_scores?.[k] ?? '');
+        const cv = parseFloat(cmpResult?.risk_scores?.[k] ?? '');
+        return !isNaN(bv) || !isNaN(cv);
+      }));
+
+      if (!allKeys.size) continue;
+
+      const labels = [...allKeys];
+      const chart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: baseDate,
+              data: labels.map(k => parseFloat(baseResult?.risk_scores?.[k] ?? 'NaN') || 0),
+              backgroundColor: '#c0c1ff88',
+              borderColor: '#c0c1ff',
+              borderWidth: 1,
+              borderRadius: 4,
+            },
+            {
+              label: cmpDate,
+              data: labels.map(k => parseFloat(cmpResult?.risk_scores?.[k] ?? 'NaN') || 0),
+              backgroundColor: '#10b98188',
+              borderColor: '#10b981',
+              borderWidth: 1,
+              borderRadius: 4,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: {
+                color: '#c8c7d9',
+                font: { family: "'JetBrains Mono', monospace", size: 10 },
+                boxWidth: 10, padding: 12,
+              }
+            },
+            tooltip: {
+              backgroundColor: '#1a2440',
+              borderColor: 'rgba(70,69,84,0.4)',
+              borderWidth: 1,
+              titleColor: '#dae2fd',
+              bodyColor: '#a09fb2',
+              titleFont: { family: "'Space Grotesk'" },
+              bodyFont: { family: "'JetBrains Mono'", size: 11 },
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#c8c7d9', font: { family: "'JetBrains Mono'", size: 10 } },
+              grid: { color: GRID },
+              border: { color: GRID },
+            },
+            y: {
+              ticks: { color: TICK, font: { family: "'JetBrains Mono'", size: 10 } },
+              grid: { color: GRID },
+              border: { color: GRID },
+            }
+          }
+        }
+      });
+      this.cmpCharts.push(chart);
+    }
   }
 
   getTopSeverity(alerts: any[]): string {
@@ -539,5 +593,32 @@ export class ResultPanelComponent implements OnInit {
     if (num >= 0.5) return '#ffb783';
     if (num >= 0.25) return '#c0c1ff';
     return '#10b981';
+  }
+
+  agentLabel(type: string): string {
+    const labels: Record<string, string> = {
+      metabolic:            'METABÓLICO',
+      cardiovascular:       'CARDIOVASCULAR',
+      hematology:           'HEMATOLOGIA',
+      therapeutic:          'TERAPÊUTICO',
+      nutrition:            'NUTRIÇÃO',
+      clinical_correlation: 'CORRELAÇÃO CLÍNICA',
+      small_animals:        'PEQUENOS ANIMAIS',
+      equine:               'EQUINO',
+      bovine:               'BOVINO'
+    };
+    return labels[type] || type.toUpperCase();
+  }
+
+  getStandardRecs(recs: any[]): any[] {
+    return (recs || []).filter(r => r.type !== 'suggested_exam' && r.type !== 'contextual_factor');
+  }
+
+  getSuggestedExams(recs: any[]): any[] {
+    return (recs || []).filter(r => r.type === 'suggested_exam');
+  }
+
+  getContextualFactors(recs: any[]): any[] {
+    return (recs || []).filter(r => r.type === 'contextual_factor');
   }
 }
