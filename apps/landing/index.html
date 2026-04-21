@@ -2380,6 +2380,9 @@
   const APP_BASE = 'https://genomaflow.com.br';
 
   function resolveCtaUrl(path) {
+    // Registrar always goes to onboarding regardless of auth state
+    if (path === '/onboarding') return APP_BASE + path;
+    // Entrar: redirect to app if already logged in
     try {
       const token = localStorage.getItem('token');
       if (token) {
