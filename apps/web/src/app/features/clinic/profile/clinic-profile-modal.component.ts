@@ -15,6 +15,7 @@ import { ClinicProfile } from '../../../shared/models/api.models';
   standalone: true,
   imports: [MatDialogModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, MatSnackBarModule, FormsModule],
   styles: [`
+    :host { display: block; }
     .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem 1.5rem 0; margin-bottom: 1.25rem; }
     h2 { font-family: 'Space Grotesk', sans-serif; font-size: 1.125rem; font-weight: 700; color: #dae2fd; margin: 0; }
     .modal-body { padding: 0 1.5rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
