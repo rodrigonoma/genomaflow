@@ -123,7 +123,7 @@ import { MatIconModule } from '@angular/material/icon';
           <div class="error-msg">{{ error }}</div>
         }
 
-        <button class="submit-btn" type="submit" [disabled]="form.invalid || loading">
+        <button class="submit-btn" type="submit" [disabled]="loading">
           {{ loading ? 'AUTENTICANDO...' : 'ENTRAR' }}
         </button>
       </form>
