@@ -296,6 +296,27 @@ export class AppComponent implements OnInit, OnDestroy {
   selector: 'app-feedback-dialog',
   standalone: true,
   imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatDialogModule, MatIconModule, NgIf],
+  styles: [`
+    .screenshot-drop {
+      border: 1px dashed rgba(70,69,84,0.4); border-radius: 6px;
+      padding: 0.75rem 1rem; margin-bottom: 1rem; cursor: pointer;
+      display: flex; align-items: center; gap: 0.75rem;
+      transition: border-color 150ms;
+    }
+    .screenshot-drop:hover { border-color: rgba(192,193,255,0.4); }
+    .screenshot-drop mat-icon { color: #6e6d80; font-size: 20px; width: 20px; height: 20px; flex-shrink: 0; }
+    .drop-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #a09fb2; }
+    .drop-hint  { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #6e6d80; margin-top: 2px; }
+    .preview-wrap { position: relative; display: inline-block; margin-bottom: 1rem; }
+    .preview-img  { max-width: 100%; max-height: 180px; border-radius: 4px; border: 1px solid rgba(70,69,84,0.3); display: block; }
+    .remove-btn {
+      position: absolute; top: -8px; right: -8px;
+      background: #0b1326; border: 1px solid rgba(70,69,84,0.4); border-radius: 50%;
+      width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: #ffb4ab; padding: 0;
+    }
+    .remove-btn mat-icon { font-size: 13px; width: 13px; height: 13px; }
+  `],
   template: `
     <div style="padding:1.5rem;background:#131b2e;border-radius:8px;min-width:400px">
       <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.25rem">
@@ -314,24 +335,26 @@ export class AppComponent implements OnInit, OnDestroy {
         </textarea>
       </mat-form-field>
 
-      <div style="margin-bottom:1rem">
-        <input #imgInput type="file" accept="image/*" style="display:none" (change)="onImageSelected($event)" />
-        @if (!screenshot) {
-          <button type="button" mat-stroked-button style="font-size:12px;color:#a09fb2;border-color:rgba(70,69,84,0.35)"
-                  (click)="imgInput.click()">
-            <mat-icon style="font-size:15px;width:15px;height:15px;margin-right:4px">attach_file</mat-icon>
-            Anexar print / imagem
+      @if (screenshotPreview) {
+        <div class="preview-wrap">
+          <img class="preview-img" [src]="screenshotPreview" alt="screenshot"/>
+          <button class="remove-btn" type="button" (click)="removeScreenshot()">
+            <mat-icon>close</mat-icon>
           </button>
-        } @else {
-          <div style="display:flex;align-items:center;gap:0.5rem">
-            <mat-icon style="font-size:15px;width:15px;height:15px;color:#4ad6a0">check_circle</mat-icon>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#4ad6a0">{{ screenshotName }}</span>
-            <button type="button" mat-icon-button style="width:24px;height:24px" (click)="removeImage()">
-              <mat-icon style="font-size:14px;color:#a09fb2">close</mat-icon>
-            </button>
+        </div>
+      } @else {
+        <input #fileInput type="file" accept="image/*" style="display:none" (change)="onFileSelect($event)"/>
+        <div class="screenshot-drop" (click)="fileInput.click()">
+          <mat-icon>add_photo_alternate</mat-icon>
+          <div>
+            <div class="drop-label">
+              {{ data.type === 'bug' ? 'Anexar print de tela' : 'Print da tela a melhorar' }}
+              <span style="color:#6e6d80"> (opcional)</span>
+            </div>
+            <div class="drop-hint">Anexar um print da tela ajuda a entender exatamente qual parte do sistema você está se referindo.</div>
           </div>
-        }
-      </div>
+        </div>
+      }
 
       @if (sent) {
         <div style="background:rgba(192,193,255,0.08);border:1px solid rgba(192,193,255,0.2);border-radius:4px;padding:0.75rem;font-family:'JetBrains Mono',monospace;font-size:12px;color:#c0c1ff;margin-bottom:1rem">
@@ -359,21 +382,28 @@ export class FeedbackDialogComponent {
   message = '';
   sending = false;
   sent = false;
-  screenshot: string | null = null;
-  screenshotName = '';
+  screenshotPreview: string | null = null;
+  private screenshotBase64: string | null = null;
 
-  onImageSelected(event: Event): void {
+  onFileSelect(event: Event): void {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
-    this.screenshotName = file.name;
+    if (file.size > 5 * 1024 * 1024) {
+      this.snack.open('Imagem muito grande. Máximo 5 MB.', '', { duration: 3000 });
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = () => { this.screenshot = reader.result as string; };
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      this.screenshotPreview = result;
+      this.screenshotBase64 = result;
+    };
     reader.readAsDataURL(file);
   }
 
-  removeImage(): void {
-    this.screenshot = null;
-    this.screenshotName = '';
+  removeScreenshot(): void {
+    this.screenshotPreview = null;
+    this.screenshotBase64 = null;
   }
 
   submit(): void {
@@ -382,7 +412,7 @@ export class FeedbackDialogComponent {
     this.http.post('/api/feedback', {
       type: this.data.type,
       message: this.message,
-      ...(this.screenshot ? { screenshot: this.screenshot } : {})
+      ...(this.screenshotBase64 ? { screenshot: this.screenshotBase64 } : {})
     }).subscribe({
       next: () => { this.sending = false; this.sent = true; },
       error: () => {
