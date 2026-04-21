@@ -366,7 +366,7 @@ module.exports = async function (fastify) {
 
     const exam = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
-        `SELECT id, file_path, status FROM exams WHERE id = $1 AND tenant_id = $2`,
+        `SELECT id, file_path, file_type, status FROM exams WHERE id = $1 AND tenant_id = $2`,
         [id, tenant_id]
       );
       return rows[0];
@@ -380,7 +380,7 @@ module.exports = async function (fastify) {
       await client.query(`UPDATE exams SET status = 'pending' WHERE id = $1`, [id]);
     });
 
-    await examQueue.add('process-exam', { exam_id: exam.id, tenant_id, file_path: exam.file_path });
+    await examQueue.add('process-exam', { exam_id: exam.id, tenant_id, file_path: exam.file_path, file_type: exam.file_type || 'pdf' });
 
     return { ok: true, exam_id: exam.id, status: 'pending' };
   });
