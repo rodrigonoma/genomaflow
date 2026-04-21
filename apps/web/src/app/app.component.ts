@@ -16,13 +16,14 @@ import { AuthService } from './core/auth/auth.service';
 import { ReviewQueueService } from './features/doctor/review-queue/review-queue.service';
 import { WsService } from './core/ws/ws.service';
 import { ChatPanelComponent } from './features/chat/chat-panel.component';
+import { ClinicProfileModalComponent } from './features/clinic/profile/clinic-profile-modal.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
   imports: [RouterOutlet, RouterLink, RouterLinkActive, AsyncPipe,
             MatIconModule, MatMenuModule, MatButtonModule, MatTooltipModule,
-            MatSnackBarModule, MatDialogModule, ChatPanelComponent],
+            MatSnackBarModule, MatDialogModule, ChatPanelComponent, ClinicProfileModalComponent],
   styles: [`
     :host { display: block; }
 
@@ -208,6 +209,11 @@ import { ChatPanelComponent } from './features/chat/chat-panel.component';
               <mat-icon>school</mat-icon> Minha especialidade
             </button>
           }
+          @if (user.role === 'admin') {
+            <button mat-menu-item (click)="openClinicProfile()">
+              <mat-icon>business</mat-icon> Editar Perfil da Clínica
+            </button>
+          }
           <button mat-menu-item (click)="auth.logout()">
             <mat-icon>logout</mat-icon> Sair
           </button>
@@ -270,6 +276,10 @@ export class AppComponent implements OnInit, OnDestroy {
       width: '480px',
       data: { type }
     });
+  }
+
+  openClinicProfile(): void {
+    this.dialog.open(ClinicProfileModalComponent, { width: '480px', panelClass: 'dark-dialog' });
   }
 
   private friendlyExamError(msg: string): string {

@@ -13,17 +13,20 @@ import { MatIconModule } from '@angular/material/icon';
 import { AlertBadgeComponent } from '../../../shared/components/alert-badge/alert-badge.component';
 import { RiskMeterComponent } from '../../../shared/components/risk-meter/risk-meter.component';
 import { DisclaimerComponent } from '../../../shared/components/disclaimer/disclaimer.component';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { signal } from '@angular/core';
 import { environment } from '../../../../environments/environment';
-import { Exam, Subject } from '../../../shared/models/api.models';
+import { Exam, Subject, Prescription, ClinicalResult } from '../../../shared/models/api.models';
 import { ReviewQueueService } from '../review-queue/review-queue.service';
+import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/prescription/prescription-modal.component';
 
 @Component({
   selector: 'app-result-panel',
   standalone: true,
   imports: [
     DatePipe, FormsModule, NgTemplateOutlet, UpperCasePipe,
-    MatCardModule, MatSelectModule, MatDividerModule, MatButtonModule, MatIconModule,
-    AlertBadgeComponent, RiskMeterComponent, DisclaimerComponent
+    MatCardModule, MatSelectModule, MatDividerModule, MatButtonModule, MatIconModule, MatDialogModule,
+    AlertBadgeComponent, RiskMeterComponent, DisclaimerComponent, PrescriptionModalComponent
   ],
   template: `
     <div class="result-page">
@@ -203,6 +206,34 @@ import { ReviewQueueService } from '../review-queue/review-queue.service';
               }
 
               <app-disclaimer />
+
+              @if (e === exam && (result.agent_type === 'therapeutic' || result.agent_type === 'nutrition')) {
+                <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid rgba(70,69,84,0.15);">
+                  <button mat-stroked-button style="font-size:12px;" (click)="openPrescription(result)">
+                    <mat-icon>description</mat-icon>
+                    {{ result.agent_type === 'therapeutic' ? 'Gerar Receita Médica' : 'Gerar Prescrição Nutricional' }}
+                  </button>
+
+                  @if ((prescriptionsByAgent()[result.agent_type] ?? []).length > 0) {
+                    <div style="margin-top:0.75rem;">
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#6e6d80;margin-bottom:0.5rem;">
+                        Receitas geradas
+                      </div>
+                      @for (p of prescriptionsByAgent()[result.agent_type]; track p.id) {
+                        <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;background:#0b1326;border-radius:4px;margin-bottom:0.25rem;">
+                          <mat-icon style="font-size:16px;width:16px;height:16px;color:#c0c1ff;">description</mat-icon>
+                          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#a09fb2;flex:1;">
+                            {{ p.created_at | date:'dd/MM/yyyy HH:mm' }} — {{ p.created_by_email }}
+                          </span>
+                          <button mat-icon-button style="width:28px;height:28px;" (click)="openPrescription(result, p)">
+                            <mat-icon style="font-size:16px;">open_in_new</mat-icon>
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              }
             </div>
           }
         </ng-template>
@@ -429,12 +460,14 @@ export class ResultPanelComponent implements OnInit, OnDestroy {
   private http = inject(HttpClient);
   private route = inject(ActivatedRoute);
   private reviewService = inject(ReviewQueueService);
+  private dialog = inject(MatDialog);
 
   exam: Exam | null = null;
   compareExam: Exam | null = null;
   compareExamId: string | null = null;
   allExams: Exam[] = [];
   subject: Subject | null = null;
+  prescriptionsByAgent = signal<Record<string, Prescription[]>>({});
   private cmpCharts: Chart[] = [];
 
   objectKeys = Object.keys;
@@ -457,7 +490,38 @@ export class ResultPanelComponent implements OnInit, OnDestroy {
         this.http.get<Subject>(`${environment.apiUrl}/patients/${subjectId}`)
           .subscribe(s => { this.subject = s; });
       }
+      this.loadPrescriptions(e.id);
     });
+  }
+
+  private loadPrescriptions(examId: string): void {
+    this.http.get<Prescription[]>(`${environment.apiUrl}/prescriptions/exams/${examId}`).subscribe({
+      next: (list) => {
+        const map: Record<string, Prescription[]> = {};
+        list.forEach(p => {
+          if (!map[p.agent_type]) map[p.agent_type] = [];
+          map[p.agent_type].push(p);
+        });
+        this.prescriptionsByAgent.set(map);
+      },
+      error: () => {}
+    });
+  }
+
+  openPrescription(result: ClinicalResult, existing?: Prescription): void {
+    if (!this.exam || !this.subject) return;
+    const subjectId = this.exam.subject_id ?? this.exam.patient_id ?? '';
+    const module: 'human' | 'veterinary' = this.subject.subject_type === 'animal' ? 'veterinary' : 'human';
+    const data: PrescriptionModalData = {
+      examId: this.exam.id,
+      subjectId,
+      subject: this.subject,
+      result,
+      module,
+      existingPrescription: existing
+    };
+    const ref = this.dialog.open(PrescriptionModalComponent, { width: '680px', panelClass: 'dark-dialog', data });
+    ref.afterClosed().subscribe(saved => { if (saved && this.exam) this.loadPrescriptions(this.exam.id); });
   }
 
   markAsReviewed(): void {

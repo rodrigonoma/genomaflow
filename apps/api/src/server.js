@@ -34,8 +34,10 @@ app.register((fastify, _opts, done) => {
   fastify.register(require('./routes/billing'),     { prefix: '' });
   fastify.register(require('./routes/feedback'),    { prefix: '/feedback' });
   fastify.register(require('./routes/error-log'),   { prefix: '/error-log' });
-  fastify.register(require('./routes/chat'),        { prefix: '/chat' });
-  fastify.register(require('./routes/master'),     { prefix: '/master' });
+  fastify.register(require('./routes/chat'),          { prefix: '/chat' });
+  fastify.register(require('./routes/prescriptions'), { prefix: '/prescriptions' });
+  fastify.register(require('./routes/clinic'),        { prefix: '/clinic' });
+  fastify.register(require('./routes/master'),        { prefix: '/master' });
   done();
 }, { prefix: API_PREFIX });
 

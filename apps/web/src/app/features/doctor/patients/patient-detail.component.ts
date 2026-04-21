@@ -17,7 +17,8 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ExamCardComponent } from '../../../shared/components/exam-card/exam-card.component';
 import { environment } from '../../../../environments/environment';
-import { Subject, Exam, Alert, TreatmentPlan, TreatmentItem, ClinicalResult, SPECIALTY_AGENTS } from '../../../shared/models/api.models';
+import { Subject, Exam, Alert, TreatmentPlan, TreatmentItem, ClinicalResult, SPECIALTY_AGENTS, Prescription } from '../../../shared/models/api.models';
+import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/prescription/prescription-modal.component';
 
 interface AlertChange {
   marker: string;
@@ -40,7 +41,8 @@ interface ComparisonBlock {
     RouterModule, DatePipe, NgClass, FormsModule,
     MatTabsModule, MatButtonModule, MatIconModule,
     MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatChipsModule, MatDialogModule, MatCheckboxModule, MatSnackBarModule, ExamCardComponent
+    MatChipsModule, MatDialogModule, MatCheckboxModule, MatSnackBarModule, ExamCardComponent,
+    PrescriptionModalComponent
   ],
   styles: [`
     :host { display: block; background: #0b1326; min-height: 100vh; }
@@ -796,6 +798,31 @@ interface ComparisonBlock {
                             }
                           </div>
                         }
+
+                        @if (cr.agent_type === 'therapeutic' || cr.agent_type === 'nutrition') {
+                          <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid rgba(70,69,84,0.1);">
+                            <button mat-stroked-button style="font-size:11px;" (click)="openPrescriptionFromDetail(exam, cr)">
+                              <mat-icon>description</mat-icon>
+                              {{ cr.agent_type === 'therapeutic' ? 'Gerar Receita' : 'Gerar Prescrição Nutricional' }}
+                            </button>
+
+                            @if ((prescriptionsByExam()[exam.id]?.[cr.agent_type] ?? []).length > 0) {
+                              <div style="margin-top:0.5rem;">
+                                @for (p of prescriptionsByExam()[exam.id][cr.agent_type]; track p.id) {
+                                  <div style="display:flex;align-items:center;gap:0.5rem;padding:0.375rem 0.625rem;background:#0b1326;border-radius:4px;margin-bottom:0.25rem;">
+                                    <mat-icon style="font-size:14px;width:14px;height:14px;color:#c0c1ff;">description</mat-icon>
+                                    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#a09fb2;flex:1;">
+                                      {{ p.created_at | date:'dd/MM/yyyy' }}
+                                    </span>
+                                    <button mat-icon-button style="width:24px;height:24px;" (click)="openPrescriptionFromDetail(exam, cr, p)">
+                                      <mat-icon style="font-size:14px;">open_in_new</mat-icon>
+                                    </button>
+                                  </div>
+                                }
+                              </div>
+                            }
+                          </div>
+                        }
                       </div>
                     }
                   </div>
@@ -989,6 +1016,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   private http   = inject(HttpClient);
   private route  = inject(ActivatedRoute);
   private snack  = inject(MatSnackBar);
+  private dialog = inject(MatDialog);
 
   subject   = signal<Subject | null>(null);
   exams     = signal<Exam[]>([]);
@@ -1001,6 +1029,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   expandedAgents   = signal<Set<string>>(new Set());
   selectedExamIds = signal(new Set<string>());
   comparison      = signal<ComparisonBlock[] | null>(null);
+  prescriptionsByExam = signal<Record<string, Record<string, Prescription[]>>>({});
   private evoCharts: Chart[] = [];
 
   pendingFile     = signal<File | null>(null);
@@ -1071,8 +1100,41 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
       const latest = [...done].sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       )[0];
-      if (latest) this.initExpandedAgents(latest);
+      if (latest) {
+        this.initExpandedAgents(latest);
+        this.loadPrescriptionsForExam(latest.id);
+      }
     });
+  }
+
+  loadPrescriptionsForExam(examId: string): void {
+    this.http.get<Prescription[]>(`${environment.apiUrl}/prescriptions/exams/${examId}`).subscribe({
+      next: (list) => {
+        const map: Record<string, Prescription[]> = {};
+        list.forEach(p => {
+          if (!map[p.agent_type]) map[p.agent_type] = [];
+          map[p.agent_type].push(p);
+        });
+        this.prescriptionsByExam.update(current => ({ ...current, [examId]: map }));
+      },
+      error: () => {}
+    });
+  }
+
+  openPrescriptionFromDetail(exam: Exam, result: ClinicalResult, existing?: Prescription): void {
+    const s = this.subject();
+    if (!s) return;
+    const module: 'human' | 'veterinary' = s.subject_type === 'animal' ? 'veterinary' : 'human';
+    const data: PrescriptionModalData = {
+      examId: exam.id,
+      subjectId: s.id,
+      subject: s,
+      result,
+      module,
+      existingPrescription: existing
+    };
+    const ref = this.dialog.open(PrescriptionModalComponent, { width: '680px', panelClass: 'dark-dialog', data });
+    ref.afterClosed().subscribe(saved => { if (saved) this.loadPrescriptionsForExam(exam.id); });
   }
 
   private loadPlans(id: string): void {

@@ -81,8 +81,41 @@ export interface Recommendation {
       | 'suggested_exam' | 'contextual_factor';
   description: string;
   priority: 'low' | 'medium' | 'high';
+  // medication (therapeutic) and supplement (nutrition) extended fields
+  name?: string;
+  dose?: string;
+  frequency?: string;
+  duration?: string;
   _exam?: string;
   _rationale?: string;
+}
+
+export interface PrescriptionItem {
+  name: string;
+  dose: string | null;
+  frequency: string;
+  duration: string | null;
+  notes: string;
+}
+
+export interface Prescription {
+  id: string;
+  exam_id: string;
+  subject_id: string;
+  agent_type: 'therapeutic' | 'nutrition';
+  items: PrescriptionItem[];
+  notes: string | null;
+  pdf_url: string | null;
+  created_at: string;
+  created_by_email?: string;
+}
+
+export interface ClinicProfile {
+  id: string;
+  name: string;
+  module: 'human' | 'veterinary';
+  cnpj: string | null;
+  clinic_logo_url: string | null;
 }
 
 export interface ClinicalResult {
