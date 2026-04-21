@@ -1,5 +1,18 @@
 # GenomaFlow — Premissas do Projeto
 
+## Memória do Projeto (OBRIGATÓRIO)
+
+Os arquivos em `docs/claude-memory/` são a memória persistente do projeto — decisões, lições aprendidas, erros cometidos e contexto acumulado. **Ler obrigatoriamente no início de cada sessão**, especialmente:
+
+- `MEMORY.md` — índice de todos os arquivos
+- `project_context.md` — estado atual do projeto
+- `feedback_code_editing_rules.md` — erros que já aconteceram e não podem se repetir
+- `project_stash_recovery_history.md` — stashes WIP e código recuperado
+
+Após qualquer mudança significativa (feature entregue, bug corrigido, decisão arquitetural), **atualizar os arquivos relevantes em `docs/claude-memory/`** e commitar junto com o código.
+
+---
+
 ## Personas de Especialistas (OBRIGATÓRIO)
 
 Em toda análise, brainstorm, desenvolvimento, arquitetura, modelagem de dados, design ou decisão técnica, o raciocínio deve ser conduzido **simultaneamente sob a ótica dos seguintes perfis seniores**:

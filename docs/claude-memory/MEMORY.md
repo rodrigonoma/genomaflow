@@ -1,0 +1,15 @@
+# GenomaFlow Memory Index
+
+- [Project Context](project_context.md) — Stack, arquitetura, estado atual completo (atualizado 2026-04-21)
+- [User Preferences](user_preferences.md) — Language, decision style, collaboration preferences
+- [Docker DB Source of Truth](project_docker_source_of_truth.md) — Docker PostgreSQL (db:5432) is the only authoritative DB; never use localhost:5432
+- [Dev Workflow Rules](feedback_dev_workflow.md) — Branch, validação local, AGUARDAR aprovação explícita, depois merge — nunca mergar sem ok do usuário
+- [DB Migration Discipline](feedback_db_migrations.md) — Schema changes via numbered migration files only; dev and prod must always be identical
+- [URL Routing Rules](project_url_routing.md) — www + root domain → landing page; Entrar/Registrar CTAs check auth state before redirecting
+- [Security Hardening Apr/2026](project_security_hardening.md) — RLS completo (032-034), rate limiting, trustProxy, senha master rotacionada, /auth/activate removido
+- [ECS/S3/Deploy — lições críticas](feedback_ecs_s3_deploy.md) — ECS isolado, CACHEBUST nos Dockerfiles, task definition deve ser atualizada (não só force-new-deployment), verificar imagem real antes de debugar
+- [Regras de edição de código](feedback_code_editing_rules.md) — Write proibido, git stash proibido, vibe coding proibido, sem afirmações sem verificar, verificar stash no início de sessão
+- [Personas seniores obrigatórias](feedback_senior_personas.md) — Engenheiro, Arquiteto, PO, Design/UX, Eng. Dados e DBA seniores em todo raciocínio técnico
+- [Compatibilidade multi-módulo](feedback_multi_module.md) — Todo ajuste/bug/feature deve funcionar para human e veterinary; dúvida → questionar; nunca causar regressão
+- [Pipeline de Imagens Médicas](project_imaging_pipeline.md) — DICOM/JPG/PNG, Vision classifier, agentes por modalidade, bounding boxes, erros já corrigidos
+- [Histórico de stashes recuperados](project_stash_recovery_history.md) — Registro de stashes WIP, o que foi recuperado, o que não deve ser aplicado
