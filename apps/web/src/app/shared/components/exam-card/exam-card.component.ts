@@ -142,7 +142,7 @@ export class ExamCardComponent {
 
   retry(): void {
     this.retrying = true;
-    this.http.post(`${environment.apiUrl}/exams/${this.exam.id}/retry`, {}).subscribe({
+    this.http.post(`${environment.apiUrl}/exams/${this.exam.id}/reprocess`, {}).subscribe({
       next: () => {
         this.exam = { ...this.exam, status: 'pending' };
         this.retrying = false;
