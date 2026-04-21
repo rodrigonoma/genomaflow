@@ -39,6 +39,7 @@ export interface Subject {
   subject_type: 'human' | 'animal';
   birth_date?: string;
   cpf_hash?: string;
+  cpf_last4?: string;
   phone?: string;
   weight?: number;
   height?: number;
