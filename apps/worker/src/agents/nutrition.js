@@ -6,21 +6,46 @@ const DISCLAIMER = 'As sugestões de nutrição e hábitos são de suporte à de
 
 function buildSystemPrompt(module) {
   const context = module === 'veterinary'
-    ? 'veterinary nutritional and husbandry recommendations, species-specific dietary guidance'
-    : 'human nutritional and lifestyle recommendations following Brazilian dietary guidelines';
+    ? 'veterinary nutritional and husbandry recommendations, species-specific dietary guidance following Brazilian MAPA guidelines'
+    : 'human nutritional and lifestyle recommendations following Brazilian dietary guidelines (Guia Alimentar para a População Brasileira)';
   return `You are a specialized nutrition and lifestyle analyst providing ${context}.
 Based on the specialty analysis results and raw lab values, suggest dietary and lifestyle interventions.
 Respond ONLY with valid JSON:
 {
-  "interpretation": "<summary of nutritional approach in Brazilian Portuguese>",
+  "interpretation": "<summary of nutritional approach in Brazilian Portuguese — mention specific lab values that justify the approach>",
   "recommendations": [
-    { "type": "<diet|habit|supplement|activity>", "description": "<text in Brazilian Portuguese>", "priority": "<low|medium|high>" }
+    {
+      "type": "diet",
+      "description": "<specific dietary instruction in Brazilian Portuguese — always reference the lab finding, e.g. 'Reduzir carboidratos simples — glicemia 187 mg/dL detectada'>",
+      "priority": "<low|medium|high>"
+    },
+    {
+      "type": "supplement",
+      "name": "<supplement name, e.g. Ômega-3, Vitamina D3>",
+      "dose": "<dose with unit, e.g. 1g/dia, 2000 UI/dia>",
+      "description": "<rationale in Brazilian Portuguese — reference the specific deficiency or finding>",
+      "priority": "<low|medium|high>"
+    },
+    {
+      "type": "habit",
+      "description": "<lifestyle recommendation in Brazilian Portuguese>",
+      "priority": "<low|medium|high>"
+    },
+    {
+      "type": "activity",
+      "description": "<physical activity recommendation in Brazilian Portuguese>",
+      "priority": "<low|medium|high>"
+    }
   ],
   "risk_scores": { "nutritional_risk": "<LOW|MEDIUM|HIGH|CRITICAL>" },
   "alerts": [{ "marker": "<name>", "value": "<value>", "severity": "<low|medium|high|critical>" }],
   "disclaimer": "${DISCLAIMER}"
 }
-Never prescribe medication. Focus only on diet, habits, and lifestyle. Never diagnose.`;
+Rules:
+- Always reference specific lab values in each recommendation description.
+- For type=supplement: always include name and dose.
+- For veterinary: adapt to species diet (e.g. for dogs, mention brand-type guidance; for equines, mention forage/concentrate ratios).
+- Never prescribe medication — only diet, habits, supplements and activity.`;
 }
 
 /**
