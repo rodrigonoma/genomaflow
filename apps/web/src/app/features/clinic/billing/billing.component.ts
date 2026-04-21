@@ -194,8 +194,13 @@ import { BillingService, LedgerItem, LedgerSummary, UsageReport } from './billin
               </td>
               <td style="padding:0.75rem 1rem;">
                 @if (item.subject_name || item.file_name) {
-                  <div style="font-size:0.8rem;color:#dbe2fd;">{{ item.subject_name }}</div>
-                  <div style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;color:#c7c5d0;margin-top:0.125rem;">{{ item.file_name }}</div>
+                  <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+                    <span style="font-size:0.8rem;color:#dbe2fd;">{{ item.subject_name }}</span>
+                    @if (item.description) {
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;text-transform:uppercase;letter-spacing:0.06em;padding:0.1rem 0.4rem;border-radius:2px;background:rgba(192,193,255,0.08);color:#a0a2e8;">{{ agentLabel(item.description) }}</span>
+                    }
+                  </div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;color:#c7c5d0;margin-top:0.2rem;">{{ item.file_name }}</div>
                 } @else {
                   <span style="font-size:0.8rem;color:#dbe2fd;">{{ item.description || '—' }}</span>
                 }
@@ -354,6 +359,17 @@ export class BillingComponent implements OnInit {
 
   nextPage(): void {
     if (this.currentPage() < this.totalPages()) { this.currentPage.update(p => p + 1); this.loadHistory(); }
+  }
+
+  agentLabel(description: string): string {
+    const map: Record<string, string> = {
+      'metabolic': 'Metabólico', 'cardiovascular': 'Cardiovascular',
+      'hematology': 'Hematologia', 'therapeutic': 'Terapêutico',
+      'nutrition': 'Nutrição', 'clinical_correlation': 'Correlação Clínica',
+      'small_animals': 'Pequenos Animais', 'equine': 'Equino', 'bovine': 'Bovino'
+    };
+    const agent = description.replace(/^Agent:\s*/i, '').trim().toLowerCase();
+    return map[agent] ?? description;
   }
 
   kindLabel(kind: string): string {
