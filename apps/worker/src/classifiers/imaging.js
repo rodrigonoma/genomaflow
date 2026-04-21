@@ -55,8 +55,8 @@ async function classifyModality(imageBase64, imageMeta) {
       }]
     });
     const text = response.content[0]?.text?.trim().toLowerCase() ?? '';
-    const valid = ['rx', 'ecg', 'ultrasound', 'mri'];
-    return valid.includes(text) ? text : null;
+    const match = text.match(/\b(rx|ecg|ultrasound|mri)\b/);
+    return match ? match[1] : null;
   } catch (_) {
     return null;
   }

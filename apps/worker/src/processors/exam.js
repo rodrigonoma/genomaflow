@@ -201,7 +201,7 @@ async function processImagingExam({ exam_id, tenant_id, file_path, file_type }) 
     if (!modality) {
       await client.query(
         `UPDATE exams SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
-        ['Não foi possível identificar a modalidade da imagem. Verifique se é RX, ECG ou Ultrassom.', exam_id]
+        ['Não foi possível identificar a modalidade da imagem. Modalidades suportadas: RX, ECG, Ultrassom e Ressonância Magnética. Verifique se a imagem está legível e tente novamente.', exam_id]
       );
       await client.query('COMMIT');
       return;
