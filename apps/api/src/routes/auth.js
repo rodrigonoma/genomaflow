@@ -48,6 +48,17 @@ module.exports = async function (fastify) {
     return { token };
   });
 
+  fastify.post('/check-email', {
+    config: { rateLimit: { max: 20, timeWindow: '10 minutes' } }
+  }, async (request, reply) => {
+    const { email: rawEmail } = request.body || {};
+    if (!rawEmail) return reply.status(400).send({ error: 'Email obrigatório' });
+    const email = rawEmail.toLowerCase().trim();
+    const { rows } = await fastify.pg.query('SELECT id FROM users WHERE LOWER(email) = $1', [email]);
+    if (rows.length > 0) return reply.status(409).send({ error: 'Email já cadastrado. Faça login ou use outro email.' });
+    return reply.send({ available: true });
+  });
+
   fastify.post('/register', {
     config: { rateLimit: { max: 5, timeWindow: '10 minutes' } }
   }, async (request, reply) => {

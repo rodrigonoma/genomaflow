@@ -80,8 +80,10 @@ interface OnboardingData {
             <p style="color:#ffb4ab;font-family:'JetBrains Mono',monospace;font-size:0.75rem;">{{ errorMsg() }}</p>
           }
         </div>
-        <button (click)="nextStep1()" style="width:100%;margin-top:1.5rem;padding:0.75rem;background:#c0c1ff;color:#4b4d83;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;border:none;border-radius:0.25rem;cursor:pointer;">
-          Continuar
+        <button (click)="nextStep1()" [disabled]="loading()"
+                style="width:100%;margin-top:1.5rem;padding:0.75rem;background:#c0c1ff;color:#4b4d83;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;border:none;border-radius:0.25rem;cursor:pointer;"
+                [style.opacity]="loading() ? '0.5' : '1'">
+          {{ loading() ? 'Verificando...' : 'Continuar' }}
         </button>
       }
 
@@ -291,7 +293,18 @@ export class OnboardingComponent {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.data.email)) return this.errorMsg.set('Email inválido.');
     if (this.data.password.length < 8) return this.errorMsg.set('Senha deve ter no mínimo 8 caracteres.');
     if (this.data.password !== this.data.confirm_password) return this.errorMsg.set('Senhas não coincidem.');
-    this.step.set(2);
+    this.loading.set(true);
+    this.http.post(`${environment.apiUrl}/auth/check-email`, { email: this.data.email }).subscribe({
+      next: () => { this.loading.set(false); this.step.set(2); },
+      error: (err) => {
+        this.loading.set(false);
+        const msg = err.error?.error ?? 'Erro ao verificar email.';
+        this.errorMsg.set(msg);
+        if (err.status === 409) {
+          setTimeout(() => this.router.navigate(['/login']), 2500);
+        }
+      }
+    });
   }
 
   nextStep2(): void {
