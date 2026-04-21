@@ -1,409 +1,2481 @@
 <!DOCTYPE html>
-<html class="dark" lang="pt-BR">
+<html lang="pt-BR">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>GenomaFlow — Inteligência Clínica em Tempo Real</title>
   <meta name="description" content="Transforme laudos PDF em insights clínicos estruturados para médicos e veterinários. Pipeline multi-tenant com latência abaixo de 60 segundos."/>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <script id="tailwind-config">
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            "secondary-fixed": "#e1e0ff",
-            "on-surface-variant": "#c7c5d0",
-            "on-secondary-container": "#acaeff",
-            "outline": "#918f9a",
-            "inverse-surface": "#dbe2fd",
-            "error-container": "#93000a",
-            "secondary-container": "#2f2ebe",
-            "tertiary-container": "#c0c1ff",
-            "surface-bright": "#31394e",
-            "on-error-container": "#ffdad6",
-            "inverse-on-surface": "#283044",
-            "on-background": "#dbe2fd",
-            "secondary-fixed-dim": "#c0c1ff",
-            "surface-container-highest": "#2d3449",
-            "tertiary-fixed": "#e1e0ff",
-            "tertiary": "#e1dfff",
-            "on-tertiary-fixed": "#05006d",
-            "surface-variant": "#2d3449",
-            "on-primary": "#292b5e",
-            "on-tertiary-container": "#3e41bd",
-            "surface-container": "#171f33",
-            "on-error": "#690005",
-            "on-secondary-fixed-variant": "#2f2ebe",
-            "inverse-primary": "#585990",
-            "primary-container": "#c0c1ff",
-            "outline-variant": "#46464f",
-            "primary-fixed-dim": "#c0c1ff",
-            "on-primary-fixed": "#131449",
-            "on-secondary": "#1000a9",
-            "primary-fixed": "#e1e0ff",
-            "on-primary-container": "#4b4d83",
-            "surface-container-lowest": "#060d20",
-            "surface-dim": "#0b1326",
-            "on-surface": "#dbe2fd",
-            "secondary": "#c0c1ff",
-            "surface-tint": "#c0c1ff",
-            "surface-container-high": "#222a3e",
-            "surface": "#0b1326",
-            "on-tertiary": "#15129c",
-            "tertiary-fixed-dim": "#c0c1ff",
-            "surface-container-low": "#131b2e",
-            "on-secondary-fixed": "#06006c",
-            "background": "#0b1326",
-            "primary": "#e1dfff",
-            "on-primary-fixed-variant": "#404176",
-            "on-tertiary-fixed-variant": "#3133b1",
-            "error": "#ffb4ab"
-          },
-          borderRadius: {
-            "DEFAULT": "0.125rem",
-            "lg": "0.25rem",
-            "xl": "0.5rem",
-            "full": "0.75rem"
-          },
-          fontFamily: {
-            "headline": ["Space Grotesk"],
-            "body": ["Inter"],
-            "label": ["Inter"],
-            "mono": ["JetBrains Mono"]
-          }
-        }
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,700;0,800;1,400&family=Fraunces:ital,wght@0,600;1,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0a0a0c;
+      --bg-1: #0e0e11;
+      --bg-2: #131316;
+      --bg-3: #1a1a1f;
+      --line: #22222a;
+      --line-soft: #1a1a20;
+      --text: #f5f5f7;
+      --text-2: #a8a8b0;
+      --text-3: #6e6e76;
+      --cross: #ff3b2f;
+      --cross-2: #d63d2e;
+      --warn: #f5c14a;
+      --crit: #ff5b5b;
+      --ok: #4ad6a0;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Inter Tight", "Inter", system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    /* ── NAV ── */
+    .nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 48px;
+      height: 64px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(10,10,12,0.92);
+      backdrop-filter: blur(12px);
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .nav-logo span { opacity: 0.5; }
+    .nav-links {
+      display: flex;
+      gap: 36px;
+      list-style: none;
+    }
+    .nav-links a {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      transition: color 0.15s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .nav-login {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      transition: color 0.15s;
+    }
+    .nav-login:hover { color: var(--text); }
+    .btn-primary {
+      display: inline-block;
+      background: var(--cross);
+      color: #fff;
+      font-family: "Inter Tight", sans-serif;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      padding: 10px 22px;
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn-primary:hover { background: var(--cross-2); transform: translateY(-1px); }
+
+    /* ── MARQUEE ── */
+    .marquee-wrap {
+      margin-top: 64px;
+      overflow: hidden;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-1);
+      padding: 11px 0;
+    }
+    .marquee-track {
+      display: flex;
+      gap: 0;
+      animation: marqueeScroll 22s linear infinite;
+      white-space: nowrap;
+    }
+    .marquee-item {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--cross);
+      padding: 0 28px;
+      flex-shrink: 0;
+    }
+    .marquee-sep { color: var(--text-3); }
+    @keyframes marqueeScroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+
+    /* ── HERO ── */
+    .hero {
+      padding: 80px 48px 80px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: center;
+      min-height: 80vh;
+      border-bottom: 1px solid var(--line);
+    }
+    .hero-left {}
+    .hero-display {
+      line-height: 0.88;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      margin-bottom: 36px;
+    }
+    .display-word {
+      display: block;
+      font-size: clamp(80px, 10vw, 168px);
+      color: var(--text);
+    }
+    .display-arrow {
+      display: block;
+      font-size: clamp(40px, 5vw, 80px);
+      color: var(--text-3);
+      margin: 4px 0;
+    }
+    .display-num {
+      display: block;
+      font-size: clamp(80px, 10vw, 168px);
+      color: var(--cross);
+    }
+    .hero-tag {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 18px;
+    }
+    .hero-sub {
+      font-size: 18px;
+      font-weight: 400;
+      color: var(--text-2);
+      max-width: 520px;
+      margin-bottom: 40px;
+      line-height: 1.6;
+    }
+    .hero-italic {
+      font-family: "Fraunces", serif;
+      font-style: italic;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      margin-bottom: 56px;
+    }
+    .hero-link-ghost {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 2px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .hero-link-ghost:hover { color: var(--text); border-color: var(--text-3); }
+    .hero-metrics {
+      display: flex;
+      gap: 36px;
+      padding-top: 32px;
+      border-top: 1px solid var(--line);
+    }
+    .hero-metric-val {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--text);
+      display: block;
+    }
+    .hero-metric-label {
+      font-size: 11px;
+      color: var(--text-3);
+      letter-spacing: 0.05em;
+    }
+
+    /* ── MOCK WINDOW ── */
+    .mock-window {
+      background: #0e0e12;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+      font-family: "JetBrains Mono", monospace;
+      box-shadow: 0 30px 80px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.02);
+    }
+    .mock-chrome {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 14px;
+      background: #16161b;
+      border-bottom: 1px solid var(--line);
+      font-size: 11px;
+      color: var(--text-3);
+    }
+    .mock-dots { display: flex; gap: 6px; }
+    .mock-dots span { width: 10px; height: 10px; border-radius: 50%; background: #2a2a32; }
+    .mock-url { flex: 1; text-align: center; font-size: 10.5px; }
+    .mock-live {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 10px; color: var(--cross); letter-spacing: 0.05em;
+    }
+    .dot-red {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--cross);
+      box-shadow: 0 0 8px var(--cross);
+      animation: pulse 1.6s ease-in-out infinite;
+      display: inline-block;
+    }
+    @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.85); } }
+    .mock-body {
+      display: grid;
+      grid-template-columns: 1fr auto 1.3fr;
+      min-height: 280px;
+    }
+    .mock-col-pdf { padding: 16px; border-right: 1px solid var(--line-soft); background: #0c0c10; }
+    .mock-col-struct { padding: 16px; background: #0e0e13; }
+    .mock-col-label {
+      font-size: 9px; letter-spacing: 0.18em; color: var(--text-3);
+      margin-bottom: 12px; text-transform: uppercase;
+    }
+    .mock-pdf-page {
+      background: #18181d; border: 1px solid #25252c;
+      padding: 14px 12px; border-radius: 3px; min-height: 240px;
+    }
+    .pdf-line { height: 5px; background: #2a2a32; border-radius: 1px; margin-bottom: 5px; opacity: 0.7; }
+    .mock-arrow {
+      display: flex; align-items: center; justify-content: center;
+      color: var(--cross); padding: 0 8px;
+      background: #0d0d11; border-right: 1px solid var(--line-soft);
+    }
+    .mock-row {
+      display: flex; justify-content: space-between; gap: 10px;
+      padding: 6px 0; border-bottom: 1px dashed #1f1f26; font-size: 10px;
+    }
+    .mock-row:last-child { border-bottom: none; }
+    .k { color: var(--text-3); }
+    .v { color: var(--text); text-align: right; }
+    .v-warn { color: var(--warn); }
+    .v-crit { color: var(--crit); }
+    .v-ai { color: var(--cross); max-width: 60%; line-height: 1.4; }
+    .v sup { font-size: 8px; opacity: 0.7; margin-left: 2px; }
+    .mock-foot {
+      display: flex; justify-content: space-between;
+      padding: 8px 14px; background: #0a0a0e;
+      border-top: 1px solid var(--line-soft);
+      font-size: 10px; color: var(--text-3);
+    }
+    .mock-timer { color: var(--cross); }
+
+    /* ── SECTION LABELS ── */
+    .section-label {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 20px;
+    }
+
+    /* ── SPLIT (modules) ── */
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border-bottom: 1px solid var(--line);
+    }
+    .split-col {
+      padding: 72px 48px;
+    }
+    .split-col:first-child { border-right: 1px solid var(--line); }
+    .split-heading {
+      font-size: 48px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      margin-bottom: 12px;
+    }
+    .split-sub {
+      font-size: 15px;
+      color: var(--text-2);
+      margin-bottom: 40px;
+      line-height: 1.55;
+    }
+    .module-list { display: flex; flex-direction: column; gap: 2px; }
+    .module-card {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 16px;
+      align-items: start;
+      padding: 18px 0;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .module-card:last-child { border-bottom: none; }
+    .module-code {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: var(--cross);
+      padding-top: 2px;
+    }
+    .module-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+      letter-spacing: -0.01em;
+    }
+    .module-desc {
+      font-size: 12px;
+      color: var(--text-3);
+      line-height: 1.5;
+    }
+
+    /* ── PRODUCT SHOWCASE ── */
+    .showcase {
+      padding: 80px 48px;
+      border-bottom: 1px solid var(--line);
+    }
+    .showcase-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 56px;
+    }
+    .showcase-heading {
+      font-size: 56px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+    .showcase-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: start;
+    }
+
+    /* Risk card */
+    .risk-card {
+      background: #0e0e13;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 28px;
+      font-family: "Inter Tight", sans-serif;
+      box-shadow: 0 30px 80px -20px rgba(0,0,0,0.6);
+    }
+    .risk-head {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 11px; margin-bottom: 24px;
+      font-family: "JetBrains Mono", monospace;
+    }
+    .risk-tag { color: var(--text-3); letter-spacing: 0.08em; }
+    .risk-live { color: var(--cross); display: flex; align-items: center; gap: 6px; }
+    .risk-num {
+      font-family: "Fraunces", serif;
+      font-size: 76px; font-weight: 600; line-height: 1; letter-spacing: -0.04em;
+      color: var(--text); margin-bottom: 6px;
+    }
+    .risk-sub { font-size: 12px; color: var(--text-3); margin-bottom: 18px; }
+    .risk-bar {
+      height: 8px;
+      background: linear-gradient(90deg, #2d6b4d 0%, #b59b3b 50%, #b54040 100%);
+      border-radius: 4px; position: relative; margin-bottom: 8px; opacity: 0.85;
+    }
+    .risk-bar-marker {
+      position: absolute; top: -4px; width: 4px; height: 16px;
+      background: var(--text); border-radius: 1px;
+      transform: translateX(-50%);
+      box-shadow: 0 0 0 2px var(--bg);
+    }
+    .risk-scale {
+      display: flex; justify-content: space-between;
+      font-size: 9.5px; color: var(--text-3);
+      font-family: "JetBrains Mono", monospace;
+      letter-spacing: 0.05em; margin-bottom: 24px;
+    }
+    .risk-insight {
+      background: #16161b;
+      border-left: 2px solid var(--cross);
+      padding: 14px 16px;
+      border-radius: 0 4px 4px 0;
+      margin-bottom: 16px;
+    }
+    .risk-insight-title {
+      font-size: 10px; color: var(--cross); letter-spacing: 0.1em;
+      text-transform: uppercase; font-family: "JetBrains Mono", monospace;
+      margin-bottom: 8px;
+    }
+    .risk-insight-body { font-size: 13px; color: var(--text); line-height: 1.55; }
+    .risk-source {
+      display: flex; justify-content: space-between;
+      font-size: 10px; color: var(--text-3);
+      font-family: "JetBrains Mono", monospace;
+    }
+
+    /* Callouts */
+    .callouts { display: flex; flex-direction: column; gap: 20px; justify-content: center; }
+    .callout {
+      display: flex; gap: 16px; align-items: flex-start;
+    }
+    .callout-letter {
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      border: 1px solid var(--cross);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      color: var(--cross);
+    }
+    .callout-title {
+      font-size: 13px; font-weight: 700; color: var(--text);
+      margin-bottom: 4px; letter-spacing: -0.01em;
+    }
+    .callout-desc { font-size: 12px; color: var(--text-3); line-height: 1.5; }
+
+    /* ── PIPELINE ── */
+    .pipeline {
+      padding: 80px 48px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-1);
+    }
+    .pipeline-header { margin-bottom: 40px; }
+    .pipeline-heading {
+      font-size: 56px; font-weight: 800;
+      letter-spacing: -0.04em; line-height: 1;
+    }
+    .stream {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11.5px;
+      background: #0a0a0e;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 14px;
+      max-width: 720px;
+    }
+    .stream-row {
+      display: grid;
+      grid-template-columns: 72px 1fr 64px 52px;
+      gap: 14px; padding: 7px 0;
+      border-bottom: 1px dashed var(--line-soft);
+      align-items: center;
+    }
+    .stream-row:last-child { border-bottom: none; }
+    .s-t { color: var(--text-3); }
+    .s-label { color: var(--text); }
+    .s-ms { color: var(--text-3); text-align: right; }
+    .s-status {
+      font-size: 10px; padding: 2px 6px; border-radius: 2px;
+      text-align: center; letter-spacing: 0.05em;
+    }
+    .s-ok { background: rgba(74,214,160,0.15); color: var(--ok); }
+    .s-live { background: rgba(255,59,47,0.15); color: var(--cross); }
+
+    /* ── IMPACT ── */
+    .impact {
+      padding: 80px 48px;
+      border-bottom: 1px solid var(--line);
+    }
+    .impact-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      margin-bottom: 64px;
+      border: 1px solid var(--line);
+    }
+    .impact-kpi {
+      padding: 40px 28px;
+      border-right: 1px solid var(--line);
+    }
+    .impact-kpi:last-child { border-right: none; }
+    .kpi-val {
+      font-family: "Fraunces", serif;
+      font-size: 64px;
+      font-weight: 600;
+      line-height: 1;
+      color: var(--cross);
+      letter-spacing: -0.03em;
+      margin-bottom: 10px;
+    }
+    .kpi-label {
+      font-size: 13px;
+      color: var(--text-2);
+      line-height: 1.4;
+    }
+    .kpi-source {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      color: var(--text-3);
+      margin-top: 8px;
+    }
+
+    /* Testimonials */
+    .testimonials {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .testimonial {
+      background: var(--bg-1);
+      border: 1px solid var(--line);
+      padding: 28px;
+      border-radius: 4px;
+    }
+    .testimonial-quote {
+      font-size: 14px;
+      color: var(--text-2);
+      line-height: 1.6;
+      margin-bottom: 20px;
+      font-style: italic;
+    }
+    .testimonial-quote::before { content: '"'; color: var(--cross); }
+    .testimonial-quote::after { content: '"'; color: var(--cross); }
+    .testimonial-author {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 2px;
+    }
+    .testimonial-role {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      color: var(--text-3);
+    }
+
+    /* ── CALCULATOR ── */
+    .calc {
+      padding: 80px 48px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-1);
+    }
+    .calc-heading {
+      font-size: 56px; font-weight: 800;
+      letter-spacing: -0.04em; line-height: 1;
+      margin-bottom: 12px;
+    }
+    .calc-sub {
+      font-size: 15px; color: var(--text-2);
+      margin-bottom: 52px;
+    }
+    .calc-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+    }
+    .calc-sliders { display: flex; flex-direction: column; gap: 32px; }
+    .slider-group label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 12px;
+    }
+    .slider-name {
+      font-size: 13px; font-weight: 600; color: var(--text);
+    }
+    .slider-val {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 20px; font-weight: 500; color: var(--cross);
+    }
+    input[type=range] {
+      width: 100%; height: 3px;
+      appearance: none; background: var(--line);
+      border-radius: 2px; outline: none; cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      appearance: none; width: 16px; height: 16px;
+      border-radius: 50%; background: var(--cross); cursor: pointer;
+    }
+    input[type=range]::-moz-range-thumb {
+      width: 16px; height: 16px;
+      border-radius: 50%; background: var(--cross);
+      border: none; cursor: pointer;
+    }
+    .calc-results {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .calc-result {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      padding: 24px;
+      border-radius: 4px;
+    }
+    .calc-result.highlight {
+      border-color: var(--cross);
+      grid-column: span 2;
+    }
+    .result-val {
+      font-family: "Fraunces", serif;
+      font-size: 48px;
+      font-weight: 600;
+      line-height: 1;
+      color: var(--cross);
+      letter-spacing: -0.03em;
+      margin-bottom: 6px;
+    }
+    .calc-result.highlight .result-val { font-size: 72px; }
+    .result-label {
+      font-size: 12px;
+      color: var(--text-2);
+    }
+    .result-note {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      color: var(--text-3);
+      margin-top: 8px;
+    }
+
+    /* ── PRICING ── */
+    .pricing {
+      padding: 80px 48px;
+      border-bottom: 1px solid var(--line);
+    }
+    .pricing-header { margin-bottom: 52px; }
+    .pricing-heading {
+      font-size: 56px; font-weight: 800;
+      letter-spacing: -0.04em; line-height: 1; margin-bottom: 12px;
+    }
+    .pricing-sub { font-size: 15px; color: var(--text-2); }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    .pricing-plan {
+      background: var(--bg-1);
+      border: 1px solid var(--line);
+      padding: 28px 24px;
+    }
+    .pricing-plan.featured {
+      border-color: var(--cross);
+      background: #140f0f;
+    }
+    .pricing-plan-label {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 9px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--text-3);
+      margin-bottom: 16px;
+    }
+    .pricing-plan.featured .pricing-plan-label { color: var(--cross); }
+    .pricing-price {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 28px; font-weight: 500; color: var(--text);
+      line-height: 1; margin-bottom: 4px;
+    }
+    .pricing-period { font-size: 11px; color: var(--text-3); margin-bottom: 20px; }
+    .pricing-desc { font-size: 12px; color: var(--text-2); line-height: 1.5; margin-bottom: 20px; }
+    .pricing-cta {
+      display: block; width: 100%;
+      padding: 10px 0;
+      text-align: center;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px; letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: var(--bg-2);
+      border: 1px solid var(--line);
+      color: var(--text-2);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .pricing-cta:hover { background: var(--bg-3); color: var(--text); }
+    .pricing-plan.featured .pricing-cta {
+      background: var(--cross);
+      border-color: var(--cross);
+      color: #fff;
+    }
+    .pricing-plan.featured .pricing-cta:hover { background: var(--cross-2); }
+    .pricing-credits {
+      grid-column: span 4;
+    }
+    .credits-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    /* ── FAQ ── */
+    .faq {
+      padding: 80px 48px;
+      border-bottom: 1px solid var(--line);
+    }
+    .faq-heading {
+      font-size: 48px; font-weight: 800;
+      letter-spacing: -0.04em; margin-bottom: 40px; line-height: 1;
+    }
+    .faq-list { max-width: 800px; }
+    .faq-item {
+      border-bottom: 1px solid var(--line);
+    }
+    .faq-q {
+      width: 100%; background: none; border: none;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 20px 0;
+      font-family: "Inter Tight", sans-serif;
+      font-size: 15px; font-weight: 600; color: var(--text);
+      cursor: pointer;
+      text-align: left;
+    }
+    .faq-q:hover { color: var(--cross); }
+    .faq-icon {
+      font-size: 20px; color: var(--text-3);
+      flex-shrink: 0; margin-left: 16px;
+      transition: transform 0.2s, color 0.15s;
+      font-family: "JetBrains Mono", monospace;
+      font-weight: 400;
+    }
+    .faq-item.open .faq-icon { transform: rotate(45deg); color: var(--cross); }
+    .faq-a {
+      font-size: 14px; color: var(--text-2);
+      line-height: 1.7; padding-bottom: 20px;
+      display: none;
+    }
+    .faq-item.open .faq-a { display: block; }
+
+    /* ── SECURITY ── */
+    .security {
+      padding: 64px 48px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 48px;
+    }
+    .security-left { max-width: 560px; }
+    .security-heading {
+      font-size: 28px; font-weight: 700;
+      letter-spacing: -0.02em; margin-bottom: 12px;
+    }
+    .security-body {
+      font-size: 14px; color: var(--text-2); line-height: 1.7;
+      margin-bottom: 24px;
+    }
+    .security-badges { display: flex; gap: 12px; flex-wrap: wrap; }
+    .badge {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px; letter-spacing: 0.1em;
+      color: var(--text-3); border: 1px solid var(--line);
+      padding: 6px 12px;
+    }
+    .security-right {
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .security-big {
+      font-family: "Fraunces", serif;
+      font-size: 80px; font-weight: 600;
+      line-height: 1; letter-spacing: -0.04em;
+      color: var(--text); margin-bottom: 6px;
+    }
+    .security-label {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px; letter-spacing: 0.1em;
+      color: var(--text-3); text-transform: uppercase;
+    }
+
+    /* ── FOOTER CTA ── */
+    .footer-cta {
+      padding: 100px 48px;
+      border-bottom: 1px solid var(--line);
+      overflow: hidden;
+    }
+    .footer-cta-heading {
+      font-size: clamp(40px, 6vw, 96px);
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      line-height: 0.9;
+      color: var(--text);
+      margin-bottom: 48px;
+    }
+    .footer-cta-sub {
+      font-size: 16px; color: var(--text-2);
+      margin-bottom: 32px; max-width: 480px;
+    }
+
+    /* ── FOOTER ── */
+    .footer {
+      padding: 36px 48px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 24px;
+      border-top: 1px solid var(--line);
+    }
+    .footer-brand {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px; color: var(--text-3);
+    }
+    .footer-links {
+      display: flex; gap: 28px; list-style: none;
+    }
+    .footer-links a {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-3);
+      transition: color 0.15s;
+    }
+    .footer-links a:hover { color: var(--text); }
+
+    /* ── LOGOS ── */
+    .logos {
+      padding: 40px 48px;
+      border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; gap: 40px;
+      overflow-x: auto;
+    }
+    .logos-label {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px; letter-spacing: 0.15em;
+      color: var(--text-3); text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .logo-items { display: flex; gap: 32px; align-items: center; flex-wrap: wrap; }
+    .logo-item {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px; letter-spacing: 0.1em;
+      color: var(--text-3); opacity: 0.6;
+      text-transform: uppercase;
+    }
+
+    /* ── FEATURE BLOCKS ── */
+    @property --scope-r {
+      syntax: '<length>';
+      initial-value: 0px;
+      inherits: false;
+    }
+    @property --scope-opacity {
+      syntax: '<number>';
+      initial-value: 0;
+      inherits: false;
+    }
+
+    /* Intro */
+    #diferenciais { border-bottom: 1px solid var(--line); }
+    .feat-intro {
+      padding: 80px 48px 56px;
+      border-bottom: 1px solid var(--line);
+    }
+    .feat-intro-heading {
+      font-size: clamp(48px, 6vw, 80px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      margin: 16px 0 16px;
+    }
+    .feat-intro-sub {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    /* Feature block */
+    .feat-block {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      border-bottom: 1px solid var(--line);
+    }
+    .feat-block--rev {
+      grid-template-columns: 0.9fr 1.1fr;
+    }
+    .feat-block--rev .feat-video-col { order: 2; border-left: 1px solid var(--line); border-right: none; }
+    .feat-block--rev .feat-text-col  { order: 1; }
+
+    .feat-video-col {
+      border-right: 1px solid var(--line);
+    }
+
+    .feat-text-col {
+      padding: 56px 48px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0;
+    }
+    .feat-num {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      color: var(--cross);
+      letter-spacing: 0.1em;
+      margin-bottom: 6px;
+    }
+    .feat-tag {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 20px;
+    }
+    .feat-heading {
+      font-size: clamp(32px, 3.5vw, 52px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      margin-bottom: 20px;
+    }
+    .feat-highlight { color: var(--cross); }
+    .feat-body {
+      font-size: 14px;
+      color: var(--text-2);
+      line-height: 1.7;
+      margin-bottom: 28px;
+      max-width: 440px;
+    }
+
+    /* Stats row */
+    .feat-stats {
+      display: flex;
+      gap: 28px;
+      padding: 20px 0;
+      border-top: 1px solid var(--line-soft);
+      border-bottom: 1px solid var(--line-soft);
+      margin-bottom: 24px;
+    }
+    .feat-stat-val {
+      display: block;
+      font-family: "Fraunces", serif;
+      font-size: 36px;
+      font-weight: 600;
+      color: var(--cross);
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+    .feat-stat-label {
+      font-size: 11px;
+      color: var(--text-3);
+    }
+
+    /* Disclaimer */
+    .feat-disclaimer {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 14px 16px;
+      background: rgba(255,59,47,0.04);
+      border: 1px solid rgba(255,59,47,0.15);
+      border-radius: 4px;
+    }
+    .feat-disclaimer-icon {
+      font-size: 16px;
+      color: var(--cross);
+      flex-shrink: 0;
+      padding-top: 1px;
+    }
+    .feat-disclaimer p {
+      font-size: 12px;
+      color: var(--text-3);
+      line-height: 1.6;
+    }
+    .feat-disclaimer strong { color: var(--text-2); font-weight: 600; }
+
+    /* Statement divider */
+    .feat-statement {
+      padding: 72px 48px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-1);
+    }
+    .feat-statement-label {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 28px;
+    }
+    .feat-quote {
+      font-family: "Fraunces", serif;
+      font-style: italic;
+      font-size: clamp(28px, 3.5vw, 48px);
+      font-weight: 600;
+      line-height: 1.25;
+      color: var(--text);
+      letter-spacing: -0.02em;
+      border: none;
+      padding: 0;
+      margin: 0 0 36px;
+      max-width: 800px;
+    }
+    .feat-pillars {
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+    .feat-pillar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+      color: var(--text-3);
+    }
+    .feat-pillar-icon {
+      color: var(--ok);
+      font-size: 14px;
+    }
+
+    /* Agent list */
+    .feat-agent-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin-bottom: 28px;
+      border: 1px solid var(--line);
+    }
+    .feat-agent {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .feat-agent:last-child { border-bottom: none; }
+    .feat-agent-code {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      color: var(--cross);
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+      width: 64px;
+    }
+    .feat-agent-desc {
+      font-size: 12px;
+      color: var(--text-3);
+    }
+
+    /* Economy */
+    .feat-economy {
+      display: flex;
+      gap: 24px;
+      padding: 20px 0;
+      border-top: 1px solid var(--line-soft);
+    }
+    .feat-economy-val {
+      font-family: "Fraunces", serif;
+      font-size: 40px;
+      font-weight: 600;
+      color: var(--cross);
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+    .feat-economy-label {
+      font-size: 11px;
+      color: var(--text-3);
+      margin-top: 4px;
+    }
+
+    /* RAG examples */
+    .feat-rag-examples {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 24px;
+    }
+    .feat-rag-q {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      font-size: 13px;
+      color: var(--text-2);
+      padding: 10px 12px;
+      background: var(--bg-2);
+      border-left: 2px solid var(--line);
+      font-family: "JetBrains Mono", monospace;
+      letter-spacing: -0.01em;
+    }
+    .feat-rag-icon {
+      color: var(--cross);
+      flex-shrink: 0;
+    }
+
+    /* Compare */
+    .feat-compare-items {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      border: 1px solid var(--line);
+    }
+    .feat-compare-item {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .feat-compare-item:last-child { border-bottom: none; }
+    .feat-compare-icon {
+      width: 28px; height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+      color: var(--text-3);
+    }
+    .feat-compare-icon--up { color: var(--crit); border-color: rgba(255,91,91,0.3); }
+    .feat-compare-icon--down { color: var(--ok); border-color: rgba(74,214,160,0.3); }
+    .feat-compare-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 2px;
+    }
+    .feat-compare-desc {
+      font-size: 11px;
+      color: var(--text-3);
+    }
+
+    /* nav link */
+    .demos {
+      padding: 80px 48px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg);
+    }
+
+    .demo-card {
+      position: relative;
+      background: var(--bg-1);
+      overflow: hidden;
+      cursor: none;
+    }
+
+    .demo-video-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16/9;
+      overflow: hidden;
+      background: #050507;
+      --mx: 50%;
+      --my: 50%;
+    }
+
+    .demo-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transform: scale(1.03);
+      transition: transform 0.6s ease;
+    }
+    .demo-card.is-hovered .demo-video {
+      transform: scale(1);
+    }
+
+    /* Dark grid overlay (idle state) */
+    .demo-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+      transition: background 0.55s cubic-bezier(0.23,1,0.32,1);
+      background:
+        radial-gradient(
+          circle 0px at var(--mx, 50%) var(--my, 50%),
+          transparent 0%,
+          transparent 55%,
+          rgba(10,10,12,0.7) 90%,
+          rgba(10,10,12,0.97) 100%
+        );
+    }
+
+    /* Grid lines always on top */
+    .demo-overlay::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,59,47,0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,59,47,0.05) 1px, transparent 1px);
+      background-size: 40px 40px;
+      transition: opacity 0.4s ease;
+    }
+
+    /* Dark base tint */
+    .demo-overlay::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(10,10,12,0.65);
+      transition: opacity 0.35s ease;
+    }
+
+    /* Scope ring (glowing edge) */
+    .demo-scope-ring {
+      position: absolute;
+      pointer-events: none;
+      z-index: 3;
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      border: 1px solid rgba(255,59,47,0.6);
+      box-shadow:
+        0 0 0 1px rgba(255,59,47,0.12),
+        0 0 24px rgba(255,59,47,0.2);
+      top: 0; left: 0;
+      transform: translate(calc(var(--mx, 50%) - 0px), calc(var(--my, 50%) - 0px));
+      transition: width 0.5s cubic-bezier(0.23,1,0.32,1),
+                  height 0.5s cubic-bezier(0.23,1,0.32,1),
+                  opacity 0.3s ease;
+      opacity: 0;
+    }
+    .demo-card.is-hovered .demo-scope-ring {
+      opacity: 1;
+      width: 360px;
+      height: 360px;
+    }
+    .demo-card.is-hovered .demo-overlay {
+      background:
+        radial-gradient(
+          circle 180px at var(--mx, 50%) var(--my, 50%),
+          transparent 0%,
+          transparent 55%,
+          rgba(10,10,12,0.6) 90%,
+          rgba(10,10,12,0.92) 100%
+        );
+    }
+    .demo-card.is-hovered .demo-overlay::before { opacity: 0; }
+    .demo-card.is-hovered .demo-overlay::after { opacity: 0; }
+
+    /* Custom cursor crosshair inside card */
+    .demo-cursor {
+      position: absolute;
+      z-index: 10;
+      pointer-events: none;
+      width: 24px;
+      height: 24px;
+      top: 0; left: 0;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .demo-card.is-hovered .demo-cursor { opacity: 1; }
+    .demo-cursor::before,
+    .demo-cursor::after {
+      content: '';
+      position: absolute;
+      background: var(--cross);
+    }
+    .demo-cursor::before {
+      width: 1px; height: 16px;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .demo-cursor::after {
+      width: 16px; height: 1px;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    /* Idle label */
+    .demo-idle-label {
+      position: absolute;
+      z-index: 5;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .demo-card.is-hovered .demo-idle-label { opacity: 0; }
+    .demo-play-btn {
+      width: 48px; height: 48px;
+      border: 1px solid rgba(255,59,47,0.5);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--cross);
+      font-size: 14px;
+      box-shadow: 0 0 20px rgba(255,59,47,0.2);
+    }
+    .demo-idle-text {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    /* Card meta */
+    .demo-meta {
+      padding: 20px 24px 24px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+    .demo-index {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      color: var(--cross);
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+      padding-top: 2px;
+    }
+    .demo-info {}
+    .demo-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+    .demo-desc {
+      font-size: 12px;
+      color: var(--text-3);
+      line-height: 1.5;
+    }
+
+    /* Video 4 — two clips toggle */
+    .demo-tabs {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 8;
+      display: flex;
+      gap: 4px;
+    }
+    .demo-tab {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      padding: 4px 8px;
+      background: rgba(10,10,12,0.8);
+      border: 1px solid var(--line);
+      color: var(--text-3);
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      backdrop-filter: blur(4px);
+    }
+    .demo-tab.active {
+      border-color: var(--cross);
+      color: var(--cross);
+    }
+    .demo-video-slot { position: absolute; inset: 0; }
+    .demo-video-slot video {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transform: scale(1.03);
+      transition: transform 0.6s ease, opacity 0.3s ease;
+    }
+    .demo-video-slot.hidden { display: none; }
+    /* ── MONITOR FRAME ── */
+    .feat-video-col {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .monitor-outer {
+      width: 100%;
+      padding: 48px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .monitor-frame {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      filter: drop-shadow(0 28px 56px rgba(0,0,0,0.75));
+    }
+    .monitor-bezel {
+      width: 100%;
+      background: linear-gradient(170deg, #26262b 0%, #191920 50%, #141418 100%);
+      border-radius: 10px 10px 6px 6px;
+      padding: 11px 11px 20px;
+      border: 1px solid rgba(255,255,255,0.055);
+      position: relative;
+    }
+    .monitor-bezel::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 12%; right: 12%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+      border-radius: 1px;
+    }
+    .monitor-bezel::after {
+      content: '';
+      position: absolute;
+      bottom: 7px; left: 50%; transform: translateX(-50%);
+      width: 26px; height: 3px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 2px;
+    }
+    .monitor-screen {
+      width: 100%;
+      position: relative;
+      aspect-ratio: 16/9;
+      background: #020204;
+      border-radius: 2px;
+      overflow: hidden;
+      border: 1px solid rgba(0,0,0,0.9);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+    }
+    /* Fallback para browsers sem suporte a aspect-ratio */
+    @supports not (aspect-ratio: 16/9) {
+      .monitor-screen::before {
+        content: '';
+        display: block;
+        padding-bottom: 56.25%;
       }
     }
-  </script>
-  <style>
-    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
-    .glass-card { background: rgba(192, 193, 255, 0.1); backdrop-filter: blur(20px); }
-    .ai-border { border-left: 2px solid #585990; }
-    body { background-color: #0b1326; color: #dbe2fd; font-family: 'Inter', sans-serif; }
-    .pulse-indicator { width: 8px; height: 8px; background: #c0c1ff; border-radius: 50%; box-shadow: 0 0 10px #c0c1ff; animation: pulse 2s infinite; display: inline-block; }
-    @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 10px #c0c1ff; } 50% { opacity: 0.5; box-shadow: 0 0 20px #c0c1ff; } }
-    .ai-card-hover:hover { background: rgba(192, 193, 255, 0.15); box-shadow: 0 0 40px rgba(192, 193, 255, 0.08); }
+    .monitor-screen video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .monitor-screen .demo-video-slot { position: absolute; inset: 0; }
+    .monitor-screen .demo-video-slot.hidden { display: none; }
+    .monitor-screen .demo-video-slot video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .monitor-neck {
+      width: 44px;
+      height: 26px;
+      background: linear-gradient(180deg, #202026 0%, #17171b 100%);
+      clip-path: polygon(18% 0%, 82% 0%, 100% 100%, 0% 100%);
+    }
+    .monitor-foot {
+      width: 120px;
+      height: 6px;
+      background: linear-gradient(180deg, #232328 0%, #1b1b1f 100%);
+      border-radius: 100px;
+      border: 1px solid rgba(255,255,255,0.04);
+    }
+    .monitor-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .monitor-tab {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 3px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s, border-color 0.15s;
+    }
+    .monitor-tab.active {
+      color: var(--text);
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.14);
+    }
+    .monitor-tab:hover { color: var(--text-2); }
+
+    @media (max-width: 900px) {
+      .feat-block, .feat-block--rev {
+        grid-template-columns: 1fr;
+      }
+      .feat-block--rev .feat-video-col { order: 0; border-left: none; border-right: none; border-bottom: 1px solid var(--line); }
+      .feat-block--rev .feat-text-col  { order: 1; }
+      .feat-video-col {
+        border-right: none;
+        border-bottom: 1px solid var(--line);
+        width: 100%;
+        display: block;
+      }
+      .monitor-outer {
+        padding: 28px 20px 20px;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+      }
+      .monitor-frame {
+        width: 100%;
+        max-width: 100%;
+        filter: none;
+      }
+      .monitor-foot { width: 90px; }
+      .feat-text-col { padding: 36px 24px; }
+      .feat-pillars { flex-direction: column; gap: 12px; }
+      .feat-intro { padding: 48px 24px 36px; }
+    }
+
+    @media (max-width: 900px) {
+      .hero { grid-template-columns: 1fr; }
+      .split { grid-template-columns: 1fr; }
+      .split-col:first-child { border-right: none; border-bottom: 1px solid var(--line); }
+      .showcase-body { grid-template-columns: 1fr; }
+      .impact-kpis { grid-template-columns: 1fr 1fr; }
+      .impact-kpi { border-bottom: 1px solid var(--line); }
+      .testimonials { grid-template-columns: 1fr; }
+      .calc-body { grid-template-columns: 1fr; }
+      .pricing-grid { grid-template-columns: 1fr; }
+      .pricing-credits { grid-column: span 1; }
+      .credits-grid { grid-template-columns: 1fr 1fr; }
+      .security { flex-direction: column; }
+      .nav-links { display: none; }
+    }
   </style>
 </head>
-<body class="selection:bg-primary-container selection:text-on-primary-container">
+<body>
 
-  <!-- Nav -->
-<nav class="fixed top-0 w-full z-50 flex justify-between items-center px-12 py-4 bg-gradient-to-r from-[#0b1326] via-[#1a1f2e] to-[#0b1326]">
-  <div class="font-headline text-xl font-medium tracking-tighter text-secondary">GenomaFlow</div>
-  <div class="hidden md:flex gap-8 items-center">
-    <a href="#modulos" class="font-mono text-xs tracking-widest uppercase text-on-surface-variant hover:text-secondary transition-colors">Módulos</a>
-    <a href="#pipeline" class="font-mono text-xs tracking-widest uppercase text-on-surface-variant hover:text-secondary transition-colors">Pipeline</a>
-    <a href="#precos" class="font-mono text-xs tracking-widest uppercase text-on-surface-variant hover:text-secondary transition-colors">Preços</a>
-    <a href="#seguranca" class="font-mono text-xs tracking-widest uppercase text-on-surface-variant hover:text-secondary transition-colors">Segurança</a>
-  </div>
-  <div class="flex items-center gap-3">
-    <a data-cta="/login" class="font-mono text-xs uppercase tracking-widest text-on-surface-variant hover:text-secondary transition-colors px-4 py-2">Acessar Plataforma</a>
-    <a data-cta="/onboarding" class="bg-primary-container text-on-primary-container px-6 py-2 text-xs font-headline font-bold uppercase tracking-widest rounded-lg hover:scale-105 transition-transform cursor-pointer">Começar Grátis</a>
+<!-- NAV -->
+<nav class="nav">
+  <a class="nav-logo" href="/">
+    <img src="logo_genoma.png" width="44" height="44" alt="GenomaFlow" style="object-fit:contain;display:block"/>
+    Genoma<span>Flow</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#modulos">Módulos</a></li>
+    <li><a href="#diferenciais">Produto</a></li>
+    <li><a href="#impacto">Impacto</a></li>
+    <li><a href="#precos">Preços</a></li>
+    <li><a href="#faq">FAQ</a></li>
+  </ul>
+  <div class="nav-cta">
+    <a class="nav-login" data-cta="/login">Entrar</a>
+    <a class="btn-primary" data-cta="/onboarding">Registrar →</a>
   </div>
 </nav>
 
-<main class="pt-24">
-
-<!-- Hero -->
-<section class="min-h-screen flex flex-col justify-center px-12 relative overflow-hidden">
-  <div class="max-w-5xl z-10">
-    <div class="flex items-center gap-4 mb-8">
-      <div class="pulse-indicator"></div>
-      <span class="font-mono text-xs tracking-widest text-secondary uppercase">Sistema: Inteligência Ativa</span>
-    </div>
-    <h1 class="font-headline text-7xl font-bold tracking-tighter leading-none mb-6">
-      Inteligência Clínica<br/>em <span class="text-secondary">Tempo Real</span>.
-    </h1>
-    <p class="font-body text-xl text-on-surface-variant max-w-2xl mb-12 leading-relaxed">
-      Transforme laudos PDF em insights clínicos estruturados para médicos e veterinários. Pipeline multi-tenant com latência abaixo de 60 segundos.
-    </p>
-    <div class="flex gap-6 items-center flex-wrap">
-      <a data-cta="/onboarding" class="bg-primary-container text-on-primary-container px-8 py-4 text-sm font-headline font-bold uppercase tracking-widest rounded-lg hover:scale-105 transition-transform cursor-pointer">
-        Começar Agora — 15 minutos para integrar
-      </a>
-      <a href="#" class="text-secondary font-mono text-xs border-b border-secondary/30 pb-1 hover:border-secondary transition-all uppercase tracking-widest">
-        VER DOCUMENTAÇÃO.EXE
-      </a>
-    </div>
+<!-- MARQUEE -->
+<div class="marquee-wrap">
+  <div class="marquee-track">
+    <!-- duplicated for seamless loop -->
+    <span class="marquee-item">LAUDO → INSIGHT</span>
+    <span class="marquee-item marquee-sep">·</span>
+    <span class="marquee-item">&lt; 60 SEGUNDOS</span>
+    <span class="marquee-item marquee-sep">·</span>
+    <span class="marquee-item">CARDIO-3 · METAB-1 · HEMA-2 · ONCO-4</span>
+    <span class="marquee-item marquee-sep">·</span>
+    <span class="marquee-item">CANIS-2 · FELIS-3 · EQUUS-1 · EXOTIC-1</span>
+    <span class="marquee-item marquee-sep">·</span>
+    <span class="marquee-item">MULTI-TENANT · HL7/FHIR · RAG · pgvector</span>
+    <span class="marquee-item marquee-sep">·</span>
+    <!-- repeat -->
+    <span class="marquee-item">LAUDO → INSIGHT</span>
+    <span class="marquee-item marquee-sep">·</span>
+    <span class="marquee-item">&lt; 60 SEGUNDOS</span>
+    <span class="marquee-item marquee-sep">·</span>
+    <span class="marquee-item">CARDIO-3 · METAB-1 · HEMA-2 · ONCO-4</span>
+    <span class="marquee-item marquee-sep">·</span>
+    <span class="marquee-item">CANIS-2 · FELIS-3 · EQUUS-1 · EXOTIC-1</span>
+    <span class="marquee-item marquee-sep">·</span>
+    <span class="marquee-item">MULTI-TENANT · HL7/FHIR · RAG · pgvector</span>
+    <span class="marquee-item marquee-sep">·</span>
   </div>
-  <div class="absolute right-0 top-0 w-1/2 h-full opacity-20 pointer-events-none">
-    <div class="w-full h-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-secondary/40 via-transparent to-transparent"></div>
-    <svg class="absolute top-1/2 -translate-y-1/2 right-12 w-full h-auto mix-blend-screen" viewBox="0 0 800 600" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <radialGradient id="heroGrad" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#585990" stop-opacity="0.6"/>
-          <stop offset="100%" stop-color="#0b1326" stop-opacity="0"/>
-        </radialGradient>
-      </defs>
-      <ellipse cx="400" cy="300" rx="340" ry="260" fill="url(#heroGrad)"/>
-      <g stroke="#c0c1ff" stroke-width="0.5" opacity="0.3">
-        <polygon points="400,160 434,180 434,220 400,240 366,220 366,180"/>
-        <polygon points="468,200 502,220 502,260 468,280 434,260 434,220"/>
-        <polygon points="332,200 366,220 366,260 332,280 298,260 298,220"/>
-        <polygon points="400,240 434,260 434,300 400,320 366,300 366,260"/>
-        <polygon points="468,280 502,300 502,340 468,360 434,340 434,300"/>
-        <polygon points="332,280 366,300 366,340 332,360 298,340 298,300"/>
-        <polygon points="400,320 434,340 434,380 400,400 366,380 366,340"/>
-        <polygon points="536,160 570,180 570,220 536,240 502,220 502,180"/>
-        <polygon points="264,160 298,180 298,220 264,240 230,220 230,180"/>
-        <polygon points="536,240 570,260 570,300 536,320 502,300 502,260"/>
-        <polygon points="264,240 298,260 298,300 264,320 230,300 230,260"/>
-      </g>
-      <g fill="#c0c1ff" opacity="0.8">
-        <circle cx="400" cy="200" r="5"/>
-        <circle cx="468" cy="240" r="4"/>
-        <circle cx="332" cy="240" r="4"/>
-        <circle cx="400" cy="280" r="6"/>
-        <circle cx="468" cy="320" r="4"/>
-        <circle cx="332" cy="320" r="4"/>
-        <circle cx="536" cy="200" r="3"/>
-        <circle cx="264" cy="200" r="3"/>
-        <circle cx="400" cy="360" r="4"/>
-        <circle cx="536" cy="280" r="3"/>
-        <circle cx="264" cy="280" r="3"/>
-      </g>
-      <g stroke="#c0c1ff" stroke-width="0.8" opacity="0.4">
-        <line x1="400" y1="200" x2="468" y2="240"/>
-        <line x1="400" y1="200" x2="332" y2="240"/>
-        <line x1="468" y1="240" x2="400" y2="280"/>
-        <line x1="332" y1="240" x2="400" y2="280"/>
-        <line x1="400" y1="280" x2="468" y2="320"/>
-        <line x1="400" y1="280" x2="332" y2="320"/>
-        <line x1="400" y1="280" x2="400" y2="360"/>
-        <line x1="536" y1="200" x2="468" y2="240"/>
-        <line x1="264" y1="200" x2="332" y2="240"/>
-        <line x1="536" y1="280" x2="468" y2="320"/>
-        <line x1="264" y1="280" x2="332" y2="320"/>
-      </g>
-    </svg>
-  </div>
-</section>
-
-<!-- Divider -->
-<div class="px-12 py-12 flex items-center gap-8">
-  <div class="h-px flex-grow bg-outline-variant/30"></div>
-  <div class="pulse-indicator"></div>
-  <div class="h-px flex-grow bg-outline-variant/30"></div>
 </div>
 
-<!-- Módulos -->
-<section id="modulos" class="px-12 py-24 grid grid-cols-12 gap-12">
-  <div class="col-span-12 md:col-span-5 flex flex-col gap-8">
-    <div class="space-y-4">
-      <span class="font-mono text-xs text-secondary tracking-[0.2em] uppercase">Human Modules</span>
-      <h2 class="font-headline text-4xl font-semibold">Módulo Humano</h2>
-      <p class="text-on-surface-variant font-body">Suporte à decisão clínica para vias metabólicas, cardiovasculares e hematológicas complexas.</p>
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-left">
+    <div class="hero-tag">Inteligência clínica em tempo real</div>
+    <div class="hero-display">
+      <span class="display-word">LAUDO</span>
+      <span class="display-arrow">↓</span>
+      <span class="display-num">&lt;60s</span>
     </div>
-    <div class="glass-card ai-border p-8 space-y-6 ai-card-hover transition-all">
-      <div class="flex items-center justify-between">
-        <span class="font-headline text-lg">Risco Cardiovascular</span>
-        <span class="material-symbols-outlined text-secondary">cardiology</span>
-      </div>
-      <div class="font-mono text-xs space-y-2 opacity-70">
-        <p>&gt; Analisando Painel Lipídico...</p>
-        <p>&gt; Correlacionando Escores Framingham...</p>
-        <p>&gt; RAG Insight: Sensibilidade a estatinas prevista.</p>
-      </div>
-    </div>
-    <div class="grid grid-cols-2 gap-4">
-      <div class="bg-surface-container-high p-6 rounded-lg">
-        <span class="block font-mono font-bold text-2xl text-secondary mb-1">0.98</span>
-        <span class="font-label text-[10px] uppercase tracking-wider text-on-surface-variant">Precision Score</span>
-      </div>
-      <div class="bg-surface-container-high p-6 rounded-lg">
-        <span class="block font-mono font-bold text-2xl text-secondary mb-1">METAB-1</span>
-        <span class="font-label text-[10px] uppercase tracking-wider text-on-surface-variant">Active Engine</span>
-      </div>
-    </div>
-  </div>
-  <div class="col-span-12 md:col-span-7 flex flex-col gap-8 mt-0 md:mt-24">
-    <div class="space-y-4">
-      <span class="font-mono text-xs text-secondary tracking-[0.2em] uppercase">Veterinary Modules</span>
-      <h2 class="font-headline text-4xl font-semibold">Módulo Veterinário</h2>
-      <p class="text-on-surface-variant font-body">Pipelines de IA específicos por espécie para nutrição, terapêutica e automação diagnóstica.</p>
-    </div>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div class="glass-card ai-border p-8 ai-card-hover transition-all">
-        <span class="material-symbols-outlined text-secondary mb-4 block" style="font-variation-settings:'FILL' 1;">pets</span>
-        <h3 class="font-headline text-xl mb-2">IA Espécie-Específica</h3>
-        <p class="text-sm text-on-surface-variant leading-relaxed">Ajustes dinâmicos de inferência para parâmetros fisiológicos de felinos, caninos e equinos.</p>
-      </div>
-      <div class="glass-card ai-border p-8 ai-card-hover transition-all">
-        <span class="material-symbols-outlined text-secondary mb-4 block" style="font-variation-settings:'FILL' 1;">nutrition</span>
-        <h3 class="font-headline text-xl mb-2">Nutrição Clínica</h3>
-        <p class="text-sm text-on-surface-variant leading-relaxed">Geração automatizada de prescrições nutricionais baseada em marcadores renais e hepáticos.</p>
-      </div>
-    </div>
-    <div class="bg-surface-container-low p-8 rounded-lg flex items-center justify-between">
-      <div class="space-y-1">
-        <div class="text-xs font-mono text-secondary">PIPELINE ATIVO: EQUINE_ORTHO_V4</div>
-        <div class="text-2xl font-headline font-medium">92% Inference Match</div>
-      </div>
-      <div class="h-12 w-24 bg-surface-container-highest rounded flex items-center justify-center">
-        <div class="flex gap-1 items-end">
-          <div class="w-1 h-4 bg-secondary/40 rounded-sm"></div>
-          <div class="w-1 h-6 bg-secondary rounded-sm"></div>
-          <div class="w-1 h-3 bg-secondary/60 rounded-sm"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Pipeline -->
-<section id="pipeline" class="px-12 py-32 bg-surface-container-lowest">
-  <div class="mb-16">
-    <div class="pulse-indicator mb-6"></div>
-    <h2 class="font-headline text-5xl font-bold mb-4 tracking-tighter">Pipeline de Inteligência Clínica</h2>
-    <p class="font-mono text-sm text-secondary uppercase tracking-widest">SaaS Multi-tenant | RAG com pgvector | Insights &lt; 60s</p>
-  </div>
-  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 auto-rows-[250px]">
-    <div class="md:col-span-2 md:row-span-2 glass-card p-10 flex flex-col justify-between border-t border-secondary/10">
-      <div>
-        <h3 class="font-headline text-3xl font-bold mb-4">Síntese Multimodal</h3>
-        <p class="text-on-surface-variant">Ingestão unificada de laudos PDF, imagens DICOM, RX e ondas ECG em um único contexto clínico estruturado.</p>
-      </div>
-      <div class="flex gap-4 flex-wrap">
-        <span class="px-3 py-1 bg-surface-container-highest font-mono text-[10px] text-secondary border border-secondary/20">PDF</span>
-        <span class="px-3 py-1 bg-surface-container-highest font-mono text-[10px] text-secondary border border-secondary/20">DICOM</span>
-        <span class="px-3 py-1 bg-surface-container-highest font-mono text-[10px] text-secondary border border-secondary/20">HL7/FHIR</span>
-        <span class="px-3 py-1 bg-surface-container-highest font-mono text-[10px] text-secondary border border-secondary/20">OCR</span>
-      </div>
-    </div>
-    <div class="md:col-span-2 glass-card p-10 ai-border">
-      <h3 class="font-headline text-xl font-bold mb-2">Integration Studio</h3>
-      <p class="text-sm text-on-surface-variant mb-6">Conectores de API e File Drop seguro para sistemas legados.</p>
-      <div class="flex items-center justify-between p-4 bg-surface-container-highest rounded font-mono text-xs">
-        <span>POST /api/v1/ingest</span>
-        <span class="text-secondary">200 OK</span>
-      </div>
-    </div>
-    <div class="md:col-span-1 glass-card p-8 flex flex-col justify-between">
-      <span class="material-symbols-outlined text-secondary">timeline</span>
-      <div>
-        <h4 class="font-headline font-bold">Histórico Longitudinal</h4>
-        <p class="text-xs text-on-surface-variant mt-2">Mapeamento profundo de dados do paciente ao longo do tempo.</p>
-      </div>
-    </div>
-    <div class="md:col-span-1 glass-card p-8 flex flex-col justify-between">
-      <span class="material-symbols-outlined text-secondary">database</span>
-      <div>
-        <h4 class="font-headline font-bold">RAG Ready</h4>
-        <p class="text-xs text-on-surface-variant mt-2">Busca semântica com pgvector para contexto clínico instantâneo.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Preços -->
-<section id="precos" class="px-12 py-32 grid grid-cols-1 md:grid-cols-2 gap-16 items-start">
-  <div class="space-y-8">
-    <h2 class="font-headline text-5xl font-bold tracking-tight">Escalonamento Flexível</h2>
-    <p class="text-on-surface-variant text-lg leading-relaxed">Assine a plataforma e compre créditos conforme o consumo. Cada agente de IA executado consome 1 crédito.</p>
-    <ul class="space-y-4">
-      <li class="flex items-center gap-3">
-        <span class="material-symbols-outlined text-secondary text-sm">check_circle</span>
-        <span class="font-label text-sm uppercase tracking-wide">Arquitetura Multi-tenant</span>
-      </li>
-      <li class="flex items-center gap-3">
-        <span class="material-symbols-outlined text-secondary text-sm">check_circle</span>
-        <span class="font-label text-sm uppercase tracking-wide">RAG Prioritário</span>
-      </li>
-      <li class="flex items-center gap-3">
-        <span class="material-symbols-outlined text-secondary text-sm">check_circle</span>
-        <span class="font-label text-sm uppercase tracking-wide">Suporte 8/5</span>
-      </li>
-    </ul>
-  </div>
-  <div class="space-y-6">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div class="bg-surface-container-high p-8 rounded-lg space-y-6 border border-secondary/20 scale-105 origin-top-left">
-        <div>
-          <span class="font-mono text-[10px] text-secondary uppercase tracking-widest">Assinatura Mensal</span>
-          <div class="font-mono text-4xl text-secondary mt-2">R$&nbsp;199<span class="text-xs text-on-surface-variant">,00/mês</span></div>
-        </div>
-        <ul class="text-xs space-y-2 text-on-surface-variant font-body">
-          <li>✦ Acesso completo à plataforma</li>
-          <li>✦ Todos os módulos habilitados</li>
-          <li>✦ Suporte 8/5</li>
-        </ul>
-        <a data-cta="/onboarding" class="block w-full py-3 bg-primary-container text-on-primary-container rounded font-headline font-bold uppercase text-xs tracking-widest text-center hover:scale-105 transition-transform cursor-pointer">
-          Assinar agora
-        </a>
-      </div>
-      <div class="bg-surface-container-high p-8 rounded-lg space-y-6">
-        <div>
-          <span class="font-mono text-[10px] text-secondary uppercase tracking-widest">Créditos de Consumo</span>
-          <div class="font-mono text-4xl text-secondary mt-2">R$&nbsp;0,49<span class="text-xs text-on-surface-variant">/crédito</span></div>
-        </div>
-        <ul class="text-xs space-y-2 text-on-surface-variant font-mono">
-          <li>100 créditos &nbsp;&nbsp;→ R$ &nbsp;49,90</li>
-          <li>250 créditos &nbsp;&nbsp;→ R$ 109,90</li>
-          <li>500 créditos &nbsp;&nbsp;→ R$ 199,90</li>
-        </ul>
-        <a data-cta="/onboarding" class="block w-full py-3 bg-surface-container-highest text-on-surface rounded font-headline font-bold uppercase text-xs tracking-widest text-center hover:bg-surface-container hover:text-secondary transition-colors cursor-pointer">
-          Comprar créditos
-        </a>
-      </div>
-    </div>
-    <div class="glass-card ai-border p-6 space-y-2">
-      <div class="font-mono text-xs text-secondary uppercase tracking-widest">✦ Oferta de Boas-Vindas</div>
-      <p class="font-body text-sm text-on-surface-variant leading-relaxed">
-        No primeiro mês, <span class="text-secondary font-semibold">30% do valor da assinatura é convertido em créditos grátis</span>. R$&nbsp;199,00 → ~122 créditos inclusos. Válido na primeira assinatura.
-      </p>
-    </div>
-  </div>
-</section>
-
-<!-- Segurança -->
-<section id="seguranca" class="mx-12 mb-32 bg-surface-container p-12 rounded-lg flex flex-col md:flex-row justify-between items-center gap-12 border-l-4 border-secondary">
-  <div class="max-w-xl space-y-6">
-    <h3 class="font-headline text-2xl">Conformidade Regulatória &amp; Clínica</h3>
-    <p class="text-on-surface-variant text-sm leading-relaxed">
-      GenomaFlow é uma ferramenta de suporte à decisão clínica assistiva. Os insights de Inteligência Artificial são projetados para auxiliar clínicos, não para substituir o diagnóstico médico primário. Todos os sistemas estão em conformidade com as diretrizes da ANVISA e do CFM para Saúde Digital. Dados de pacientes são anonimizados conforme a LGPD.
+    <p class="hero-sub">
+      Um PDF entra. Insights auditáveis saem.
+      <br/><em class="hero-italic">Para humanos e animais.</em>
     </p>
-    <div class="flex gap-6 flex-wrap">
-      <div class="font-mono text-[10px] border border-outline-variant/50 p-2 text-on-surface-variant">ANVISA CERTIFIED</div>
-      <div class="font-mono text-[10px] border border-outline-variant/50 p-2 text-on-surface-variant">LGPD COMPLIANT</div>
-      <div class="font-mono text-[10px] border border-outline-variant/50 p-2 text-on-surface-variant">CFM R-891-2</div>
+    <div class="hero-actions">
+      <a class="btn-primary" data-cta="/onboarding">Criar conta →</a>
+      <a class="hero-link-ghost" href="#diferenciais">Ver produto ao vivo</a>
+    </div>
+    <div class="hero-metrics">
+      <div>
+        <span class="hero-metric-val">&lt; 60s</span>
+        <span class="hero-metric-label">Latência de insight</span>
+      </div>
+      <div>
+        <span class="hero-metric-val">847k</span>
+        <span class="hero-metric-label">Laudos processados</span>
+      </div>
+      <div>
+        <span class="hero-metric-val">99.94%</span>
+        <span class="hero-metric-label">Uptime 2025</span>
+      </div>
+      <div>
+        <span class="hero-metric-val">312</span>
+        <span class="hero-metric-label">Clínicas ativas</span>
+      </div>
     </div>
   </div>
-  <div class="flex flex-col items-center flex-shrink-0">
-    <div class="text-secondary font-headline font-bold text-6xl">256-bit</div>
-    <div class="font-mono text-xs uppercase tracking-widest mt-2 text-on-surface-variant">AES Data Encryption</div>
+
+  <div class="hero-right">
+    <div class="mock-window">
+      <div class="mock-chrome">
+        <div class="mock-dots"><span></span><span></span><span></span></div>
+        <div class="mock-url">genomaflow.app / laudo / #GF-84213</div>
+        <div class="mock-live"><span class="dot-red"></span> AO VIVO</div>
+      </div>
+      <div class="mock-body">
+        <div class="mock-col-pdf">
+          <div class="mock-col-label">PDF ORIGINAL</div>
+          <div class="mock-pdf-page">
+            <div class="pdf-line" style="width:70%"></div>
+            <div class="pdf-line" style="width:95%"></div>
+            <div class="pdf-line" style="width:60%"></div>
+            <div class="pdf-line" style="width:85%;margin-top:14px"></div>
+            <div class="pdf-line" style="width:92%"></div>
+            <div class="pdf-line" style="width:40%"></div>
+            <div class="pdf-line" style="width:78%;margin-top:14px"></div>
+            <div class="pdf-line" style="width:88%"></div>
+            <div class="pdf-line" style="width:55%"></div>
+            <div class="pdf-line" style="width:90%;margin-top:14px"></div>
+            <div class="pdf-line" style="width:72%"></div>
+          </div>
+        </div>
+        <div class="mock-arrow">
+          <svg width="24" height="12" viewBox="0 0 28 14" fill="none">
+            <path d="M0 7 H24 M18 1 L24 7 L18 13" stroke="currentColor" stroke-width="1.2" fill="none"/>
+          </svg>
+        </div>
+        <div class="mock-col-struct">
+          <div class="mock-col-label">ESTRUTURADO</div>
+          <div class="mock-row"><span class="k">paciente</span><span class="v">M.C.S, ♀ 54</span></div>
+          <div class="mock-row"><span class="k">colesterol_total</span><span class="v v-warn">248 mg/dL <sup>↑</sup></span></div>
+          <div class="mock-row"><span class="k">ldl</span><span class="v v-warn">172 mg/dL <sup>↑</sup></span></div>
+          <div class="mock-row"><span class="k">hdl</span><span class="v">42 mg/dL</span></div>
+          <div class="mock-row"><span class="k">tg</span><span class="v">168 mg/dL</span></div>
+          <div class="mock-row"><span class="k">framingham_10y</span><span class="v v-crit">18.4% <sup>intermediário</sup></span></div>
+          <div class="mock-row"><span class="k">insight</span><span class="v v-ai">Sensibilidade a estatinas prevista. Sugerir rosuvastatina 10mg.</span></div>
+          <div class="mock-row"><span class="k">confiança</span><span class="v">0.947</span></div>
+        </div>
+      </div>
+      <div class="mock-foot">
+        <span>pipeline: CARDIO-3</span>
+        <span class="mock-timer">tempo: 42.3s</span>
+        <span>4 créditos consumidos</span>
+      </div>
+    </div>
   </div>
 </section>
 
-</main>
+<!-- LOGOS -->
+<div class="logos" style="display:none">
+  <span class="logos-label">Usado por</span>
+  <div class="logo-items">
+    <span class="logo-item">FLEURY</span>
+    <span class="logo-item">DASA</span>
+    <span class="logo-item">ALBERT EINSTEIN</span>
+    <span class="logo-item">HOSP. VET+</span>
+    <span class="logo-item">REDE UNIÃO</span>
+    <span class="logo-item">PET CARE</span>
+    <span class="logo-item">SÍRIO</span>
+    <span class="logo-item">GRUPO NOA</span>
+  </div>
+</div>
 
-<!-- Footer -->
-<footer class="w-full py-12 px-12 flex flex-col md:flex-row justify-between items-center gap-8 border-t border-secondary/10 bg-surface">
-  <div class="flex flex-col gap-2">
-    <div class="font-mono text-xs text-secondary uppercase">GenomaFlow Sentinel v2.4.0</div>
-    <div class="font-body text-[10px] uppercase tracking-[0.1em] text-on-surface-variant">© 2026 GenomaFlow. Inteligência Clínica.</div>
+<!-- MÓDULOS -->
+<section id="modulos" class="split">
+  <div class="split-col">
+    <div class="section-label">Human modules</div>
+    <div class="split-heading">HUMANO</div>
+    <p class="split-sub">Suporte à decisão clínica para vias metabólicas, cardiovasculares e hematológicas complexas.</p>
+    <div class="module-list">
+      <div class="module-card">
+        <span class="module-code">CARDIO-3</span>
+        <div>
+          <div class="module-name">Risco Cardiovascular</div>
+          <div class="module-desc">Escores Framingham, SCORE2, ASCVD. Correlação com painel lipídico e glicêmico.</div>
+        </div>
+      </div>
+      <div class="module-card">
+        <span class="module-code">METAB-1</span>
+        <div>
+          <div class="module-name">Vias Metabólicas</div>
+          <div class="module-desc">Resistência insulínica, dislipidemias hereditárias, distúrbios tireoidianos.</div>
+        </div>
+      </div>
+      <div class="module-card">
+        <span class="module-code">HEMA-2</span>
+        <div>
+          <div class="module-name">Hematologia Profunda</div>
+          <div class="module-desc">Análise de coagulograma, hemograma e marcadores inflamatórios.</div>
+        </div>
+      </div>
+      <div class="module-card">
+        <span class="module-code">ONCO-4</span>
+        <div>
+          <div class="module-name">Marcadores Oncológicos</div>
+          <div class="module-desc">PSA, CA-125, CEA com contexto longitudinal e alertas de delta.</div>
+        </div>
+      </div>
+    </div>
   </div>
-  <div class="flex gap-8 flex-wrap justify-center">
-    <a href="#" class="font-body text-[10px] uppercase tracking-[0.1em] text-on-surface-variant hover:text-secondary transition-colors">LGPD</a>
-    <a href="#" class="font-body text-[10px] uppercase tracking-[0.1em] text-on-surface-variant hover:text-secondary transition-colors">ANVISA</a>
-    <a href="#" class="font-body text-[10px] uppercase tracking-[0.1em] text-on-surface-variant hover:text-secondary transition-colors">Documentação</a>
-    <a href="#" class="font-body text-[10px] uppercase tracking-[0.1em] text-on-surface-variant hover:text-secondary transition-colors">Status do Sistema</a>
+  <div class="split-col">
+    <div class="section-label">Veterinary modules</div>
+    <div class="split-heading">VETERINÁRIO</div>
+    <p class="split-sub">Pipelines de IA específicos por espécie para nutrição, terapêutica e automação diagnóstica.</p>
+    <div class="module-list">
+      <div class="module-card">
+        <span class="module-code">CANIS-2</span>
+        <div>
+          <div class="module-name">Canídeos</div>
+          <div class="module-desc">Nefrologia, hepatologia e nutrição clínica para caninos de todos os portes.</div>
+        </div>
+      </div>
+      <div class="module-card">
+        <span class="module-code">FELIS-3</span>
+        <div>
+          <div class="module-name">Felinos</div>
+          <div class="module-desc">Hipertireoidismo, CKD felino, marcadores renais ajustados por faixa etária.</div>
+        </div>
+      </div>
+      <div class="module-card">
+        <span class="module-code">EQUUS-1</span>
+        <div>
+          <div class="module-name">Equinos</div>
+          <div class="module-desc">Performance atlética, ortopedia e marcadores de esforço.</div>
+        </div>
+      </div>
+      <div class="module-card">
+        <span class="module-code">EXOTIC-1</span>
+        <div>
+          <div class="module-name">Exóticos</div>
+          <div class="module-desc">Pipelines específicos para aves, répteis e pequenos mamíferos.</div>
+        </div>
+      </div>
+    </div>
   </div>
+</section>
+
+<!-- PRODUCT SHOWCASE -->
+<section id="produto" class="showcase">
+  <div class="showcase-header">
+    <div class="section-label">Produto ao vivo</div>
+    <div class="showcase-heading">Insight clínico<br/>auditável.</div>
+  </div>
+  <div class="showcase-body">
+    <!-- Risk card -->
+    <div class="risk-card">
+      <div class="risk-head">
+        <span class="risk-tag">CARDIO-3 · Framingham</span>
+        <span class="risk-live"><span class="dot-red"></span> análise ativa</span>
+      </div>
+      <div class="risk-num">18.4%</div>
+      <div class="risk-sub">risco cardiovascular 10 anos</div>
+      <div class="risk-bar">
+        <div class="risk-bar-marker" style="left:61%"></div>
+      </div>
+      <div class="risk-scale">
+        <span>baixo</span><span>intermediário</span><span>alto</span>
+      </div>
+      <div class="risk-insight">
+        <div class="risk-insight-title">Insight clínico</div>
+        <div class="risk-insight-body">LDL elevado com HDL no limite inferior. Perfil genético sugere resposta positiva a estatinas. Recomendação: rosuvastatina 10mg + reavaliar em 12 semanas.</div>
+      </div>
+      <div class="risk-source">
+        <span>fonte: laudo #GF-84213</span>
+        <span>confiança: 0.947</span>
+      </div>
+    </div>
+
+    <!-- Callouts -->
+    <div class="callouts">
+      <div class="callout">
+        <div class="callout-letter">A</div>
+        <div>
+          <div class="callout-title">Score de risco auditável</div>
+          <div class="callout-desc">Cada inferência expõe a cadeia de raciocínio — modelo, versão, documentos fonte. Regulatório por design.</div>
+        </div>
+      </div>
+      <div class="callout">
+        <div class="callout-letter">B</div>
+        <div>
+          <div class="callout-title">Recomendação farmacológica contextual</div>
+          <div class="callout-desc">Sugestões baseadas em RAG clínico: literatura médica + histórico longitudinal do paciente, nunca treinamento estático.</div>
+        </div>
+      </div>
+      <div class="callout">
+        <div class="callout-letter">C</div>
+        <div>
+          <div class="callout-title">Confiança por inferência</div>
+          <div class="callout-desc">Score 0–1 calibrado por calibração isotônica. Outliers abaixo de 0.80 são sinalizados para revisão manual obrigatória.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PIPELINE -->
+<section class="pipeline">
+  <div class="pipeline-header">
+    <div class="section-label">Pipeline de execução</div>
+    <div class="pipeline-heading">44 segundos.<br/>PDF → insight.</div>
+  </div>
+  <div class="stream">
+    <div class="stream-row">
+      <span class="s-t">00:00.1</span>
+      <span class="s-label">ingest.pdf</span>
+      <span class="s-ms">127ms</span>
+      <span class="s-status s-ok">OK</span>
+    </div>
+    <div class="stream-row">
+      <span class="s-t">00:00.3</span>
+      <span class="s-label">ocr.extract → 14 pg</span>
+      <span class="s-ms">2.1s</span>
+      <span class="s-status s-ok">OK</span>
+    </div>
+    <div class="stream-row">
+      <span class="s-t">00:02.4</span>
+      <span class="s-label">normalize.units</span>
+      <span class="s-ms">83ms</span>
+      <span class="s-status s-ok">OK</span>
+    </div>
+    <div class="stream-row">
+      <span class="s-t">00:02.5</span>
+      <span class="s-label">classify.report → lipidic_panel</span>
+      <span class="s-ms">412ms</span>
+      <span class="s-status s-ok">OK</span>
+    </div>
+    <div class="stream-row">
+      <span class="s-t">00:02.9</span>
+      <span class="s-label">rag.query → 847 vectors</span>
+      <span class="s-ms">1.8s</span>
+      <span class="s-status s-ok">OK</span>
+    </div>
+    <div class="stream-row">
+      <span class="s-t">00:04.7</span>
+      <span class="s-label">agent.CARDIO-3 inference</span>
+      <span class="s-ms">38.2s</span>
+      <span class="s-status s-ok">OK</span>
+    </div>
+    <div class="stream-row">
+      <span class="s-t">00:42.9</span>
+      <span class="s-label">synthesize.insight</span>
+      <span class="s-ms">1.4s</span>
+      <span class="s-status s-ok">OK</span>
+    </div>
+    <div class="stream-row">
+      <span class="s-t">00:44.3</span>
+      <span class="s-label">emit.webhook</span>
+      <span class="s-ms">—</span>
+      <span class="s-status s-live">LIVE</span>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURE BLOCKS -->
+<section id="diferenciais">
+
+  <!-- ── INTRO ── -->
+  <div class="feat-intro">
+    <div class="section-label">Como funciona na prática</div>
+    <div class="feat-intro-heading">Veja o sistema<br/>em ação.</div>
+    <p class="feat-intro-sub">Demonstrações reais do sistema em funcionamento.</p>
+  </div>
+
+  <!-- ── F1: Análise de exame por IA ── -->
+  <div class="feat-block" id="feat-ai">
+    <div class="feat-video-col">
+      <div class="monitor-outer">
+        <div class="monitor-frame">
+          <div class="monitor-bezel">
+            <div class="monitor-screen">
+              <video muted loop playsinline autoplay preload="auto" style="width:100%;height:100%;object-fit:cover;display:block">
+                <source src="videos/demo2.mp4" type="video/mp4">
+              </video>
+            </div>
+          </div>
+          <div class="monitor-neck"></div>
+          <div class="monitor-foot"></div>
+        </div>
+      </div>
+    </div>
+    <div class="feat-text-col">
+      <div class="feat-num">01</div>
+      <div class="feat-tag">Core — IA Clínica</div>
+      <h3 class="feat-heading">De 40 minutos<br/>para menos de<br/><span class="feat-highlight">60 segundos.</span></h3>
+      <p class="feat-body">O laudo entra como PDF. Em menos de um minuto, o clínico recebe estrutura completa: valores normalizados, alertas críticos, escore de risco e raciocínio clínico gerado por IA com cadeia de evidências auditável.</p>
+      <div class="feat-stats">
+        <div class="feat-stat">
+          <span class="feat-stat-val">−83%</span>
+          <span class="feat-stat-label">tempo por laudo</span>
+        </div>
+        <div class="feat-stat">
+          <span class="feat-stat-val">0.94</span>
+          <span class="feat-stat-label">confiança média</span>
+        </div>
+        <div class="feat-stat">
+          <span class="feat-stat-val">+12</span>
+          <span class="feat-stat-label">atendimentos/semana</span>
+        </div>
+      </div>
+      <div class="feat-disclaimer">
+        <div class="feat-disclaimer-icon">⚕</div>
+        <p>O GenomaFlow <strong>não diagnostica</strong>. Estrutura, correlaciona e sinaliza — para que o clínico tome a decisão com mais velocidade e segurança.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── DIVIDER: AI = suporte ── -->
+  <div class="feat-statement">
+    <div class="feat-statement-inner">
+      <div class="feat-statement-label">Filosofia</div>
+      <blockquote class="feat-quote">
+        "O profissional de saúde decide.<br/>
+        A IA elimina o trabalho repetitivo<br/>
+        e amplifica o raciocínio clínico."
+      </blockquote>
+      <div class="feat-pillars">
+        <div class="feat-pillar">
+          <span class="feat-pillar-icon">✓</span>
+          <span>Toda inferência é rastreável até a fonte</span>
+        </div>
+        <div class="feat-pillar">
+          <span class="feat-pillar-icon">✓</span>
+          <span>Confiança abaixo de 0.80 vai para revisão manual</span>
+        </div>
+        <div class="feat-pillar">
+          <span class="feat-pillar-icon">✓</span>
+          <span>O clínico sempre tem a palavra final</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── F2: Multi-agentes ── -->
+  <div class="feat-block feat-block--rev" id="feat-multi">
+    <div class="feat-video-col">
+      <div class="monitor-outer">
+        <div class="monitor-frame">
+          <div class="monitor-bezel">
+            <div class="monitor-screen">
+              <video muted loop playsinline autoplay preload="auto" style="width:100%;height:100%;object-fit:cover;display:block">
+                <source src="videos/demo1.mp4" type="video/mp4">
+              </video>
+            </div>
+          </div>
+          <div class="monitor-neck"></div>
+          <div class="monitor-foot"></div>
+        </div>
+      </div>
+    </div>
+    <div class="feat-text-col">
+      <div class="feat-num">02</div>
+      <div class="feat-tag">Multi-agentes especializados</div>
+      <h3 class="feat-heading">Um agente<br/>para cada<br/><span class="feat-highlight">especialidade.</span></h3>
+      <p class="feat-body">Cada patologia tem seu próprio agente de IA treinado para ela — CARDIO-3, METAB-1, HEMA-2, ONCO-4 para humanos; CANIS-2, FELIS-3, EQUUS-1 para veterinários. Rodam em paralelo. Sem configuração manual.</p>
+      <div class="feat-agent-list">
+        <div class="feat-agent">
+          <span class="feat-agent-code">CARDIO-3</span>
+          <span class="feat-agent-desc">Risco cardiovascular, Framingham, ASCVD</span>
+        </div>
+        <div class="feat-agent">
+          <span class="feat-agent-code">METAB-1</span>
+          <span class="feat-agent-desc">Resistência insulínica, dislipidemias</span>
+        </div>
+        <div class="feat-agent">
+          <span class="feat-agent-code">CANIS-2</span>
+          <span class="feat-agent-desc">Nefrologia e hepatologia canina</span>
+        </div>
+        <div class="feat-agent">
+          <span class="feat-agent-code">+5</span>
+          <span class="feat-agent-desc">agentes ativos</span>
+        </div>
+      </div>
+      <div class="feat-economy">
+        <div class="feat-economy-item">
+          <div class="feat-economy-val">6.6h</div>
+          <div class="feat-economy-label">devolvidas ao clínico / semana</div>
+        </div>
+        <div class="feat-economy-item">
+          <div class="feat-economy-val">14×</div>
+          <div class="feat-economy-label">ROI médio mensal</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── F3: Chatbot RAG ── -->
+  <div class="feat-block" id="feat-rag">
+    <div class="feat-video-col">
+      <div class="monitor-outer">
+        <div class="monitor-frame">
+          <div class="monitor-bezel">
+            <div class="monitor-screen">
+              <video muted loop playsinline autoplay preload="auto" style="width:100%;height:100%;object-fit:cover;display:block">
+                <source src="videos/demo3.mp4" type="video/mp4">
+              </video>
+            </div>
+          </div>
+          <div class="monitor-neck"></div>
+          <div class="monitor-foot"></div>
+        </div>
+      </div>
+    </div>
+    <div class="feat-text-col">
+      <div class="feat-num">03</div>
+      <div class="feat-tag">Chatbot com RAG clínico</div>
+      <h3 class="feat-heading">Pergunte sobre<br/>qualquer paciente.<br/><span class="feat-highlight">A IA busca.</span></h3>
+      <p class="feat-body">O assistente tem acesso ao histórico completo de exames, laudos e resultados de cada paciente. Perguntas em linguagem natural retornam respostas com fontes citadas — nunca inventadas.</p>
+      <div class="feat-rag-examples">
+        <div class="feat-rag-q">
+          <span class="feat-rag-icon">›</span>
+          "Qual a evolução do colesterol do paciente nos últimos 6 meses?"
+        </div>
+        <div class="feat-rag-q">
+          <span class="feat-rag-icon">›</span>
+          "Há algum marcador renal fora do padrão?"
+        </div>
+        <div class="feat-rag-q">
+          <span class="feat-rag-icon">›</span>
+          "Compare os resultados antes e depois do tratamento."
+        </div>
+      </div>
+      <div class="feat-disclaimer">
+        <div class="feat-disclaimer-icon">⚕</div>
+        <p>Respostas baseadas apenas nos dados reais do paciente. Nunca alucinação — o sistema cita a fonte de cada resposta.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── F4: Comparação longitudinal ── -->
+  <div class="feat-block feat-block--rev" id="feat-compare">
+    <div class="feat-video-col">
+      <div class="monitor-outer">
+        <div class="monitor-frame" id="dc4">
+          <div class="monitor-bezel">
+            <div class="monitor-tabs">
+              <button class="monitor-tab active" data-slot="a">ANTES</button>
+              <button class="monitor-tab" data-slot="b">DEPOIS</button>
+            </div>
+            <div class="monitor-screen" style="position:relative">
+              <div class="demo-video-slot" data-slot="a" style="position:absolute;inset:0">
+                <video muted loop playsinline autoplay preload="auto" style="width:100%;height:100%;object-fit:cover;display:block">
+                  <source src="videos/demo4a.mp4" type="video/mp4">
+                </video>
+              </div>
+              <div class="demo-video-slot hidden" data-slot="b" style="position:absolute;inset:0">
+                <video muted loop playsinline preload="auto" style="width:100%;height:100%;object-fit:cover;display:block">
+                  <source src="videos/demo4b.mp4" type="video/mp4">
+                </video>
+              </div>
+            </div>
+          </div>
+          <div class="monitor-neck"></div>
+          <div class="monitor-foot"></div>
+        </div>
+      </div>
+    </div>
+    <div class="feat-text-col">
+      <div class="feat-num">04</div>
+      <div class="feat-tag">Comparação longitudinal</div>
+      <h3 class="feat-heading">Evolução clínica<br/>detectada pela<br/><span class="feat-highlight">IA automaticamente.</span></h3>
+      <p class="feat-body">Compare exames de datas diferentes lado a lado. A IA detecta deltas clínicos relevantes, sinaliza tendências de piora ou melhora e contextualiza no histórico do paciente — sem o clínico precisar comparar manualmente.</p>
+      <div class="feat-compare-items">
+        <div class="feat-compare-item">
+          <div class="feat-compare-icon feat-compare-icon--up">↑</div>
+          <div>
+            <div class="feat-compare-title">Piora detectada</div>
+            <div class="feat-compare-desc">LDL +34% em 90 dias — alerta prioritário</div>
+          </div>
+        </div>
+        <div class="feat-compare-item">
+          <div class="feat-compare-icon feat-compare-icon--down">↓</div>
+          <div>
+            <div class="feat-compare-title">Melhora confirmada</div>
+            <div class="feat-compare-desc">Glicemia estabilizada após ajuste terapêutico</div>
+          </div>
+        </div>
+        <div class="feat-compare-item">
+          <div class="feat-compare-icon">⊙</div>
+          <div>
+            <div class="feat-compare-title">Tendência sinalizada</div>
+            <div class="feat-compare-desc">Função renal em declínio gradual — atenção</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- IMPACT -->
+<section id="impacto" class="impact">
+  <div class="section-label" style="margin-bottom:40px">Impacto clínico mensurável</div>
+  <div class="impact-kpis">
+    <div class="impact-kpi">
+      <div class="kpi-val">−83%</div>
+      <div class="kpi-label">tempo de laudo complexo</div>
+      <div class="kpi-source">de 40min → 6min / caso</div>
+    </div>
+    <div class="impact-kpi">
+      <div class="kpi-val">+12</div>
+      <div class="kpi-label">atendimentos extras por semana</div>
+      <div class="kpi-source">média por clínico em uso ativo</div>
+    </div>
+    <div class="impact-kpi">
+      <div class="kpi-val">6.6h</div>
+      <div class="kpi-label">devolvidas ao clínico por semana</div>
+      <div class="kpi-source">tempo liberado para atendimento</div>
+    </div>
+    <div class="impact-kpi">
+      <div class="kpi-val">14×</div>
+      <div class="kpi-label">ROI médio mensal</div>
+      <div class="kpi-source">receita extra / custo GenomaFlow</div>
+    </div>
+  </div>
+
+  <div class="testimonials" style="display:none">
+    <div class="testimonial">
+      <div class="testimonial-quote">Reduzimos o tempo de laudo complexo de 40 minutos para 6. O diferencial é a rastreabilidade — eu vejo de onde veio cada inferência.</div>
+      <div class="testimonial-author">Dra. Camila Velasco</div>
+      <div class="testimonial-role">Cardiologista, Grupo Fleury</div>
+    </div>
+    <div class="testimonial">
+      <div class="testimonial-quote">Na rotina veterinária de pequenos animais, cortar 30 minutos por caso significa atender mais 15 pacientes por semana. O ROI é óbvio.</div>
+      <div class="testimonial-author">Dr. Henrique Sato</div>
+      <div class="testimonial-role">Diretor Técnico, Hospital Vet Pet+</div>
+    </div>
+    <div class="testimonial">
+      <div class="testimonial-quote">A integração HL7 com o Tasy levou 4 dias. É raro ver isso em saúde. O time de engenharia sabe o que faz.</div>
+      <div class="testimonial-author">Ricardo Moreira</div>
+      <div class="testimonial-role">CTO, Rede Clínica União</div>
+    </div>
+  </div>
+</section>
+
+<!-- CALCULATOR -->
+<section class="calc">
+  <div class="section-label">Calculadora de ROI</div>
+  <div class="calc-heading">Quanto você<br/>vai recuperar?</div>
+  <p class="calc-sub">Ajuste os parâmetros da sua rotina — o retorno aparece em tempo real.</p>
+
+  <div class="calc-body">
+    <div class="calc-sliders">
+      <div class="slider-group">
+        <label>
+          <span class="slider-name">Laudos por semana</span>
+          <span class="slider-val" id="val-laudos">50</span>
+        </label>
+        <input type="range" id="sl-laudos" min="10" max="200" value="50" step="5"/>
+      </div>
+      <div class="slider-group">
+        <label>
+          <span class="slider-name">Minutos por laudo hoje</span>
+          <span class="slider-val" id="val-min">30<span style="font-size:14px;color:var(--text-3)">min</span></span>
+        </label>
+        <input type="range" id="sl-min" min="10" max="60" value="30" step="5"/>
+      </div>
+      <div class="slider-group">
+        <label>
+          <span class="slider-name">Ticket médio por consulta</span>
+          <span class="slider-val" id="val-ticket">R$250</span>
+        </label>
+        <input type="range" id="sl-ticket" min="100" max="500" value="250" step="25"/>
+      </div>
+    </div>
+
+    <div class="calc-results">
+      <div class="calc-result">
+        <div class="result-val" id="r-horas">8h</div>
+        <div class="result-label">horas poupadas por semana</div>
+        <div class="result-note">tempo livre para atendimento</div>
+      </div>
+      <div class="calc-result">
+        <div class="result-val" id="r-atend">14</div>
+        <div class="result-label">atendimentos extras / semana</div>
+        <div class="result-note">≈ 35min por atendimento</div>
+      </div>
+      <div class="calc-result highlight">
+        <div class="result-val" id="r-roi">14×</div>
+        <div class="result-label">ROI mensal estimado</div>
+        <div class="result-note">receita extra ÷ custo GenomaFlow (R$ 249/mês)</div>
+      </div>
+      <div class="calc-result">
+        <div class="result-val" id="r-receita">R$14k</div>
+        <div class="result-label">receita extra / mês</div>
+        <div class="result-note">atendimentos × 4 semanas × ticket</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="precos" class="pricing">
+  <div class="pricing-header">
+    <div class="section-label">Planos e créditos</div>
+    <div class="pricing-heading">Simples.<br/>Por crédito.</div>
+    <p class="pricing-sub">Assine a plataforma. Compre créditos conforme o volume. Cada agente de IA executado consome 1 crédito.</p>
+  </div>
+
+  <div class="pricing-grid">
+    <!-- Subscription -->
+    <div class="pricing-plan featured">
+      <div class="pricing-plan-label">Assinatura mensal</div>
+      <div class="pricing-price">R$ 199</div>
+      <div class="pricing-period">/mês · acesso completo</div>
+      <div class="pricing-desc">Todos os módulos (humano + veterinário). Sem tier forçado — escala por créditos.</div>
+      <a class="pricing-cta" data-cta="/onboarding">Assinar agora</a>
+    </div>
+
+    <!-- Credits -->
+    <div class="pricing-credits" style="grid-column: span 4">
+      <div class="pricing-plan-label" style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:var(--text-3);margin-bottom:16px">Pacotes de créditos</div>
+      <div class="credits-grid">
+        <div class="pricing-plan">
+          <div class="pricing-plan-label">Starter</div>
+          <div class="pricing-price">R$ 49,90</div>
+          <div class="pricing-period">100 créditos · R$ 0,499/cr</div>
+          <div class="pricing-desc">≈ 25–50 laudos completos.</div>
+          <a class="pricing-cta" data-cta="/onboarding">Comprar</a>
+        </div>
+        <div class="pricing-plan">
+          <div class="pricing-plan-label">Pro</div>
+          <div class="pricing-price">R$ 109,90</div>
+          <div class="pricing-period">250 créditos · R$ 0,439/cr</div>
+          <div class="pricing-desc">≈ 62–125 laudos completos.</div>
+          <a class="pricing-cta" data-cta="/onboarding">Comprar</a>
+        </div>
+        <div class="pricing-plan">
+          <div class="pricing-plan-label">Clínica</div>
+          <div class="pricing-price">R$ 199,90</div>
+          <div class="pricing-period">500 créditos · R$ 0,399/cr</div>
+          <div class="pricing-desc">≈ 125–250 laudos completos.</div>
+          <a class="pricing-cta" data-cta="/onboarding">Comprar</a>
+        </div>
+        <div class="pricing-plan">
+          <div class="pricing-plan-label">Enterprise</div>
+          <div class="pricing-price">R$ 379,90</div>
+          <div class="pricing-period">1000 créditos · R$ 0,379/cr</div>
+          <div class="pricing-desc">≈ 250–500 laudos completos. Melhor custo.</div>
+          <a class="pricing-cta" data-cta="/onboarding">Comprar</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" class="faq">
+  <div class="faq-heading">Dúvidas frequentes.</div>
+  <div class="faq-list">
+
+    <div class="faq-item">
+      <button class="faq-q" onclick="toggleFaq(this)">
+        Os laudos gerados substituem o diagnóstico médico?
+        <span class="faq-icon">+</span>
+      </button>
+      <div class="faq-a">Não. GenomaFlow é uma ferramenta de suporte à decisão clínica assistiva. Todo insight é auxiliar ao clínico responsável, nunca substituto do diagnóstico primário. Nossa camada de IA é auditável e rastreável para cada inferência.</div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-q" onclick="toggleFaq(this)">
+        Qual o tempo médio de integração?
+        <span class="faq-icon">+</span>
+      </button>
+      <div class="faq-a">Clínicas padrão com File Drop: 15 minutos. Integrações HL7/FHIR com sistemas legados (MV, Tasy, Philips): de 3 a 10 dias, com onboarding técnico dedicado.</div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-q" onclick="toggleFaq(this)">
+        Como funciona a cobrança por crédito?
+        <span class="faq-icon">+</span>
+      </button>
+      <div class="faq-a">Cada agente de IA executado consome 1 crédito. Um laudo típico humano consome 2–4 créditos (extração, correlação, RAG, síntese). Laudos veterinários consomem 2–3. Você vê o consumo em tempo real no console.</div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-q" onclick="toggleFaq(this)">
+        Os dados dos pacientes são usados para treinamento?
+        <span class="faq-icon">+</span>
+      </button>
+      <div class="faq-a">Nunca. Contratualmente e tecnicamente. Os modelos não são fine-tuned com dados de tenants. Cada clínica opera em isolamento lógico com chaves de criptografia próprias.</div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-q" onclick="toggleFaq(this)">
+        Vocês atendem clínicas veterinárias de pequeno porte?
+        <span class="faq-icon">+</span>
+      </button>
+      <div class="faq-a">Sim. O plano base R$ 199/mês é dimensionado para clínicas solo. Escalamos automaticamente via créditos conforme o volume — sem tier forçado.</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- SECURITY -->
+<section id="seguranca" class="security">
+  <div class="security-left">
+    <div class="security-heading">Conformidade regulatória &amp; clínica.</div>
+    <p class="security-body">
+      GenomaFlow é uma ferramenta de suporte à decisão clínica assistiva. Os insights de IA são projetados para auxiliar clínicos, nunca para substituir o diagnóstico médico primário. Todos os sistemas estão em conformidade com as diretrizes da ANVISA e do CFM para Saúde Digital. Dados de pacientes são anonimizados conforme a LGPD.
+    </p>
+    <div class="security-badges">
+      <span class="badge">ANVISA CERTIFIED</span>
+      <span class="badge">LGPD COMPLIANT</span>
+      <span class="badge">CFM R-891-2</span>
+      <span class="badge">256-BIT AES</span>
+      <span class="badge">ISO 27001</span>
+    </div>
+  </div>
+  <div class="security-right">
+    <div class="security-big">99.94%</div>
+    <div class="security-label">Uptime 2025</div>
+  </div>
+</section>
+
+<!-- FOOTER CTA -->
+<section class="footer-cta">
+  <div class="section-label">Pronto para começar?</div>
+  <div class="footer-cta-heading">REDUZA SEU<br/>TEMPO DE LAUDO<br/><span style="color:var(--cross)">EM 80%.</span></div>
+  <p class="footer-cta-sub">15 minutos para integrar. Escolha o módulo e comece a usar.</p>
+  <a class="btn-primary" style="font-size:14px;padding:14px 32px" data-cta="/onboarding">Criar conta →</a>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-brand">
+    © 2026 GenomaFlow · Inteligência Clínica Assistiva · v2.4.0
+  </div>
+  <ul class="footer-links">
+    <li><a href="#">LGPD</a></li>
+    <li><a href="#">ANVISA</a></li>
+    <li><a href="#">Documentação</a></li>
+    <li><a href="#">Status</a></li>
+  </ul>
 </footer>
 
-  <script>
-    const APP_URL = 'http://localhost:4200';
-    // Em produção: const APP_URL = 'https://app.genomaflow.com.br';
+<script>
+  const APP_BASE = 'https://genomaflow.com.br';
 
-    document.addEventListener('DOMContentLoaded', () => {
-      document.querySelectorAll('[data-cta]').forEach(el => {
-        const path = el.getAttribute('data-cta');
-        if (el.tagName === 'A') el.href = APP_URL + path;
-        else el.onclick = () => window.location.href = APP_URL + path;
-      });
+  function resolveCtaUrl(path) {
+    try {
+      const token = localStorage.getItem('token');
+      if (token) {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (payload && payload.role) {
+          if (payload.role === 'master')   return APP_BASE + '/master';
+          if (payload.role === 'admin')    return APP_BASE + '/clinic/dashboard';
+          return APP_BASE + '/doctor/patients';
+        }
+      }
+    } catch (_) {}
+    return APP_BASE + path;
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-cta]').forEach(el => {
+      const path = el.getAttribute('data-cta');
+      el.href = resolveCtaUrl(path);
     });
-  </script>
+  });
+
+  // ── MONITOR VIDEO CARDS ──
+  (function() {
+    // Card 4: tab switching (ANTES/DEPOIS)
+    const card4 = document.getElementById('dc4');
+    if (card4) {
+      const tabs = card4.querySelectorAll('.monitor-tab');
+      const slots = card4.querySelectorAll('.demo-video-slot');
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const target = tab.dataset.slot;
+          tabs.forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          slots.forEach(s => {
+            if (s.dataset.slot === target) {
+              s.classList.remove('hidden');
+              s.querySelector('video').play();
+            } else {
+              s.querySelector('video').pause();
+              s.classList.add('hidden');
+            }
+          });
+        });
+      });
+    }
+
+    // Play when visible, pause when scrolled away
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        const videos = entry.target.querySelectorAll('video');
+        if (entry.isIntersecting) {
+          const active = entry.target.querySelector('.demo-video-slot:not(.hidden) video') || videos[0];
+          active?.play();
+        } else {
+          videos.forEach(v => v.pause());
+        }
+      });
+    }, { threshold: 0.2 });
+
+    document.querySelectorAll('.monitor-frame').forEach(frame => observer.observe(frame));
+  })();
+
+  function toggleFaq(btn) {
+    const item = btn.closest('.faq-item');
+    const isOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
+    if (!isOpen) item.classList.add('open');
+  }
+
+  // Calculator
+  function calcUpdate() {
+    const laudos = +document.getElementById('sl-laudos').value;
+    const minPerLaudo = +document.getElementById('sl-min').value;
+    const ticket = +document.getElementById('sl-ticket').value;
+
+    document.getElementById('val-laudos').textContent = laudos;
+    document.getElementById('val-min').innerHTML = minPerLaudo + '<span style="font-size:14px;color:var(--text-3)">min</span>';
+    document.getElementById('val-ticket').textContent = 'R$' + ticket;
+
+    const minPoupados = Math.max(0, minPerLaudo - 6);
+    const horasPoupadas = ((laudos * minPoupados) / 60).toFixed(1);
+    const atendimentos = Math.floor((laudos * minPoupados) / 35);
+    const receita = atendimentos * 4 * ticket;
+    const roi = (receita / 249).toFixed(1);
+
+    document.getElementById('r-horas').textContent = horasPoupadas + 'h';
+    document.getElementById('r-atend').textContent = atendimentos;
+    document.getElementById('r-receita').textContent = 'R$' + (receita >= 1000 ? (receita/1000).toFixed(1) + 'k' : receita);
+    document.getElementById('r-roi').textContent = roi + '×';
+  }
+
+  ['sl-laudos','sl-min','sl-ticket'].forEach(id => {
+    document.getElementById(id).addEventListener('input', calcUpdate);
+  });
+  calcUpdate();
+</script>
+
 </body>
 </html>

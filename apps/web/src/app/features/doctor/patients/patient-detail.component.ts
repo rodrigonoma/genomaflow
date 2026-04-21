@@ -1,10 +1,10 @@
 import { Component, computed, inject, OnInit, OnDestroy, signal } from '@angular/core';
+import { Chart, registerables } from 'chart.js';
+Chart.register(...registerables);
 import { HttpClient } from '@angular/common/http';
-import { Subscription } from 'rxjs';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { DatePipe, NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { WsService } from '../../../core/ws/ws.service';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -17,7 +17,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ExamCardComponent } from '../../../shared/components/exam-card/exam-card.component';
 import { environment } from '../../../../environments/environment';
-import { Subject, Exam, Alert, TreatmentPlan, TreatmentItem, ClinicalResult } from '../../../shared/models/api.models';
+import { Subject, Exam, Alert, TreatmentPlan, TreatmentItem, ClinicalResult, SPECIALTY_AGENTS } from '../../../shared/models/api.models';
 
 interface AlertChange {
   marker: string;
@@ -53,7 +53,7 @@ interface ComparisonBlock {
       display: inline-flex; align-items: center; gap: 6px;
       font-family: 'JetBrains Mono', monospace; font-size: 11px;
       text-transform: uppercase; letter-spacing: 0.1em;
-      color: #908fa0; cursor: pointer; background: none; border: none;
+      color: #a09fb2; cursor: pointer; background: none; border: none;
       margin-bottom: 1rem;
       transition: color 0.15s;
     }
@@ -77,7 +77,7 @@ interface ComparisonBlock {
     }
     .badge-human  { background: rgba(192,193,255,0.1); color: #c0c1ff; border: 1px solid rgba(192,193,255,0.2); }
     .badge-animal { background: rgba(74,214,160,0.1);  color: #4ad6a0; border: 1px solid rgba(74,214,160,0.2); }
-    .badge-sex    { background: rgba(70,69,84,0.2); color: #908fa0; border: 1px solid rgba(70,69,84,0.3); }
+    .badge-sex    { background: rgba(70,69,84,0.2); color: #a09fb2; border: 1px solid rgba(70,69,84,0.3); }
     .badge-species { background: rgba(245,193,74,0.1); color: #f5c14a; border: 1px solid rgba(245,193,74,0.2); }
 
     .header-actions { display: flex; gap: 8px; }
@@ -96,14 +96,14 @@ interface ComparisonBlock {
       gap: 1.5rem; max-width: 900px;
     }
     .profile-section {
-      background: #131b2e; border: 1px solid rgba(70,69,84,0.2);
+      background: #111929; border: 1px solid rgba(70,69,84,0.2);
       border-radius: 6px; padding: 1.5rem;
     }
     .profile-section.span-2 { grid-column: span 2; }
     .section-label {
       font-family: 'JetBrains Mono', monospace; font-size: 10px;
       text-transform: uppercase; letter-spacing: 0.15em;
-      color: #464554; margin-bottom: 1rem;
+      color: #6e6d80; margin-bottom: 1rem;
     }
     .field-row { display: flex; flex-direction: column; gap: 1rem; }
     .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -120,7 +120,7 @@ interface ComparisonBlock {
     .owner-name { font-weight: 600; font-size: 14px; color: #dae2fd; }
     .owner-meta {
       font-family: 'JetBrains Mono', monospace; font-size: 11px;
-      color: #908fa0; margin-top: 3px;
+      color: #7c7b8f; margin-top: 3px;
     }
 
     /* ── Evolução ── */
@@ -128,11 +128,11 @@ interface ComparisonBlock {
     .evolution-exam-row {
       display: flex; align-items: center; gap: 0.75rem;
       padding: 0.6rem 1rem; border-radius: 6px;
-      background: #131b2e; border: 1px solid rgba(70,69,84,0.15);
+      background: #111929; border: 1px solid rgba(70,69,84,0.15);
       cursor: pointer;
     }
     .evolution-exam-row.selected { border-color: #c0c1ff; }
-    .evolution-exam-meta { font-size: 13px; color: #908fa0; }
+    .evolution-exam-meta { font-size: 13px; color: #7c7b8f; }
     .evolution-exam-date { font-weight: 600; color: #dae2fd; margin-right: 0.5rem; }
     .compare-btn { margin-bottom: 2rem; }
     .comparison-header {
@@ -140,8 +140,10 @@ interface ComparisonBlock {
       letter-spacing: 0.1em; color: #c0c1ff; text-transform: uppercase;
       margin-bottom: 1.5rem;
     }
-    .comparison-blocks { display: flex; flex-direction: column; gap: 1.5rem; max-width: 800px; }
-    .comp-block { background: #131b2e; border-radius: 8px; padding: 1rem 1.25rem; border: 1px solid rgba(70,69,84,0.15); }
+    .comparison-blocks { display: flex; flex-direction: column; gap: 1.5rem; }
+    .comp-chart-wrap { height: 180px; margin: 0.75rem 0 0.25rem; position: relative; }
+    .comp-chart-wrap canvas { height: 100% !important; }
+    .comp-block { background: #111929; border-radius: 8px; padding: 1rem 1.25rem; border: 1px solid rgba(70,69,84,0.15); }
     .comp-agent-header {
       display: flex; align-items: baseline; gap: 1rem; margin-bottom: 0.75rem;
     }
@@ -149,13 +151,13 @@ interface ComparisonBlock {
       font-family: 'Space Grotesk', sans-serif; font-weight: 700;
       font-size: 13px; text-transform: uppercase; color: #c0c1ff; letter-spacing: 0.05em;
     }
-    .comp-risk-traj { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #908fa0; }
+    .comp-risk-traj { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #7c7b8f; }
     .comp-changes { display: flex; flex-direction: column; gap: 0.4rem; }
     .comp-change-row { display: flex; align-items: center; gap: 0.5rem; font-size: 13px; }
     .comp-change-kind { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; min-width: 72px; }
     .comp-marker { color: #dae2fd; }
-    .comp-severity { color: #908fa0; font-size: 12px; }
-    .comp-empty { color: #908fa0; font-style: italic; font-size: 13px; }
+    .comp-severity { color: #7c7b8f; font-size: 12px; }
+    .comp-empty { color: #7c7b8f; font-style: italic; font-size: 13px; }
 
     /* ── EXAMS ── */
     .exams-upload-row {
@@ -169,15 +171,15 @@ interface ComparisonBlock {
     .exam-wrap.status-border-done       { border-left: 4px solid #10b981; }
     .exam-wrap.status-border-processing { border-left: 4px solid #c0c1ff; }
     .exam-wrap.status-border-error      { border-left: 4px solid #ffb4ab; }
-    .exam-wrap.status-border-pending    { border-left: 4px solid #908fa0; }
+    .exam-wrap.status-border-pending    { border-left: 4px solid #7c7b8f; }
 
     /* ── AI RESULTS (redesign) ── */
-    .ai-exam-selector { margin-bottom: 1rem; }
+    .ai-exam-selector { margin-bottom: 1rem; padding-top: 0.75rem; }
     .ai-select-field { width: 300px; }
     .ai-status-strip { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem; }
     .ai-agent-chip {
       display: flex; align-items: center; gap: 0.5rem;
-      padding: 0.4rem 0.75rem; background: #131b2e;
+      padding: 0.4rem 0.75rem; background: #111929;
       border: 1px solid rgba(70,69,84,0.2); border-left: 3px solid;
       border-radius: 6px; cursor: pointer; transition: background 150ms;
     }
@@ -187,10 +189,10 @@ interface ComparisonBlock {
       font-weight: 700; color: #dae2fd; text-transform: uppercase; letter-spacing: 0.04em;
     }
     .ai-chip-sev { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; }
-    .ai-chip-count { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #908fa0; }
+    .ai-chip-count { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #7c7b8f; }
     .ai-cards { display: flex; flex-direction: column; gap: 0.5rem; max-width: 860px; }
     .ai-card {
-      background: #131b2e; border: 1px solid rgba(70,69,84,0.2);
+      background: #111929; border: 1px solid rgba(70,69,84,0.2);
       border-left: 4px solid; border-radius: 8px; overflow: hidden;
     }
     .ai-card-header {
@@ -198,13 +200,13 @@ interface ComparisonBlock {
       padding: 0.75rem 1rem; cursor: pointer; transition: background 150ms;
     }
     .ai-card-header:hover { background: #1a2540; }
-    .ai-expand-icon { font-size: 18px !important; width: 18px !important; height: 18px !important; color: #908fa0; }
+    .ai-expand-icon { font-size: 18px !important; width: 18px !important; height: 18px !important; color: #7c7b8f; }
     .ai-card-name {
       font-family: 'Space Grotesk', sans-serif; font-size: 13px;
       font-weight: 700; color: #dae2fd; text-transform: uppercase; letter-spacing: 0.04em; flex: 1;
     }
     .ai-card-sev { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; }
-    .ai-card-count { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #908fa0; }
+    .ai-card-count { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #7c7b8f; }
     .ai-result-link {
       font-family: 'JetBrains Mono', monospace; font-size: 10px;
       color: #c0c1ff; text-decoration: none; white-space: nowrap; margin-left: auto;
@@ -213,7 +215,7 @@ interface ComparisonBlock {
     .ai-card-body { padding: 0 1rem 1rem 1rem; border-top: 1px solid rgba(70,69,84,0.15); }
     .ai-section-label {
       font-family: 'JetBrains Mono', monospace; font-size: 9px;
-      text-transform: uppercase; letter-spacing: 0.1em; color: #464554;
+      text-transform: uppercase; letter-spacing: 0.1em; color: #6e6d80;
       margin: 1rem 0 0.5rem 0;
     }
     .ai-alerts { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.5rem; }
@@ -223,7 +225,7 @@ interface ComparisonBlock {
     }
     .ai-alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .ai-alert-marker { color: #dae2fd; flex: 1; }
-    .ai-alert-value { color: #908fa0; }
+    .ai-alert-value { color: #7c7b8f; }
     .ai-alert-sev { font-size: 10px; font-weight: 700; min-width: 56px; text-align: right; }
     .ai-interpretation { margin-bottom: 0.5rem; }
     .ai-interpretation p {
@@ -239,7 +241,7 @@ interface ComparisonBlock {
     }
     .ai-rec-type {
       font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
-      letter-spacing: 0.08em; color: #908fa0; flex-shrink: 0; padding-top: 2px; min-width: 88px;
+      letter-spacing: 0.08em; color: #7c7b8f; flex-shrink: 0; padding-top: 2px; min-width: 88px;
     }
     .ai-rec-desc { font-family: 'Inter', sans-serif; font-size: 13px; color: #c7c4d7; line-height: 1.4; }
 
@@ -253,7 +255,7 @@ interface ComparisonBlock {
       font-size: 1rem; color: #dae2fd;
     }
     .plan-card {
-      background: #131b2e; border: 1px solid rgba(70,69,84,0.2);
+      background: #111929; border: 1px solid rgba(70,69,84,0.2);
       border-radius: 6px; padding: 1.25rem; margin-bottom: 1rem;
       max-width: 900px;
     }
@@ -264,7 +266,7 @@ interface ComparisonBlock {
     .plan-title { font-weight: 700; font-size: 15px; color: #dae2fd; }
     .plan-meta {
       font-family: 'JetBrains Mono', monospace; font-size: 10px;
-      color: #464554; margin-top: 3px;
+      color: #6e6d80; margin-top: 3px;
     }
     .plan-type-badge {
       font-family: 'JetBrains Mono', monospace; font-size: 10px;
@@ -273,11 +275,11 @@ interface ComparisonBlock {
     }
     .type-therapeutic { background: rgba(192,193,255,0.1); color: #c0c1ff; }
     .type-nutritional  { background: rgba(74,214,160,0.1);  color: #4ad6a0; }
-    .plan-desc { font-size: 13px; color: #908fa0; margin-bottom: 1rem; line-height: 1.5; }
+    .plan-desc { font-size: 13px; color: #7c7b8f; margin-bottom: 1rem; line-height: 1.5; }
     .items-table { width: 100%; border-collapse: collapse; }
     .items-table th {
       font-family: 'JetBrains Mono', monospace; font-size: 9px;
-      text-transform: uppercase; letter-spacing: 0.15em; color: #464554;
+      text-transform: uppercase; letter-spacing: 0.15em; color: #6e6d80;
       text-align: left; padding: 6px 0; border-bottom: 1px solid rgba(70,69,84,0.2);
     }
     .items-table td {
@@ -309,17 +311,17 @@ interface ComparisonBlock {
       border-radius: 4px; width: 100%; outline: none;
       font-family: 'Inter', sans-serif;
     }
-    .item-row input:focus { border-color: #464554; }
+    .item-row input:focus { border-color: #6e6d80; }
     .btn-icon {
       background: none; border: 1px solid rgba(70,69,84,0.3);
-      color: #908fa0; padding: 8px; border-radius: 4px;
+      color: #a09fb2; padding: 8px; border-radius: 4px;
       cursor: pointer; transition: all 0.15s;
     }
     .btn-icon:hover { border-color: #ffb4ab; color: #ffb4ab; }
     .add-item-btn {
       font-family: 'JetBrains Mono', monospace; font-size: 11px;
       text-transform: uppercase; letter-spacing: 0.08em;
-      color: #908fa0; background: none; border: 1px dashed rgba(70,69,84,0.3);
+      color: #a09fb2; background: none; border: 1px dashed rgba(70,69,84,0.3);
       padding: 8px 14px; border-radius: 4px; cursor: pointer;
       transition: all 0.15s; margin-top: 4px;
     }
@@ -327,12 +329,48 @@ interface ComparisonBlock {
     .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1rem; }
 
     .empty-state {
-      font-size: 14px; color: #908fa0; padding: 3rem; text-align: center;
+      font-size: 14px; color: #7c7b8f; padding: 3rem; text-align: center;
     }
 
     .plan-status-active    { color: #4ad6a0; }
     .plan-status-completed { color: #c0c1ff; }
-    .plan-status-cancelled { color: #908fa0; }
+    .plan-status-cancelled { color: #7c7b8f; }
+
+    /* ── UPLOAD CONFIRMATION PANEL ── */
+    .upload-panel {
+      background: #111929; border: 1px solid rgba(192,193,255,0.15);
+      border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem; max-width: 700px;
+    }
+    .upload-panel-title {
+      font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+      font-size: 13px; color: #dae2fd; margin-bottom: 1rem;
+    }
+    .upload-file-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      color: #c0c1ff; background: rgba(73,75,214,0.1);
+      border: 1px solid rgba(73,75,214,0.25); padding: 4px 10px;
+      border-radius: 4px; margin-bottom: 1rem;
+    }
+    .agents-section-label {
+      font-family: 'JetBrains Mono', monospace; font-size: 9px;
+      text-transform: uppercase; letter-spacing: 0.15em; color: #6e6d80;
+      margin-bottom: 0.5rem;
+    }
+    .agents-row { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .agent-check {
+      display: flex; align-items: center; gap: 6px;
+      background: #0b1326; border: 1px solid rgba(70,69,84,0.3);
+      border-radius: 6px; padding: 0.5rem 0.75rem; cursor: pointer;
+      transition: border-color 150ms;
+    }
+    .agent-check.selected { border-color: rgba(192,193,255,0.4); }
+    .agent-check-label {
+      font-family: 'Space Grotesk', sans-serif; font-size: 12px;
+      font-weight: 600; color: #c7c4d7;
+    }
+    .upload-panel-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1rem; }
+    .upload-panel-error { color: #ffb4ab; font-size: 12px; margin-top: 0.5rem; }
   `],
   template: `
     <div class="page-header">
@@ -470,6 +508,71 @@ interface ComparisonBlock {
                 </div>
               </div>
 
+              <!-- Contexto Clínico (human only) -->
+              @if (subject()!.subject_type === 'human') {
+                <div class="profile-section span-2">
+                  <div class="section-label">Contexto Clínico</div>
+                  <div class="field-row">
+                    <div class="field-pair">
+                      <mat-form-field appearance="outline">
+                        <mat-label>Tabagismo</mat-label>
+                        <mat-select [(ngModel)]="editForm.smoking">
+                          <mat-option value="">Não informado</mat-option>
+                          <mat-option value="never">Nunca fumou</mat-option>
+                          <mat-option value="former">Ex-fumante</mat-option>
+                          <mat-option value="current_light">Fumante leve (&lt;10/dia)</mat-option>
+                          <mat-option value="current_heavy">Fumante pesado (≥10/dia)</mat-option>
+                        </mat-select>
+                      </mat-form-field>
+                      <mat-form-field appearance="outline">
+                        <mat-label>Consumo de álcool</mat-label>
+                        <mat-select [(ngModel)]="editForm.alcohol">
+                          <mat-option value="">Não informado</mat-option>
+                          <mat-option value="none">Não consome</mat-option>
+                          <mat-option value="occasional">Ocasional</mat-option>
+                          <mat-option value="moderate">Moderado</mat-option>
+                          <mat-option value="heavy">Abusivo</mat-option>
+                        </mat-select>
+                      </mat-form-field>
+                    </div>
+                    <div class="field-pair">
+                      <mat-form-field appearance="outline">
+                        <mat-label>Dieta</mat-label>
+                        <mat-select [(ngModel)]="editForm.diet_type">
+                          <mat-option value="">Não informado</mat-option>
+                          <mat-option value="omnivore">Onívora</mat-option>
+                          <mat-option value="vegetarian">Vegetariana</mat-option>
+                          <mat-option value="vegan">Vegana</mat-option>
+                          <mat-option value="low_carb">Low Carb</mat-option>
+                          <mat-option value="mediterranean">Mediterrânea</mat-option>
+                          <mat-option value="other">Outra</mat-option>
+                        </mat-select>
+                      </mat-form-field>
+                      <mat-form-field appearance="outline">
+                        <mat-label>Atividade física</mat-label>
+                        <mat-select [(ngModel)]="editForm.physical_activity">
+                          <mat-option value="">Não informado</mat-option>
+                          <mat-option value="sedentary">Sedentário</mat-option>
+                          <mat-option value="light">Leve (1–2x/sem)</mat-option>
+                          <mat-option value="moderate">Moderada (3–4x/sem)</mat-option>
+                          <mat-option value="intense">Intensa (5+x/sem)</mat-option>
+                        </mat-select>
+                      </mat-form-field>
+                    </div>
+                    <mat-form-field appearance="outline">
+                      <mat-label>Medicamentos em uso</mat-label>
+                      <textarea matInput rows="2" [(ngModel)]="editForm.medications"
+                                placeholder="Ex: metformina 500mg, atorvastatina 20mg..."></textarea>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline">
+                      <mat-label>Histórico familiar relevante</mat-label>
+                      <textarea matInput rows="2" [(ngModel)]="editForm.family_history"
+                                placeholder="Ex: pai com IAM aos 55, mãe com DM2..."></textarea>
+                    </mat-form-field>
+                  </div>
+                </div>
+              }
+
               <!-- Owner card (vet only) -->
               @if (subject()!.subject_type === 'animal' && subject()!.owner_name) {
                 <div class="profile-section">
@@ -498,18 +601,69 @@ interface ComparisonBlock {
 
         <!-- ── EXAMES ── -->
         <mat-tab [label]="'Exames (' + exams().length + ')'">
-          <div class="exams-upload-row">
-            <input #examFile type="file" accept=".pdf" style="display:none"
-                   (change)="onExamFile($event)"/>
-            <button mat-stroked-button class="upload-exam-btn" (click)="examFile.click()"
-                    [disabled]="uploading()">
-              <mat-icon>upload_file</mat-icon>
-              {{ uploading() ? 'Enviando…' : 'Upload de Exame (PDF)' }}
-            </button>
-            @if (uploadError()) {
-              <span class="upload-error">{{ uploadError() }}</span>
-            }
-          </div>
+          <input #examFile type="file" accept=".pdf" style="display:none"
+                 (change)="onExamFile($event)"/>
+
+          @if (!pendingFile()) {
+            <div class="exams-upload-row">
+              <button mat-stroked-button class="upload-exam-btn" (click)="examFile.click()"
+                      [disabled]="uploading()">
+                <mat-icon>upload_file</mat-icon>
+                Upload de Exame (PDF)
+              </button>
+              @if (uploadError()) {
+                <span class="upload-error">{{ uploadError() }}</span>
+              }
+            </div>
+          } @else {
+            <div class="upload-panel">
+              <div class="upload-panel-title">Confirmar envio de exame</div>
+              <div class="upload-file-chip">
+                <mat-icon style="font-size:14px;width:14px;height:14px">description</mat-icon>
+                {{ pendingFile()!.name }}
+              </div>
+
+              @if (subject()?.subject_type === 'human') {
+                <div class="agents-section-label">Agentes de análise</div>
+                <div class="agents-row">
+                  @for (agent of humanPhase1Agents; track agent.value) {
+                    <div class="agent-check" [class.selected]="uploadAgents().includes(agent.value)"
+                         (click)="toggleUploadAgent(agent.value)">
+                      <mat-checkbox [checked]="uploadAgents().includes(agent.value)"
+                                    (click)="$event.stopPropagation()"
+                                    (change)="toggleUploadAgent(agent.value)" color="primary"/>
+                      <span class="agent-check-label">{{ agent.label }}</span>
+                    </div>
+                  }
+                </div>
+
+                <mat-form-field appearance="outline" style="width:100%;margin-bottom:0.75rem">
+                  <mat-label>Queixa principal</mat-label>
+                  <input matInput [(ngModel)]="chiefComplaintValue"
+                         placeholder="Ex: dor no peito, fadiga persistente..."/>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline" style="width:100%">
+                  <mat-label>Sintomas atuais</mat-label>
+                  <textarea matInput rows="2" [(ngModel)]="currentSymptomsValue"
+                            placeholder="Ex: dispneia aos esforços, edema em MMII..."></textarea>
+                </mat-form-field>
+              }
+
+              <div class="upload-panel-actions">
+                <button mat-button (click)="cancelUpload()">Cancelar</button>
+                <button mat-flat-button style="background:#c0c1ff;color:#1000a9;font-weight:700"
+                        [disabled]="uploading()" (click)="submitUpload()">
+                  <mat-icon>send</mat-icon>
+                  {{ uploading() ? 'Enviando…' : 'Enviar para análise' }}
+                </button>
+              </div>
+
+              @if (uploadError()) {
+                <div class="upload-panel-error">{{ uploadError() }}</div>
+              }
+            </div>
+          }
           @if (exams().length === 0) {
             <p class="empty-state">Nenhum exame registrado.</p>
           } @else {
@@ -601,13 +755,42 @@ interface ComparisonBlock {
                           }
                         </div>
 
-                        @if (cr.recommendations?.length) {
+                        @if (getStandardRecs(cr.recommendations).length) {
                           <div class="ai-section-label">RECOMENDAÇÕES</div>
                           <div class="ai-recs">
-                            @for (rec of cr.recommendations; track rec.description) {
+                            @for (rec of getStandardRecs(cr.recommendations); track rec.description) {
                               <div class="ai-rec-item"
                                    [style.border-left-color]="severityColor(rec.priority === 'high' ? 'high' : rec.priority === 'medium' ? 'medium' : 'low')">
                                 <span class="ai-rec-type">{{ rec.type.toUpperCase() }}</span>
+                                <span class="ai-rec-desc">{{ rec.description }}</span>
+                              </div>
+                            }
+                          </div>
+                        }
+
+                        @if (getSuggestedExams(cr.recommendations).length) {
+                          <div class="ai-section-label">EXAMES SUGERIDOS</div>
+                          <div class="ai-recs">
+                            @for (rec of getSuggestedExams(cr.recommendations); track rec.description) {
+                              <div class="ai-rec-item" [style.border-left-color]="severityColor('medium')">
+                                <span class="ai-rec-type">EXAME</span>
+                                <div>
+                                  <span class="ai-rec-desc">{{ rec._exam }}</span>
+                                  @if (rec._rationale) {
+                                    <div style="font-family:'Inter',sans-serif;font-size:11px;color:#7c7b8f;margin-top:2px;font-style:italic">{{ rec._rationale }}</div>
+                                  }
+                                </div>
+                              </div>
+                            }
+                          </div>
+                        }
+
+                        @if (getContextualFactors(cr.recommendations).length) {
+                          <div class="ai-section-label">FATORES CONTEXTUAIS</div>
+                          <div class="ai-recs">
+                            @for (rec of getContextualFactors(cr.recommendations); track rec.description) {
+                              <div class="ai-rec-item" [style.border-left-color]="severityColor('low')">
+                                <span class="ai-rec-type">CONTEXTO</span>
                                 <span class="ai-rec-desc">{{ rec.description }}</span>
                               </div>
                             }
@@ -667,7 +850,9 @@ interface ComparisonBlock {
                     <div class="comp-block">
                       <div class="comp-agent-header">
                         <span class="comp-agent-name">{{ agentLabel(block.agent_type) }}</span>
-                        <span class="comp-risk-traj">{{ block.risk_trajectory.join(' → ') }}</span>
+                      </div>
+                      <div class="comp-chart-wrap">
+                        <canvas [id]="'evo-chart-' + block.agent_type"></canvas>
                       </div>
                       @if (block.changes.length === 0) {
                         <span class="comp-empty">Risk score alterado, sem mudanças em alertas.</span>
@@ -804,8 +989,6 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   private http   = inject(HttpClient);
   private route  = inject(ActivatedRoute);
   private snack  = inject(MatSnackBar);
-  private ws     = inject(WsService);
-  private wsSub  = new Subscription();
 
   subject   = signal<Subject | null>(null);
   exams     = signal<Exam[]>([]);
@@ -818,6 +1001,19 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   expandedAgents   = signal<Set<string>>(new Set());
   selectedExamIds = signal(new Set<string>());
   comparison      = signal<ComparisonBlock[] | null>(null);
+  private evoCharts: Chart[] = [];
+
+  pendingFile     = signal<File | null>(null);
+  uploadAgents    = signal<string[]>([]);
+  doctorSpecialty = signal<string | null>(null);
+  chiefComplaintValue  = '';
+  currentSymptomsValue = '';
+
+  readonly humanPhase1Agents = [
+    { value: 'metabolic',       label: 'Metabólico' },
+    { value: 'cardiovascular',  label: 'Cardiovascular' },
+    { value: 'hematology',      label: 'Hematologia' }
+  ];
 
   sortedAiExams = computed(() =>
     [...this.aiResults()].sort((a, b) =>
@@ -852,35 +1048,8 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     this.loadSubject(id);
     this.loadExams(id);
     this.loadPlans(id);
-    this.subscribeToExamUpdates(id);
-  }
-
-  ngOnDestroy(): void { this.wsSub.unsubscribe(); }
-
-  private subscribeToExamUpdates(subjectId: string): void {
-    this.wsSub.add(
-      this.ws.examUpdates$.subscribe(({ exam_id }) => {
-        const match = this.exams().find(e => e.id === exam_id);
-        if (!match) return;
-        // Reload exam details to get results then update signals
-        this.http.get<Exam>(`${environment.apiUrl}/exams/${exam_id}`).subscribe(updated => {
-          this.exams.update(list => list.map(e => e.id === exam_id ? updated : e));
-          if (updated.status === 'done') {
-            this.aiResults.update(list => {
-              const exists = list.some(e => e.id === exam_id);
-              return exists ? list.map(e => e.id === exam_id ? updated : e) : [updated, ...list];
-            });
-          }
-        });
-      })
-    );
-    this.wsSub.add(
-      this.ws.examError$.subscribe(({ exam_id }) => {
-        if (this.exams().some(e => e.id === exam_id)) {
-          this.exams.update(list => list.map(e => e.id === exam_id ? { ...e, status: 'error' } : e));
-        }
-      })
-    );
+    this.http.get<{ specialty: string | null }>(`${environment.apiUrl}/auth/me`)
+      .subscribe({ next: me => this.doctorSpecialty.set(me.specialty ?? null), error: () => {} });
   }
 
   private loadSubject(id: string): void {
@@ -953,7 +1122,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   }
 
   private readonly SEV_COLORS: Record<string, string> = {
-    critical: '#ffb4ab', high: '#ffcb6b', medium: '#c0c1ff', low: '#4ad6a0', none: '#464554'
+    critical: '#ffb4ab', high: '#ffcb6b', medium: '#c0c1ff', low: '#4ad6a0', none: '#6e6d80'
   };
 
   topSeverity(alerts: Alert[]): string {
@@ -965,7 +1134,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   }
 
   severityColor(sev: string): string {
-    return this.SEV_COLORS[sev?.toLowerCase()] ?? '#464554';
+    return this.SEV_COLORS[sev?.toLowerCase()] ?? '#6e6d80';
   }
 
   sortedAlerts(alerts: Alert[]): Alert[] {
@@ -1070,13 +1239,14 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     }
 
     this.comparison.set(blocks);
+    setTimeout(() => this.renderEvolutionCharts(), 0);
   }
 
   private readonly AGENT_LABELS: Record<string, string> = {
     metabolic: 'Metabólico', cardiovascular: 'Cardiovascular',
     hematology: 'Hematologia', therapeutic: 'Terapêutico',
-    nutrition: 'Nutrição', small_animals: 'Pequenos Animais',
-    equine: 'Equino', bovine: 'Bovino'
+    nutrition: 'Nutrição', clinical_correlation: 'Correlação Clínica',
+    small_animals: 'Pequenos Animais', equine: 'Equino', bovine: 'Bovino'
   };
   agentLabel(type: string): string { return this.AGENT_LABELS[type] ?? type; }
 
@@ -1086,28 +1256,89 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   kindIcon(kind: string): string { return this.KIND_ICONS[kind] ?? 'circle'; }
 
   private readonly KIND_COLORS: Record<string, string> = {
-    new: '#ffb4ab', worsened: '#ffcb6b', improved: '#4ad6a0', resolved: '#908fa0'
+    new: '#ffb4ab', worsened: '#ffcb6b', improved: '#4ad6a0', resolved: '#7c7b8f'
   };
-  kindColor(kind: string): string { return this.KIND_COLORS[kind] ?? '#908fa0'; }
+  kindColor(kind: string): string { return this.KIND_COLORS[kind] ?? '#7c7b8f'; }
 
   private readonly KIND_LABELS: Record<string, string> = {
     new: 'NOVO', worsened: 'PIOROU', improved: 'MELHOROU', resolved: 'RESOLVIDO'
   };
   kindLabel(kind: string): string { return this.KIND_LABELS[kind] ?? kind; }
 
+  getStandardRecs(recs: any[]): any[] {
+    return (recs || []).filter(r => r.type !== 'suggested_exam' && r.type !== 'contextual_factor');
+  }
+
+  getSuggestedExams(recs: any[]): any[] {
+    return (recs || []).filter(r => r.type === 'suggested_exam');
+  }
+
+  getContextualFactors(recs: any[]): any[] {
+    return (recs || []).filter(r => r.type === 'contextual_factor');
+  }
+
   onExamFile(event: Event): void {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
+    (event.target as HTMLInputElement).value = '';
+
+    if (this.subject()?.subject_type === 'human') {
+      const specialty = this.doctorSpecialty();
+      const preSelected = specialty && SPECIALTY_AGENTS[specialty]?.length
+        ? SPECIALTY_AGENTS[specialty]
+        : ['metabolic', 'cardiovascular', 'hematology'];
+      this.uploadAgents.set([...preSelected]);
+      this.chiefComplaintValue = '';
+      this.currentSymptomsValue = '';
+      this.uploadError.set('');
+      this.pendingFile.set(file);
+    } else {
+      this.doUpload(file);
+    }
+  }
+
+  toggleUploadAgent(type: string): void {
+    const agents = this.uploadAgents();
+    if (agents.includes(type)) {
+      this.uploadAgents.set(agents.filter(a => a !== type));
+    } else {
+      this.uploadAgents.set([...agents, type]);
+    }
+  }
+
+  cancelUpload(): void {
+    this.pendingFile.set(null);
+    this.uploadError.set('');
+    this.chiefComplaintValue = '';
+    this.currentSymptomsValue = '';
+  }
+
+  submitUpload(): void {
+    const file = this.pendingFile();
+    if (!file) return;
+    const extraFields = this.subject()?.subject_type === 'human' ? {
+      selected_agents: JSON.stringify(this.uploadAgents()),
+      chief_complaint: this.chiefComplaintValue,
+      current_symptoms: this.currentSymptomsValue
+    } : undefined;
+    this.doUpload(file, extraFields, () => this.pendingFile.set(null));
+  }
+
+  private doUpload(file: File, extra?: Record<string, string>, onSuccess?: () => void): void {
     const id = this.subject()!.id;
     this.uploading.set(true);
     this.uploadError.set('');
     const form = new FormData();
     form.append('patient_id', id);
     form.append('file', file);
+    if (extra) {
+      Object.entries(extra).forEach(([k, v]) => form.append(k, v));
+    }
     this.http.post<{ exam_id: string; status: string }>(`${environment.apiUrl}/exams`, form)
       .subscribe({
         next: ({ exam_id, status }) => {
           this.uploading.set(false);
+          onSuccess?.();
           const newExam: Exam = {
             id: exam_id,
             subject_id: id,
@@ -1119,12 +1350,108 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
             results: null
           };
           this.exams.update(e => [newExam, ...e]);
-          (event.target as HTMLInputElement).value = '';
         },
         error: (err: any) => {
           this.uploading.set(false);
           this.uploadError.set(err.error?.error ?? 'Erro ao enviar exame');
         }
       });
+  }
+
+  ngOnDestroy(): void {
+    this.evoCharts.forEach(c => c.destroy());
+  }
+
+  private renderEvolutionCharts(): void {
+    this.evoCharts.forEach(c => c.destroy());
+    this.evoCharts = [];
+
+    const blocks = this.comparison() ?? [];
+    const exams = this.selectedSortedExams();
+    if (exams.length < 2 || !blocks.length) return;
+
+    const labels = exams.map(e =>
+      new Date(e.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+    );
+
+    const COLORS = ['#c0c1ff', '#10b981', '#ffb783', '#f5c14a', '#60a5fa', '#f472b6', '#a78bfa'];
+    const GRID   = 'rgba(70,69,84,0.18)';
+    const TICK   = '#7c7b8f';
+    const LEGEND = '#c8c7d9';
+
+    for (const block of blocks) {
+      const canvas = document.getElementById(`evo-chart-${block.agent_type}`) as HTMLCanvasElement | null;
+      if (!canvas) continue;
+
+      // Collect numeric metric keys for this agent
+      const metricKeys = new Set<string>();
+      for (const exam of exams) {
+        const result = (exam.results ?? []).find(r => r.agent_type === block.agent_type);
+        for (const [k, v] of Object.entries(result?.risk_scores ?? {})) {
+          if (!isNaN(parseFloat(v as string))) metricKeys.add(k);
+        }
+      }
+
+      const datasets = [...metricKeys].map((key, i) => ({
+        label: key,
+        data: exams.map(exam => {
+          const result = (exam.results ?? []).find(r => r.agent_type === block.agent_type);
+          const v = result?.risk_scores?.[key];
+          return v !== undefined ? parseFloat(v as string) : null;
+        }),
+        borderColor: COLORS[i % COLORS.length],
+        backgroundColor: COLORS[i % COLORS.length] + '18',
+        pointBackgroundColor: COLORS[i % COLORS.length],
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        tension: 0.35,
+        spanGaps: true,
+        fill: false,
+      }));
+
+      if (!datasets.length) continue;
+
+      const chart = new Chart(canvas, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              labels: {
+                color: LEGEND,
+                font: { family: "'JetBrains Mono', monospace", size: 10 },
+                boxWidth: 8, padding: 10,
+              }
+            },
+            tooltip: {
+              backgroundColor: '#1a2440',
+              borderColor: 'rgba(70,69,84,0.4)',
+              borderWidth: 1,
+              titleColor: '#dae2fd',
+              bodyColor: '#a09fb2',
+              titleFont: { family: "'Space Grotesk'" },
+              bodyFont: { family: "'JetBrains Mono'", size: 11 },
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: TICK, font: { family: "'JetBrains Mono'", size: 10 } },
+              grid: { color: GRID },
+              border: { color: GRID },
+            },
+            y: {
+              ticks: { color: TICK, font: { family: "'JetBrains Mono'", size: 10 } },
+              grid: { color: GRID },
+              border: { color: GRID },
+            }
+          }
+        }
+      });
+
+      this.evoCharts.push(chart);
+    }
   }
 }
