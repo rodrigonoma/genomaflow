@@ -17,6 +17,11 @@ export const DOCTOR_ROUTES: Routes = [
       import('./exams/exam-upload.component').then(m => m.ExamUploadComponent)
   },
   {
+    path: 'review-queue',
+    loadComponent: () =>
+      import('./review-queue/review-queue.component').then(m => m.ReviewQueueComponent)
+  },
+  {
     path: 'results/:examId',
     loadComponent: () =>
       import('./results/result-panel.component').then(m => m.ResultPanelComponent)

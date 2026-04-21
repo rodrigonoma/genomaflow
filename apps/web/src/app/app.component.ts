@@ -145,18 +145,16 @@ import { ChatPanelComponent } from './features/chat/chat-panel.component';
         </div>
 
         <nav class="sidebar-nav">
-          @if (user.role === 'admin') {
-            <div class="nav-section-label">Gestão</div>
-            <a class="nav-item" routerLink="/clinic/dashboard" routerLinkActive="active">
-              <mat-icon>dashboard</mat-icon> Dashboard
-            </a>
-            <a class="nav-item" routerLink="/clinic/users" routerLinkActive="active">
-              <mat-icon>group</mat-icon> Usuários
-            </a>
-            <a class="nav-item" routerLink="/clinic/billing" routerLinkActive="active">
-              <mat-icon>account_balance_wallet</mat-icon> Créditos
-            </a>
-          }
+          <div class="nav-section-label">Gestão</div>
+          <a class="nav-item" routerLink="/clinic/dashboard" routerLinkActive="active">
+            <mat-icon>dashboard</mat-icon> Dashboard
+          </a>
+          <a class="nav-item" routerLink="/clinic/users" routerLinkActive="active">
+            <mat-icon>group</mat-icon> Usuários
+          </a>
+          <a class="nav-item" routerLink="/clinic/billing" routerLinkActive="active">
+            <mat-icon>account_balance_wallet</mat-icon> Créditos
+          </a>
           <div class="nav-section-label">Clínica</div>
           <a class="nav-item" routerLink="/doctor/patients" routerLinkActive="active">
             <mat-icon>{{ user.module === 'veterinary' ? 'pets' : 'people' }}</mat-icon>

@@ -46,8 +46,6 @@ import { User } from '../../../shared/models/api.models';
             <mat-form-field appearance="outline">
               <mat-label>Role</mat-label>
               <mat-select [(ngModel)]="newRole">
-                <mat-option value="doctor">Médico</mat-option>
-                <mat-option value="lab_tech">Lab Tech</mat-option>
                 <mat-option value="admin">Admin</mat-option>
               </mat-select>
             </mat-form-field>
@@ -70,13 +68,7 @@ import { User } from '../../../shared/models/api.models';
         <ng-container matColumnDef="role">
           <th mat-header-cell *matHeaderCellDef>Role</th>
           <td mat-cell *matCellDef="let u">
-            @if (u.role === 'admin') {
-              <span class="role-badge role-admin">ADMIN</span>
-            } @else if (u.role === 'doctor') {
-              <span class="role-badge role-doctor">DOCTOR</span>
-            } @else {
-              <span class="role-badge role-lab">LAB TECH</span>
-            }
+            <span class="role-badge role-admin">ADMIN</span>
           </td>
         </ng-container>
         <ng-container matColumnDef="created_at">
@@ -241,7 +233,7 @@ export class UsersComponent implements OnInit {
   showInvite = false;
   newEmail = '';
   newPassword = '';
-  newRole = 'doctor';
+  newRole = 'admin';
   inviteError = '';
 
   ngOnInit(): void { this.load(); }

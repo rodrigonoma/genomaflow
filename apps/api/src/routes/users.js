@@ -1,7 +1,7 @@
 const bcrypt = require('bcrypt');
 const { withTenant } = require('../db/tenant');
 
-const VALID_ROLES = ['doctor', 'lab_tech', 'admin'];
+const VALID_ROLES = ['admin'];
 
 module.exports = async function (fastify) {
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {

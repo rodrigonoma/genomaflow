@@ -118,7 +118,7 @@ export interface ReviewQueueItem extends Exam {
 export interface User {
   id: string;
   email: string;
-  role: 'doctor' | 'lab_tech' | 'admin';
+  role: 'admin';
   specialty?: string;
   created_at: string;
 }
@@ -126,7 +126,7 @@ export interface User {
 export interface JwtPayload {
   user_id: string;
   tenant_id: string;
-  role: 'doctor' | 'lab_tech' | 'admin';
+  role: 'admin' | 'master';
   module: 'human' | 'veterinary';
 }
 

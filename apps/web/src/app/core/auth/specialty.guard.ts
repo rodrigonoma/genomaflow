@@ -11,8 +11,8 @@ export const specialtyGuard: CanActivateFn = () => {
   const http   = inject(HttpClient);
   const router = inject(Router);
 
-  // Only doctors on the human module need a specialty set
-  if (auth.currentUser?.module !== 'human' || auth.currentUser?.role !== 'doctor') return true;
+  // Only human module users need a specialty set
+  if (auth.currentUser?.module !== 'human') return true;
 
   return http.get<{ specialty: string | null }>(`${environment.apiUrl}/auth/me`).pipe(
     map(user => {

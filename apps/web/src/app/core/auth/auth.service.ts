@@ -45,11 +45,7 @@ export class AuthService {
         }),
         map(({ token }) => {
           const payload = this.decode(token);
-          const path =
-            payload.role === 'doctor' ? '/doctor/patients' :
-            payload.role === 'lab_tech' ? '/lab/uploads' :
-            '/clinic/dashboard';
-          this.router.navigate([path]);
+          this.router.navigate(['/clinic/dashboard']);
         })
       );
   }
