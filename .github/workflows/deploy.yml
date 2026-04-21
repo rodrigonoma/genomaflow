@@ -49,16 +49,53 @@ jobs:
           docker push $IMAGE:${{ env.IMAGE_TAG }}
           docker push $IMAGE:latest
 
-      - name: Force new ECS deployment
+      - name: Update ECS task definitions and deploy
         run: |
+          ACCOUNT=${{ secrets.AWS_ACCOUNT_ID }}
+          TAG=${{ env.IMAGE_TAG }}
+
+          declare -A SERVICE_TASK=(
+            [genomaflow-api]="genomaflowecsApiTask"
+            [genomaflow-worker]="genomaflowecsWorkerTask"
+            [genomaflow-web]="genomaflowecsWebTask"
+          )
+          declare -A SERVICE_IMAGE=(
+            [genomaflow-api]="$ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/genomaflow/api:$TAG"
+            [genomaflow-worker]="$ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/genomaflow/worker:$TAG"
+            [genomaflow-web]="$ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/genomaflow/web:$TAG"
+          )
+
           for svc in genomaflow-api genomaflow-worker genomaflow-web; do
-            echo "Redeploy: $svc"
+            FAMILY_PREFIX="${SERVICE_TASK[$svc]}"
+            NEW_IMAGE="${SERVICE_IMAGE[$svc]}"
+
+            # Get current task definition family name
+            TASK_DEF_ARN=$(aws ecs describe-services \
+              --cluster genomaflow --services $svc \
+              --query 'services[0].taskDefinition' --output text)
+
+            FAMILY=$(aws ecs describe-task-definition \
+              --task-definition "$TASK_DEF_ARN" \
+              --query 'taskDefinition.family' --output text)
+
+            # Build new task definition with updated image
+            NEW_TASK_DEF=$(aws ecs describe-task-definition \
+              --task-definition "$TASK_DEF_ARN" \
+              --query 'taskDefinition' --output json | \
+              jq --arg img "$NEW_IMAGE" \
+                'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
+                 .containerDefinitions[0].image = $img')
+
+            NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+              --cli-input-json "$NEW_TASK_DEF" \
+              --query 'taskDefinition.taskDefinitionArn' --output text)
+            echo "$svc → new task def: $NEW_TASK_DEF_ARN"
+
             aws ecs update-service \
               --cluster genomaflow \
-              --service  $svc \
-              --force-new-deployment \
-              --query 'service.serviceName' \
-              --output text
+              --service $svc \
+              --task-definition "$NEW_TASK_DEF_ARN" \
+              --query 'service.serviceName' --output text
           done
 
       - name: Run migrations
