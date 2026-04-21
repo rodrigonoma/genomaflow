@@ -10,10 +10,11 @@ export class WsService {
 
   constructor(private zone: NgZone) {}
 
-  examUpdates$     = new Subject<{ exam_id: string }>();
-  examError$       = new Subject<{ exam_id: string; error_message: string }>();
-  billingAlert$    = new Subject<{ balance: number }>();
+  examUpdates$      = new Subject<{ exam_id: string }>();
+  examError$        = new Subject<{ exam_id: string; error_message: string }>();
+  billingAlert$     = new Subject<{ balance: number }>();
   billingExhausted$ = new Subject<void>();
+  reconnect$        = new Subject<void>();
 
   connect(token: string): void {
     this.disconnect();
@@ -30,7 +31,10 @@ export class WsService {
     const url = `${protocol}//${location.host}/exams/subscribe?token=${this.token}`;
     this.ws = new WebSocket(url);
 
-    this.ws.onopen = () => { this.reconnectDelay = 1000; };
+    this.ws.onopen = () => {
+      this.reconnectDelay = 1000;
+      this.zone.run(() => this.reconnect$.next());
+    };
 
     this.ws.onmessage = (event) => {
       try {
