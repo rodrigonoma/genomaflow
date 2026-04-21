@@ -2,20 +2,26 @@ import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
 import { Router } from '@angular/router';
 import { authGuard } from './core/auth/auth.guard';
+import { masterGuard } from './core/auth/master.guard';
 import { AuthService } from './core/auth/auth.service';
+
+const homeForRole = (router: Router, role: string | undefined) => {
+  if (role === 'master') return router.createUrlTree(['/master']);
+  return router.createUrlTree(['/clinic/dashboard']);
+};
 
 const rootRedirectGuard = () => {
   const auth = inject(AuthService);
   const router = inject(Router);
   if (!auth.currentUser) return router.createUrlTree(['/login']);
-  return router.createUrlTree(['/clinic/dashboard']);
+  return homeForRole(router, auth.currentUser.role);
 };
 
 const loginGuard = () => {
   const auth = inject(AuthService);
   const router = inject(Router);
   if (!auth.currentUser) return true;
-  return router.createUrlTree(['/clinic/dashboard']);
+  return homeForRole(router, auth.currentUser.role);
 };
 
 export const routes: Routes = [
@@ -24,6 +30,12 @@ export const routes: Routes = [
     canActivate: [loginGuard],
     loadComponent: () =>
       import('./features/auth/login.component').then(m => m.LoginComponent)
+  },
+  {
+    path: 'master',
+    canActivate: [authGuard, masterGuard],
+    loadComponent: () =>
+      import('./features/master/master.component').then(m => m.MasterComponent)
   },
   {
     path: 'doctor',
