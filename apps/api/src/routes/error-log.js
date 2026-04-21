@@ -1,14 +1,14 @@
 module.exports = async function (fastify) {
   fastify.post('/', async (request, reply) => {
-    const { url, method, status_code, error_message } = request.body || {};
+    const { url, method, status_code, error_message, tenant_id: bodyTenantId, user_id: bodyUserId } = request.body || {};
 
-    let tenant_id = null;
-    let user_id = null;
+    let tenant_id = bodyTenantId ?? null;
+    let user_id = bodyUserId ?? null;
     try {
       await fastify.authenticate(request, reply);
-      tenant_id = request.user?.tenant_id ?? null;
-      user_id = request.user?.user_id ?? null;
-    } catch (_) { /* unauthenticated errors are still logged */ }
+      tenant_id = request.user?.tenant_id ?? tenant_id;
+      user_id = request.user?.user_id ?? user_id;
+    } catch (_) { /* unauthenticated errors are still logged with body fallback */ }
 
     await fastify.pg.query(
       `INSERT INTO error_log (tenant_id, user_id, url, method, status_code, error_message)

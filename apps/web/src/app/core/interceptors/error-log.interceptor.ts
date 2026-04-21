@@ -5,6 +5,9 @@ import { AuthService } from '../auth/auth.service';
 
 export const errorLogInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
+  // Capture user context at request time — before a potential 401 triggers logout
+  const currentUser = auth.currentUser;
+  const token = auth.getToken();
 
   return next(req).pipe(
     catchError((error: HttpErrorResponse) => {
@@ -12,7 +15,6 @@ export const errorLogInterceptor: HttpInterceptorFn = (req, next) => {
       const skipLog = url.includes('/error-log') || url.includes('/auth/login');
 
       if (!skipLog && error.status >= 400) {
-        const token = auth.getToken();
         const backendMsg = error.error?.error || error.error?.message || null;
         const errorMessage = backendMsg
           ? `[${error.status}] ${backendMsg}`
@@ -21,7 +23,9 @@ export const errorLogInterceptor: HttpInterceptorFn = (req, next) => {
           url,
           method: req.method,
           status_code: error.status,
-          error_message: errorMessage
+          error_message: errorMessage,
+          tenant_id: (currentUser as any)?.tenant_id ?? null,
+          user_id: (currentUser as any)?.user_id ?? null
         };
         fetch('/api/error-log', {
           method: 'POST',
