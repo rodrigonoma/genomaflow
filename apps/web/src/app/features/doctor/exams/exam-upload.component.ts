@@ -19,6 +19,16 @@ import { Exam } from '../../../shared/models/api.models';
     .page { max-width: 720px; margin: 0 auto; }
 
     .page-header { margin-bottom: 2rem; }
+    .back-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: #a09fb2; cursor: pointer; background: none; border: none;
+      padding: 0; margin-bottom: 1.25rem;
+      transition: color 150ms ease;
+    }
+    .back-link:hover { color: #c0c1ff; }
+    .back-link mat-icon { font-size: 15px; width: 15px; height: 15px; }
     .page-title {
       font-family: 'Space Grotesk', sans-serif;
       font-weight: 700; font-size: 1.5rem; color: #dae2fd; margin: 0 0 0.25rem 0;
@@ -122,6 +132,10 @@ import { Exam } from '../../../shared/models/api.models';
   template: `
     <div class="page">
       <div class="page-header">
+        <button class="back-link" [routerLink]="['/doctor/patients', patientId]">
+          <mat-icon>arrow_back</mat-icon>
+          Perfil do paciente
+        </button>
         <h1 class="page-title">Enviar exame</h1>
         <span class="page-sub">Laudo laboratorial (PDF) · Imagem médica (DICOM, JPG, PNG)</span>
       </div>

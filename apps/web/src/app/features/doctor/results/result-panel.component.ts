@@ -2,7 +2,7 @@ import { Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { Chart, registerables } from 'chart.js';
 Chart.register(...registerables);
 import { HttpClient } from '@angular/common/http';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterModule } from '@angular/router';
 import { DatePipe, NgTemplateOutlet, UpperCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -28,7 +28,7 @@ import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/
     DatePipe, FormsModule, NgTemplateOutlet, UpperCasePipe,
     MatCardModule, MatSelectModule, MatDividerModule, MatButtonModule, MatIconModule, MatDialogModule,
     AlertBadgeComponent, RiskMeterComponent, DisclaimerComponent, PrescriptionModalComponent,
-    ImagingResultComponent
+    ImagingResultComponent, RouterModule
   ],
   template: `
     <div class="result-page">
@@ -39,6 +39,11 @@ import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/
       }
 
       @if (exam) {
+        <button class="back-link" [routerLink]="['/doctor/patients', exam.subject_id || exam.patient_id]">
+          <mat-icon>arrow_back</mat-icon>
+          {{ subject ? subject.name : 'Paciente' }}
+        </button>
+
         <div class="result-header">
           <div class="header-left">
             <h1 class="patient-title">Resultado do Exame</h1>
@@ -49,17 +54,17 @@ import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/
 
         @if (subject) {
           <div class="subject-identity">
-            @if (subject.subject_type === 'animal') {
-              <span class="identity-chip">
+            <a class="identity-chip identity-chip-link"
+               [routerLink]="['/doctor/patients', exam.subject_id || exam.patient_id]">
+              @if (subject.subject_type === 'animal') {
                 <mat-icon style="font-size:14px;width:14px;height:14px">pets</mat-icon>
                 {{ subject.name }} · {{ speciesLabel(subject.species!) }}
-              </span>
-            } @else {
-              <span class="identity-chip">
+              } @else {
                 <mat-icon style="font-size:14px;width:14px;height:14px">person</mat-icon>
                 {{ subject.name }}
-              </span>
-            }
+              }
+              <mat-icon style="font-size:12px;width:12px;height:12px;margin-left:2px;opacity:0.5">open_in_new</mat-icon>
+            </a>
           </div>
         }
 
@@ -287,6 +292,17 @@ import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/
       font-size: 13px; color: #7c7b8f;
     }
 
+    .back-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: #a09fb2; cursor: pointer; background: none; border: none;
+      padding: 0; margin-bottom: 1.5rem;
+      transition: color 150ms ease;
+    }
+    .back-link:hover { color: #c0c1ff; }
+    .back-link mat-icon { font-size: 15px; width: 15px; height: 15px; }
+
     .result-header {
       display: flex; align-items: flex-start; justify-content: space-between;
       margin-bottom: 1.75rem; flex-wrap: wrap; gap: 1rem;
@@ -442,6 +458,13 @@ import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/
       font-family: 'JetBrains Mono', monospace; font-size: 11px;
       color: #c0c1ff; background: rgba(73,75,214,0.1);
       border: 1px solid rgba(73,75,214,0.25); padding: 4px 10px; border-radius: 4px;
+    }
+    .identity-chip-link {
+      text-decoration: none; cursor: pointer;
+      transition: background 150ms ease, border-color 150ms ease;
+    }
+    .identity-chip-link:hover {
+      background: rgba(73,75,214,0.2); border-color: rgba(73,75,214,0.45);
     }
     .recommendations-section { margin-top: 1.25rem; }
     .rec-title {
