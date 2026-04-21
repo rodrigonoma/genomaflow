@@ -1095,7 +1095,14 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     this.http.get<{ specialty: string | null }>(`${environment.apiUrl}/auth/me`)
       .subscribe({ next: me => this.doctorSpecialty.set(me.specialty ?? null), error: () => {} });
     this.wsSub = new Subscription();
-    this.wsSub.add(this.ws.examUpdates$.subscribe(() => this.loadExams(id)));
+    this.wsSub.add(this.ws.examUpdates$.subscribe(({ exam_id }) => {
+      const isThisPatient = this.exams().some(e => e.id === exam_id);
+      this.loadExams(id);
+      if (isThisPatient) {
+        this.snack.open('Resultado disponível!', 'Ver', { duration: 5000 })
+          .onAction().subscribe(() => window.location.href = `/doctor/results/${exam_id}`);
+      }
+    }));
     this.wsSub.add(this.ws.reconnect$.subscribe(() => this.loadExams(id)));
     this.pollInterval = setInterval(() => {
       const hasPending = this.exams().some(e => e.status === 'pending' || e.status === 'processing');

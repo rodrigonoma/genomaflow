@@ -337,8 +337,8 @@ export class ExamUploadComponent implements OnInit, OnDestroy {
 
   private refreshExam(examId: string): void {
     this.http.get<Exam>(`${environment.apiUrl}/exams/${examId}`).subscribe(exam => {
-      const idx = this.exams.findIndex(e => e.id === examId);
-      if (idx !== -1) this.exams[idx] = exam;
+      this.exams = this.exams.map(e => e.id === examId ? exam : e);
+      this.managePollState();
     });
   }
 }
