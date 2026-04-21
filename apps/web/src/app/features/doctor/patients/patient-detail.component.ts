@@ -1031,6 +1031,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   private dialog = inject(MatDialog);
   private ws     = inject(WsService);
   private wsSub?: Subscription;
+  private pollInterval?: ReturnType<typeof setInterval>;
 
   subject   = signal<Subject | null>(null);
   exams     = signal<Exam[]>([]);
@@ -1096,6 +1097,10 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     this.wsSub = new Subscription();
     this.wsSub.add(this.ws.examUpdates$.subscribe(() => this.loadExams(id)));
     this.wsSub.add(this.ws.reconnect$.subscribe(() => this.loadExams(id)));
+    this.pollInterval = setInterval(() => {
+      const hasPending = this.exams().some(e => e.status === 'pending' || e.status === 'processing');
+      if (hasPending) this.loadExams(id);
+    }, 8000);
   }
 
   private loadSubject(id: string): void {
@@ -1440,6 +1445,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.evoCharts.forEach(c => c.destroy());
     this.wsSub?.unsubscribe();
+    if (this.pollInterval) clearInterval(this.pollInterval);
   }
 
   private renderEvolutionCharts(): void {

@@ -1,6 +1,12 @@
 const { withTenant } = require('../db/tenant');
 const crypto = require('crypto');
 
+function publishSubjectUpserted(fastify, tenant_id, subject_id) {
+  try {
+    fastify.redis.publish(`subject:upserted:${tenant_id}`, JSON.stringify({ subject_id }));
+  } catch (_) {}
+}
+
 function hashCpf(cpf) {
   return crypto.createHash('sha256').update(cpf.replace(/\D/g, '')).digest('hex');
 }
@@ -98,6 +104,7 @@ module.exports = async function (fastify) {
         );
         return rows[0];
       });
+      publishSubjectUpserted(fastify, tenant_id, subject.id);
       return reply.status(201).send(subject);
     }
 
@@ -125,6 +132,7 @@ module.exports = async function (fastify) {
       );
       return rows[0];
     });
+    publishSubjectUpserted(fastify, tenant_id, subject.id);
     return reply.status(201).send(subject);
   });
 
@@ -133,7 +141,7 @@ module.exports = async function (fastify) {
     return withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
         `SELECT s.id, s.name, s.birth_date, s.sex, s.subject_type, s.species,
-                s.weight, s.breed, s.created_at,
+                s.weight, s.breed, s.created_at, s.cpf_last4,
                 o.name AS owner_name, o.cpf_last4 AS owner_cpf_last4, o.phone AS owner_phone
          FROM subjects s
          LEFT JOIN owners o ON o.id = s.owner_id
@@ -232,6 +240,7 @@ module.exports = async function (fastify) {
       return rows[0] || null;
     });
     if (!subject) return reply.status(404).send({ error: 'Patient not found' });
+    publishSubjectUpserted(fastify, tenant_id, subject.id);
     return subject;
   });
 

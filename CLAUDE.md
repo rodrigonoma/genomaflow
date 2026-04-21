@@ -281,6 +281,10 @@ docker run --rm <image:tag> grep -rl "termo_do_novo_código" /usr/share/nginx/ht
 - **Uma concern por branch** — branch de routing não toca em auth; branch de auth não toca em UI. Se duas coisas precisam mudar, dois PRs separados e aprovados separadamente
 - **Smoke test obrigatório antes de pedir aprovação** — testar localmente as rotas críticas (login admin → dashboard, login master → painel master, telas principais carregam) antes de apresentar resultado para aprovação. Se não for possível testar algo, declarar explicitamente o que não foi testado
 - **Verificar migrations pendentes antes de mergear** — comparar arquivos em `migrations/` com `_migrations` table. Migration inesperadamente pendente em produção = parar e investigar antes de prosseguir
+- **Ler o arquivo completo antes de qualquer `Edit`** — nunca editar sem ter lido o estado atual. `Edit` em conteúdo desatualizado causa regressões silenciosas
+- **Nunca fazer afirmações categóricas sem verificar com ferramentas** — "nunca existiu", "não há stash", "não há branch" só podem ser ditas após `git log --all`, `git stash list` e leitura efetiva do histórico. Dizer sem verificar = mentira
+- **Verificar stash e histórico WIP antes de qualquer sessão de trabalho** — rodar `git stash list` e `git log --all --oneline | grep -i "wip\|stash"` no início de cada sessão para detectar código perdido
+- **Vibe coding é proibido** — nunca fazer múltiplas correções sequenciais pequenas sem diagnóstico completo primeiro. O fluxo obrigatório é: ler todos os arquivos relevantes → diagnosticar a causa raiz → propor solução → executar de uma vez
 
 ---
 
@@ -299,6 +303,8 @@ docker run --rm <image:tag> grep -rl "termo_do_novo_código" /usr/share/nginx/ht
 - Usar `force-new-deployment` sem registrar nova task definition → ECS reinicia com imagem antiga, mudanças nunca chegam a produção
 - Remover `ARG CACHEBUST` dos Dockerfiles → Docker reutiliza camadas antigas silenciosamente, bundle deployado não reflete o código do commit
 - Mergar branch para main sem aprovação explícita do usuário → viola o fluxo de desenvolvimento obrigatório do projeto
+- Afirmar que código "nunca existiu" ou "não há stash" sem verificar o histórico completo → mentira que causa perda de código
+- Fazer correções em cadeia sem diagnóstico completo (vibe coding) → regressões acumuladas e raiz do problema não resolvida
 
 ---
 
