@@ -170,7 +170,17 @@ import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/
                   @for (rec of getStandardRecs(result.recommendations); track rec.description) {
                     <div class="rec-item" [class]="'priority-' + rec.priority">
                       <span class="rec-type">{{ rec.type | uppercase }}</span>
-                      <span class="rec-desc">{{ rec.description }}</span>
+                      <div class="rec-body">
+                        @if (rec.type === 'medication' && rec.name) {
+                          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:#dae2fd;margin-bottom:2px;">
+                            {{ rec.name }}
+                            @if (rec.dose) { <span style="font-weight:400;color:#c0c1ff"> · {{ rec.dose }}</span> }
+                            @if (rec.frequency) { <span style="font-weight:400;color:#a09fb2"> · {{ rec.frequency }}</span> }
+                            @if (rec.duration) { <span style="font-weight:400;color:#7c7b8f"> · {{ rec.duration }}</span> }
+                          </div>
+                        }
+                        <span class="rec-desc">{{ rec.description }}</span>
+                      </div>
                     </div>
                   }
                 </div>

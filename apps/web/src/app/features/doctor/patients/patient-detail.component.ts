@@ -766,7 +766,17 @@ interface ComparisonBlock {
                               <div class="ai-rec-item"
                                    [style.border-left-color]="severityColor(rec.priority === 'high' ? 'high' : rec.priority === 'medium' ? 'medium' : 'low')">
                                 <span class="ai-rec-type">{{ rec.type.toUpperCase() }}</span>
-                                <span class="ai-rec-desc">{{ rec.description }}</span>
+                                <div>
+                                  @if (rec.type === 'medication' && rec.name) {
+                                    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:#dae2fd;margin-bottom:2px;">
+                                      {{ rec.name }}
+                                      @if (rec.dose) { <span style="font-weight:400;color:#c0c1ff"> · {{ rec.dose }}</span> }
+                                      @if (rec.frequency) { <span style="font-weight:400;color:#a09fb2"> · {{ rec.frequency }}</span> }
+                                      @if (rec.duration) { <span style="font-weight:400;color:#7c7b8f"> · {{ rec.duration }}</span> }
+                                    </div>
+                                  }
+                                  <span class="ai-rec-desc">{{ rec.description }}</span>
+                                </div>
                               </div>
                             }
                           </div>
@@ -1083,7 +1093,9 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     this.loadPlans(id);
     this.http.get<{ specialty: string | null }>(`${environment.apiUrl}/auth/me`)
       .subscribe({ next: me => this.doctorSpecialty.set(me.specialty ?? null), error: () => {} });
-    this.wsSub = this.ws.examUpdates$.subscribe(() => this.loadExams(id));
+    this.wsSub = new Subscription();
+    this.wsSub.add(this.ws.examUpdates$.subscribe(() => this.loadExams(id)));
+    this.wsSub.add(this.ws.reconnect$.subscribe(() => this.loadExams(id)));
   }
 
   private loadSubject(id: string): void {

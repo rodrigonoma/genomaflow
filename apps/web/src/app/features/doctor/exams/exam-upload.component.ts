@@ -202,16 +202,26 @@ export class ExamUploadComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.patientId = this.route.snapshot.paramMap.get('id')!;
     this.loadBalance();
-    this.wsSub = this.ws.examUpdates$
-      .pipe(filter(({ exam_id }) => this.exams.some(e => e.id === exam_id)))
-      .subscribe(({ exam_id }) => {
-        this.refreshExam(exam_id);
-        this.loadBalance();
-        this.snackBar.open('Resultado disponível!', 'Ver', { duration: 5000 })
-          .onAction().subscribe(() =>
-            window.location.href = `/doctor/results/${exam_id}`
-          );
-      });
+    this.wsSub = new Subscription();
+    this.wsSub.add(
+      this.ws.examUpdates$
+        .pipe(filter(({ exam_id }) => this.exams.some(e => e.id === exam_id)))
+        .subscribe(({ exam_id }) => {
+          this.refreshExam(exam_id);
+          this.loadBalance();
+          this.snackBar.open('Resultado disponível!', 'Ver', { duration: 5000 })
+            .onAction().subscribe(() =>
+              window.location.href = `/doctor/results/${exam_id}`
+            );
+        })
+    );
+    this.wsSub.add(
+      this.ws.reconnect$.subscribe(() => {
+        this.exams
+          .filter(e => e.status === 'pending' || e.status === 'processing')
+          .forEach(e => this.refreshExam(e.id));
+      })
+    );
   }
 
   ngOnDestroy(): void { this.wsSub?.unsubscribe(); }
