@@ -10,5 +10,6 @@ RUN npx ng build --configuration=production
 # Stage 2: serve
 FROM nginx:alpine
 COPY --from=build /app/dist/genomaflow-web/browser /usr/share/nginx/html
+COPY --from=build /app/landing /usr/share/nginx/landing
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

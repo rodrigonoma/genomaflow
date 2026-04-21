@@ -44,6 +44,7 @@ jobs:
 
       - name: Build & push Web
         run: |
+          cp -r apps/landing apps/web/landing
           IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/web
           docker build --build-arg CACHEBUST=${{ env.IMAGE_TAG }} -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest apps/web
           docker push $IMAGE:${{ env.IMAGE_TAG }}
