@@ -76,4 +76,4 @@ async function classifyModality(imageBase64, imageMeta, rawBuffer = null) {
   }
 }
 
-module.exports = { detectFileType, classifyModality };
+module.exports = { detectFileType, classifyModality, detectImageMime };

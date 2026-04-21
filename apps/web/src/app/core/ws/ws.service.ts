@@ -39,12 +39,13 @@ export class WsService {
     this.ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data) as Record<string, unknown>;
+        const kind = (msg['event'] ?? msg['type']) as string;
         this.zone.run(() => {
-          if (msg['type'] === 'exam:error') {
+          if (kind === 'exam:error') {
             this.examError$.next({ exam_id: msg['exam_id'] as string, error_message: msg['error_message'] as string });
-          } else if (msg['type'] === 'billing:alert') {
+          } else if (kind === 'billing:alert') {
             this.billingAlert$.next({ balance: msg['balance'] as number });
-          } else if (msg['type'] === 'billing:exhausted') {
+          } else if (kind === 'billing:exhausted') {
             this.billingExhausted$.next();
           } else {
             this.examUpdates$.next(msg as { exam_id: string });

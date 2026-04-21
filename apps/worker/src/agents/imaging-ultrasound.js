@@ -38,13 +38,13 @@ Rules:
 /**
  * @param {{ imageBase64: string, imageMeta: object, pdfBuffer?: Buffer, patient: object, guidelines: Array }} ctx
  */
-async function runImagingUltrasoundAgent({ imageBase64, imageMeta, pdfBuffer, patient, guidelines }) {
+async function runImagingUltrasoundAgent({ imageBase64, imageMimeType = 'image/png', imageMeta, pdfBuffer, patient, guidelines }) {
   const guidelinesText = (guidelines || []).map(g => `## ${g.title}\n${g.content}`).join('\n\n');
 
   const content = [];
 
   if (imageBase64) {
-    content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageBase64 } });
+    content.push({ type: 'image', source: { type: 'base64', media_type: imageMimeType, data: imageBase64 } });
   } else if (pdfBuffer) {
     content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBuffer.toString('base64') } });
   }

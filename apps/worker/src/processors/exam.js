@@ -2,7 +2,7 @@ const { Pool } = require('pg');
 const { downloadFile, uploadFile, deleteFile, keyFromPath, BUCKET } = require('../storage/s3');
 const Redis = require('ioredis');
 const { dicomToImage } = require('../converters/dicom');
-const { classifyModality } = require('../classifiers/imaging');
+const { classifyModality, detectImageMime } = require('../classifiers/imaging');
 const { runImagingRxAgent } = require('../agents/imaging-rx');
 const { runImagingEcgAgent } = require('../agents/imaging-ecg');
 const { runImagingUltrasoundAgent } = require('../agents/imaging-ultrasound');
@@ -182,23 +182,26 @@ async function processImagingExam({ exam_id, tenant_id, file_path, file_type }) 
     let imageMeta     = {};
     let imageS3Key    = null;
 
+    let imageMimeType = 'image/png';
+
     if (file_type === 'dicom') {
       const { pngBuffer, meta } = await dicomToImage(buffer);
-      imageMeta    = meta;
-      imageBase64  = pngBuffer.toString('base64');
-      imageS3Key   = `uploads/${tenant_id}/${exam_id}/image.png`;
+      imageMeta     = meta;
+      imageBase64   = pngBuffer.toString('base64');
+      imageMimeType = 'image/png';
+      imageS3Key    = `uploads/${tenant_id}/${exam_id}/image.png`;
       await uploadFile(imageS3Key, pngBuffer, 'image/png');
     } else if (file_type === 'image') {
-      imageBase64 = buffer.toString('base64');
-      imageS3Key  = keyFromPath(file_path);
+      imageMimeType = detectImageMime(buffer);
+      imageBase64   = buffer.toString('base64');
+      imageS3Key    = keyFromPath(file_path);
     } else if (file_type === 'pdf') {
       pdfBuffer = buffer;
     }
 
     const original_image_url = imageS3Key ? `s3://${BUCKET}/${imageS3Key}` : null;
 
-    const rawImageBuffer = file_type === 'image' ? buffer : null;
-    const modality = await classifyModality(imageBase64, imageMeta, rawImageBuffer);
+    const modality = await classifyModality(imageBase64, imageMeta, file_type === 'image' ? buffer : null);
     if (!modality) {
       await client.query(
         `UPDATE exams SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
@@ -225,7 +228,7 @@ async function processImagingExam({ exam_id, tenant_id, file_path, file_type }) 
     } catch (_) {}
 
     const patientContext = { sex: subject.sex, species: subject.species || null };
-    const { result, usage } = await agentConfig.runner({ imageBase64, imageMeta, pdfBuffer, patient: patientContext, guidelines });
+    const { result, usage } = await agentConfig.runner({ imageBase64, imageMimeType, imageMeta, pdfBuffer, patient: patientContext, guidelines });
 
     await persistImagingResult(client, exam_id, tenant_id, agentConfig.type, result, usage, { original_image_url });
     await debitCredit(tenant_id, exam_id, agentConfig.type, client);

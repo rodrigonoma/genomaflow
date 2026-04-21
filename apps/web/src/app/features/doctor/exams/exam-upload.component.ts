@@ -212,33 +212,64 @@ export class ExamUploadComponent implements OnInit, OnDestroy {
   balance = 0;
   balanceLoaded = false;
   private wsSub?: Subscription;
+  private pollInterval?: ReturnType<typeof setInterval>;
 
   ngOnInit(): void {
     this.patientId = this.route.snapshot.paramMap.get('id')!;
     this.loadBalance();
+    this.loadExams();
     this.wsSub = new Subscription();
     this.wsSub.add(
       this.ws.examUpdates$
-        .pipe(filter(({ exam_id }) => this.exams.some(e => e.id === exam_id)))
         .subscribe(({ exam_id }) => {
-          this.refreshExam(exam_id);
-          this.loadBalance();
-          this.snackBar.open('Resultado disponível!', 'Ver', { duration: 5000 })
-            .onAction().subscribe(() =>
-              window.location.href = `/doctor/results/${exam_id}`
-            );
+          if (this.exams.some(e => e.id === exam_id)) {
+            this.refreshExam(exam_id);
+            this.loadBalance();
+            this.snackBar.open('Resultado disponível!', 'Ver', { duration: 5000 })
+              .onAction().subscribe(() =>
+                window.location.href = `/doctor/results/${exam_id}`
+              );
+          }
         })
     );
     this.wsSub.add(
-      this.ws.reconnect$.subscribe(() => {
-        this.exams
-          .filter(e => e.status === 'pending' || e.status === 'processing')
-          .forEach(e => this.refreshExam(e.id));
-      })
+      this.ws.reconnect$.subscribe(() => this.loadExams())
     );
+    this.startPolling();
   }
 
-  ngOnDestroy(): void { this.wsSub?.unsubscribe(); }
+  ngOnDestroy(): void {
+    this.wsSub?.unsubscribe();
+    this.stopPolling();
+  }
+
+  private loadExams(): void {
+    this.http.get<Exam[]>(`${environment.apiUrl}/exams`).subscribe(all => {
+      const mine = (all as any[]).filter(e => e.subject_id === this.patientId || e.patient_id === this.patientId);
+      // merge: keep locally uploaded exams not yet in API response
+      const apiIds = new Set(mine.map((e: Exam) => e.id));
+      const localOnly = this.exams.filter(e => !apiIds.has(e.id));
+      this.exams = [...mine, ...localOnly];
+      this.managePollState();
+    });
+  }
+
+  private startPolling(): void {
+    this.pollInterval = setInterval(() => {
+      const hasPending = this.exams.some(e => e.status === 'pending' || e.status === 'processing');
+      if (hasPending) this.loadExams();
+    }, 8000);
+  }
+
+  private stopPolling(): void {
+    if (this.pollInterval) clearInterval(this.pollInterval);
+  }
+
+  private managePollState(): void {
+    const hasPending = this.exams.some(e => e.status === 'pending' || e.status === 'processing');
+    if (!hasPending) this.stopPolling();
+    else if (!this.pollInterval) this.startPolling();
+  }
 
   private loadBalance(): void {
     this.http.get<{ balance: number }>(`${environment.apiUrl}/billing/balance`)

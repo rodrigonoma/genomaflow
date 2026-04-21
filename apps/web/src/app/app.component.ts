@@ -314,6 +314,25 @@ export class AppComponent implements OnInit, OnDestroy {
         </textarea>
       </mat-form-field>
 
+      <div style="margin-bottom:1rem">
+        <input #imgInput type="file" accept="image/*" style="display:none" (change)="onImageSelected($event)" />
+        @if (!screenshot) {
+          <button type="button" mat-stroked-button style="font-size:12px;color:#a09fb2;border-color:rgba(70,69,84,0.35)"
+                  (click)="imgInput.click()">
+            <mat-icon style="font-size:15px;width:15px;height:15px;margin-right:4px">attach_file</mat-icon>
+            Anexar print / imagem
+          </button>
+        } @else {
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <mat-icon style="font-size:15px;width:15px;height:15px;color:#4ad6a0">check_circle</mat-icon>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#4ad6a0">{{ screenshotName }}</span>
+            <button type="button" mat-icon-button style="width:24px;height:24px" (click)="removeImage()">
+              <mat-icon style="font-size:14px;color:#a09fb2">close</mat-icon>
+            </button>
+          </div>
+        }
+      </div>
+
       @if (sent) {
         <div style="background:rgba(192,193,255,0.08);border:1px solid rgba(192,193,255,0.2);border-radius:4px;padding:0.75rem;font-family:'JetBrains Mono',monospace;font-size:12px;color:#c0c1ff;margin-bottom:1rem">
           Obrigado pelo feedback! Recebemos sua mensagem.
@@ -340,15 +359,35 @@ export class FeedbackDialogComponent {
   message = '';
   sending = false;
   sent = false;
+  screenshot: string | null = null;
+  screenshotName = '';
+
+  onImageSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    this.screenshotName = file.name;
+    const reader = new FileReader();
+    reader.onload = () => { this.screenshot = reader.result as string; };
+    reader.readAsDataURL(file);
+  }
+
+  removeImage(): void {
+    this.screenshot = null;
+    this.screenshotName = '';
+  }
 
   submit(): void {
     if (!this.message.trim()) return;
     this.sending = true;
-    this.http.post('/api/feedback', { type: this.data.type, message: this.message }).subscribe({
+    this.http.post('/api/feedback', {
+      type: this.data.type,
+      message: this.message,
+      ...(this.screenshot ? { screenshot: this.screenshot } : {})
+    }).subscribe({
       next: () => { this.sending = false; this.sent = true; },
       error: () => {
         this.sending = false;
-        this.sent = true; // show success anyway — feedback stored client-side
+        this.sent = true;
         this.snack.open('Feedback recebido. Obrigado!', '', { duration: 3000 });
       }
     });
