@@ -39,12 +39,21 @@ module.exports = async function (fastify) {
 
     if (!subject_id) return reply.status(400).send({ error: 'patient_id is required' });
     if (!fileData) return reply.status(400).send({ error: 'file is required' });
-    if (fileData.mimetype !== 'application/pdf') {
-      return reply.status(400).send({ error: 'Only PDF files are accepted' });
+
+    const fileExt  = (fileData.filename || '').toLowerCase().split('.').pop();
+    const isDicom  = fileExt === 'dcm' || fileExt === 'dicom' || fileData.mimetype === 'application/dicom';
+    const isImage  = ['jpg', 'jpeg', 'png', 'tiff', 'tif'].includes(fileExt);
+    const isPdf    = fileData.mimetype === 'application/pdf' || fileExt === 'pdf';
+
+    if (!isDicom && !isImage && !isPdf) {
+      return reply.status(400).send({ error: 'Formato não suportado. Envie PDF, DICOM (.dcm), JPG ou PNG.' });
     }
 
+    const file_type   = isDicom ? 'dicom' : isImage ? 'image' : 'pdf';
+    const contentType = isPdf   ? 'application/pdf' : isDicom ? 'application/octet-stream' : fileData.mimetype;
+
     const key = `uploads/${tenant_id}/${Date.now()}-${fileData.filename}`;
-    const s3Path = await uploadFile(key, fileData._buffer, 'application/pdf');
+    const s3Path = await uploadFile(key, fileData._buffer, contentType);
 
     try {
       const exam = await withTenant(fastify.pg, tenant_id, async (client) => {
@@ -74,10 +83,10 @@ module.exports = async function (fastify) {
         }
 
         const { rows } = await client.query(
-          `INSERT INTO exams (tenant_id, subject_id, uploaded_by, file_path, status, source)
-           VALUES ($1, $2, $3, $4, 'pending', 'upload')
+          `INSERT INTO exams (tenant_id, subject_id, uploaded_by, file_path, status, source, file_type)
+           VALUES ($1, $2, $3, $4, 'pending', 'upload', $5)
            RETURNING id, status`,
-          [tenant_id, subject_id, user_id, s3Path]
+          [tenant_id, subject_id, user_id, s3Path, file_type]
         );
         return rows[0];
       });
@@ -86,6 +95,7 @@ module.exports = async function (fastify) {
         exam_id: exam.id,
         tenant_id,
         file_path: s3Path,
+        file_type,
         selected_agents: selected_agents || null,
         chief_complaint,
         current_symptoms
@@ -291,20 +301,24 @@ module.exports = async function (fastify) {
 
     const exam = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
-        `SELECT e.id, e.subject_id, e.status, e.source, e.file_path, e.created_at, e.updated_at,
+        `SELECT e.id, e.subject_id, e.status, e.source, e.file_path, e.file_type,
+                e.created_at, e.updated_at,
                 json_agg(
                   json_build_object(
                     'agent_type', cr.agent_type,
                     'interpretation', cr.interpretation,
                     'risk_scores', cr.risk_scores,
                     'alerts', cr.alerts,
-                    'disclaimer', cr.disclaimer
+                    'recommendations', cr.recommendations,
+                    'disclaimer', cr.disclaimer,
+                    'metadata', cr.metadata
                   )
                 ) FILTER (WHERE cr.id IS NOT NULL) AS results
          FROM exams e
          LEFT JOIN clinical_results cr ON cr.exam_id = e.id
          WHERE e.id = $1
-         GROUP BY e.id, e.subject_id, e.status, e.source, e.file_path, e.created_at, e.updated_at`,
+         GROUP BY e.id, e.subject_id, e.status, e.source, e.file_path, e.file_type,
+                  e.created_at, e.updated_at`,
         [id]
       );
       return rows[0] || null;
@@ -312,6 +326,36 @@ module.exports = async function (fastify) {
 
     if (!exam) return reply.status(404).send({ error: 'Exam not found' });
     return exam;
+  });
+
+  fastify.get('/:id/image', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { tenant_id } = request.user;
+    const { id } = request.params;
+
+    const row = await withTenant(fastify.pg, tenant_id, async (client) => {
+      const { rows } = await client.query(
+        `SELECT cr.metadata
+         FROM clinical_results cr
+         JOIN exams e ON e.id = cr.exam_id
+         WHERE e.id = $1
+           AND cr.agent_type LIKE 'imaging_%'
+           AND cr.metadata->>'original_image_url' IS NOT NULL
+         LIMIT 1`,
+        [id]
+      );
+      return rows[0] ?? null;
+    });
+
+    if (!row?.metadata?.original_image_url) {
+      return reply.status(404).send({ error: 'Imagem não encontrada para este exame' });
+    }
+
+    const { downloadFile, keyFromPath } = require('../storage/s3');
+    const buffer = await downloadFile(keyFromPath(row.metadata.original_image_url));
+
+    reply.header('Content-Type', 'image/png');
+    reply.header('Cache-Control', 'private, max-age=3600');
+    return reply.send(buffer);
   });
 
   fastify.post('/:id/reprocess', { preHandler: [fastify.authenticate] }, async (request, reply) => {
