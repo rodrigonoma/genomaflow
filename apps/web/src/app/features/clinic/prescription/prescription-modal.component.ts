@@ -22,7 +22,7 @@ export interface PrescriptionModalData {
   standalone: true,
   imports: [MatDialogModule, MatButtonModule, MatIconModule, MatSnackBarModule, FormsModule],
   styles: [`
-    .modal-wrap { background: #111929; border-radius: 8px; width: 640px; max-width: 95vw; }
+    :host { display: block; }
     .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem 1.5rem 0; }
     h2 { font-family: 'Space Grotesk', sans-serif; font-size: 1.125rem; font-weight: 700; color: #dae2fd; margin: 0; }
     .modal-body { padding: 1.25rem 1.5rem; max-height: 60vh; overflow-y: auto; }
@@ -32,15 +32,14 @@ export interface PrescriptionModalData {
     .delete-btn { position: absolute; top: 0.5rem; right: 0.5rem; }
     .add-btn { width: 100%; margin-top: 0.5rem; }
     .footer { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; border-top: 1px solid rgba(70,69,84,0.15); gap: 0.75rem; }
-    .actions { display: flex; gap: 0.5rem; }
+    .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
     label { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #6e6d80; display: block; margin-bottom: 0.25rem; }
-    input[type=text] { width: 100%; background: #111929; border: 1px solid rgba(70,69,84,0.3); border-radius: 4px; padding: 0.5rem 0.75rem; color: #dae2fd; font-size: 13px; font-family: 'JetBrains Mono', monospace; box-sizing: border-box; }
+    input[type=text] { width: 100%; background: #0b1326; border: 1px solid rgba(70,69,84,0.3); border-radius: 4px; padding: 0.5rem 0.75rem; color: #dae2fd; font-size: 13px; font-family: 'JetBrains Mono', monospace; box-sizing: border-box; }
     input[type=text]:focus { outline: none; border-color: #c0c1ff; }
-    textarea { width: 100%; background: #111929; border: 1px solid rgba(70,69,84,0.3); border-radius: 4px; padding: 0.5rem 0.75rem; color: #dae2fd; font-size: 13px; font-family: 'JetBrains Mono', monospace; resize: vertical; min-height: 80px; box-sizing: border-box; }
+    textarea { width: 100%; background: #0b1326; border: 1px solid rgba(70,69,84,0.3); border-radius: 4px; padding: 0.5rem 0.75rem; color: #dae2fd; font-size: 13px; font-family: 'JetBrains Mono', monospace; resize: vertical; min-height: 80px; box-sizing: border-box; }
   `],
   template: `
-    <div class="modal-wrap">
-      <div class="modal-header">
+    <div class="modal-header">
         <h2>{{ data.result.agent_type === 'therapeutic' ? 'Gerar Receita Médica' : 'Gerar Prescrição Nutricional' }}</h2>
         <button mat-icon-button (click)="close()"><mat-icon>close</mat-icon></button>
       </div>
@@ -107,7 +106,6 @@ export interface PrescriptionModalData {
           </button>
         </div>
       }
-    </div>
   `
 })
 export class PrescriptionModalComponent {
