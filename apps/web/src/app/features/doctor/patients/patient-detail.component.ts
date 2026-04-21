@@ -18,6 +18,8 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ExamCardComponent } from '../../../shared/components/exam-card/exam-card.component';
 import { environment } from '../../../../environments/environment';
 import { Subject, Exam, Alert, TreatmentPlan, TreatmentItem, ClinicalResult, SPECIALTY_AGENTS } from '../../../shared/models/api.models';
+import { WsService } from '../../../core/ws/ws.service';
+import { Subscription } from 'rxjs';
 
 interface AlertChange {
   marker: string;
@@ -989,6 +991,8 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   private http   = inject(HttpClient);
   private route  = inject(ActivatedRoute);
   private snack  = inject(MatSnackBar);
+  private ws     = inject(WsService);
+  private wsSub?: Subscription;
 
   subject   = signal<Subject | null>(null);
   exams     = signal<Exam[]>([]);
@@ -1050,6 +1054,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     this.loadPlans(id);
     this.http.get<{ specialty: string | null }>(`${environment.apiUrl}/auth/me`)
       .subscribe({ next: me => this.doctorSpecialty.set(me.specialty ?? null), error: () => {} });
+    this.wsSub = this.ws.examUpdates$.subscribe(() => this.loadExams(id));
   }
 
   private loadSubject(id: string): void {
@@ -1360,6 +1365,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.evoCharts.forEach(c => c.destroy());
+    this.wsSub?.unsubscribe();
   }
 
   private renderEvolutionCharts(): void {
