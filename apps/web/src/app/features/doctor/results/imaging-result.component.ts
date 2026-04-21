@@ -54,6 +54,13 @@ import { ClinicalResult, ImagingFinding, ImagingMetadata } from '../../../shared
     .meas-value { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: #c0c1ff; }
     .no-image-msg { padding: 1rem; background: rgba(70,69,84,0.08); border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6e6d80; }
     .loading-img { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6e6d80; padding: 1rem 0; }
+    .finding-hidden { opacity: 0.4; }
+    .toggle-finding-btn {
+      flex-shrink: 0; background: none; border: none; cursor: pointer;
+      color: #6e6d80; padding: 2px; display: flex; align-items: center;
+      transition: color 150ms ease;
+    }
+    .toggle-finding-btn:hover { color: #c0c1ff; }
   `],
   template: `
     @if (measurements && hasMeasurements()) {
@@ -122,8 +129,10 @@ import { ClinicalResult, ImagingFinding, ImagingMetadata } from '../../../shared
     @if (findings.length > 0) {
       <div class="findings-list">
         @for (f of findings; track f.id) {
-          <div class="finding-item" [class]="'severity-' + f.severity" (click)="highlightFinding(f)">
-            <div class="finding-badge" [style.background]="severityColor(f.severity)">
+          <div class="finding-item" [class]="'severity-' + f.severity"
+               [class.finding-hidden]="hiddenIds.has(f.id)"
+               (click)="highlightFinding(f)">
+            <div class="finding-badge" [style.background]="hiddenIds.has(f.id) ? '#3a3a4a' : severityColor(f.severity)">
               [{{ f.id }}]
             </div>
             <div class="finding-body">
@@ -132,6 +141,12 @@ import { ClinicalResult, ImagingFinding, ImagingMetadata } from '../../../shared
                 <div class="finding-desc">{{ f.description }}</div>
               }
             </div>
+            <button class="toggle-finding-btn" (click)="toggleFinding($event, f)"
+                    [title]="hiddenIds.has(f.id) ? 'Mostrar marcação' : 'Ocultar marcação'">
+              <mat-icon style="font-size:16px;width:16px;height:16px;">
+                {{ hiddenIds.has(f.id) ? 'visibility_off' : 'visibility' }}
+              </mat-icon>
+            </button>
           </div>
         }
       </div>
@@ -154,6 +169,7 @@ export class ImagingResultComponent implements OnChanges, AfterViewInit {
   findings: ImagingFinding[] = [];
   measurements: ImagingMetadata['measurements'] = null;
 
+  hiddenIds = new Set<number>();
   private highlightedId: number | null = null;
   private imageLoaded = false;
 
@@ -161,6 +177,7 @@ export class ImagingResultComponent implements OnChanges, AfterViewInit {
     if (changes['result']) {
       this.findings     = this.result.metadata?.findings     ?? [];
       this.measurements = this.result.metadata?.measurements ?? null;
+      this.hiddenIds.clear();
 
       if (this.result.metadata?.original_image_url) {
         this.loadImage();
@@ -216,7 +233,19 @@ export class ImagingResultComponent implements OnChanges, AfterViewInit {
   }
 
   highlightFinding(finding: ImagingFinding): void {
+    if (this.hiddenIds.has(finding.id)) return;
     this.highlightedId = finding.id === this.highlightedId ? null : finding.id;
+    this.drawFindings();
+  }
+
+  toggleFinding(event: Event, finding: ImagingFinding): void {
+    event.stopPropagation();
+    if (this.hiddenIds.has(finding.id)) {
+      this.hiddenIds.delete(finding.id);
+    } else {
+      this.hiddenIds.add(finding.id);
+      if (this.highlightedId === finding.id) this.highlightedId = null;
+    }
     this.drawFindings();
   }
 
@@ -230,7 +259,7 @@ export class ImagingResultComponent implements OnChanges, AfterViewInit {
     if (!this.showAnnotations) return;
 
     this.findings.forEach(f => {
-      if (!f.box) return;
+      if (!f.box || this.hiddenIds.has(f.id)) return;
       const [x1p, y1p, x2p, y2p] = f.box;
       const x = x1p * canvas.width;
       const y = y1p * canvas.height;
