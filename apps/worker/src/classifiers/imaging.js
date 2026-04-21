@@ -29,19 +29,33 @@ function detectFileType(filename, mimetype) {
 }
 
 /**
+ * Detecta o MIME type real da imagem a partir dos magic bytes do buffer.
+ * @param {Buffer} buffer
+ * @returns {'image/jpeg'|'image/png'|'image/webp'|'image/gif'}
+ */
+function detectImageMime(buffer) {
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) return 'image/jpeg';
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) return 'image/png';
+  if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46) return 'image/webp';
+  return 'image/png';
+}
+
+/**
  * Classifica a modalidade de imagem médica.
  * Usa o header DICOM se disponível; fallback para Claude Vision.
  * @param {string|null} imageBase64
  * @param {object} imageMeta
- * @returns {Promise<'rx'|'ecg'|'ultrasound'|null>}
+ * @param {Buffer|null} rawBuffer
+ * @returns {Promise<'rx'|'ecg'|'ultrasound'|'mri'|null>}
  */
-async function classifyModality(imageBase64, imageMeta) {
+async function classifyModality(imageBase64, imageMeta, rawBuffer = null) {
   if (imageMeta?.modality) {
     const mapped = DICOM_MODALITY_MAP[imageMeta.modality];
     if (mapped) return mapped;
   }
 
   if (!imageBase64) return null;
+  const mediaType = rawBuffer ? detectImageMime(rawBuffer) : 'image/png';
   try {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
@@ -49,7 +63,7 @@ async function classifyModality(imageBase64, imageMeta) {
       messages: [{
         role: 'user',
         content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageBase64 } },
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
           { type: 'text', text: 'Classify this medical image type. Respond with ONLY one word: rx | ecg | ultrasound | mri | other' }
         ]
       }]

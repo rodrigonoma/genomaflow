@@ -197,7 +197,8 @@ async function processImagingExam({ exam_id, tenant_id, file_path, file_type }) 
 
     const original_image_url = imageS3Key ? `s3://${BUCKET}/${imageS3Key}` : null;
 
-    const modality = await classifyModality(imageBase64, imageMeta);
+    const rawImageBuffer = file_type === 'image' ? buffer : null;
+    const modality = await classifyModality(imageBase64, imageMeta, rawImageBuffer);
     if (!modality) {
       await client.query(
         `UPDATE exams SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
