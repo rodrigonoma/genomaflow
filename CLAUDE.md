@@ -231,13 +231,41 @@ Quando nenhum tenant está configurado, o SELECT é livre. Com `withTenant`, res
 
 - **O arquivo `.github/workflows/deploy.yml` deve estar sempre commitado no repositório**
 - Sem o workflow no git, nenhum push dispara o pipeline — código local nunca chega a produção
-- O deploy automaticamente: build Docker → push ECR → run migrations → force-deploy ECS → wait stable
-- **Nunca assumir que o código em produção é o mais recente sem verificar** — checar timestamp da imagem no ECR:
+- O deploy automaticamente: build Docker → push ECR → registra nova task definition → update-service → run migrations → wait stable
+- **Nunca assumir que o código em produção é o mais recente sem verificar** — checar imagem da task definition ativa:
   ```bash
-  aws ecr describe-images --repository-name genomaflow/api \
-    --query 'sort_by(imageDetails,&imagePushedAt)[-1].imagePushedAt'
+  aws ecs describe-services --cluster genomaflow --services genomaflow-web \
+    --query 'services[0].deployments[0].taskDefinition'
+  aws ecs describe-task-definition --task-definition <arn> \
+    --query 'taskDefinition.containerDefinitions[0].image'
   ```
 - Após um push para main, aguardar o pipeline completar (~10-15 min) antes de testar em produção
+
+### `force-new-deployment` NÃO troca a imagem (OBRIGATÓRIO)
+
+- `aws ecs update-service --force-new-deployment` reinicia o serviço com a **mesma task definition** — a imagem pinada no digest antigo **não muda**
+- Para trocar a imagem é obrigatório o fluxo completo:
+  1. `aws ecs register-task-definition` com o novo image tag → obtém novo ARN
+  2. `aws ecs update-service --task-definition <novo-arn>` → agora o ECS usa a imagem nova
+- O workflow `.github/workflows/deploy.yml` já implementa esse fluxo corretamente — nunca simplificá-lo para apenas `force-new-deployment`
+
+### Docker layer cache — CACHEBUST (OBRIGATÓRIO)
+
+- Todos os Dockerfiles (`apps/api`, `apps/worker`, `apps/web`) têm `ARG CACHEBUST` posicionado **antes do `COPY src`**
+- O CI passa `--build-arg CACHEBUST=<git-sha>` em cada build
+- Isso garante que a camada de código fonte e todas as camadas posteriores (compilação, etc.) sejam sempre reconstruídas a cada commit, mesmo que o Docker daemon reutilize o cache do `npm ci`
+- **Nunca remover o `ARG CACHEBUST` dos Dockerfiles** — sem ele, builds podem silenciosamente reutilizar código antigo
+
+### Verificar imagem deployada na dúvida
+
+```bash
+# Login no ECR
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin <account>.dkr.ecr.us-east-1.amazonaws.com
+
+# Confirmar que o bundle tem o código novo
+docker run --rm <image:tag> grep -rl "termo_do_novo_código" /usr/share/nginx/html/
+```
 
 ### Variáveis de ambiente em novos task definitions
 
@@ -257,7 +285,10 @@ Quando nenhum tenant está configurado, o SELECT é livre. Com `withTenant`, res
 - Email salvo com case misto + login com comparação exata → usuário não consegue autenticar mesmo com credenciais corretas
 - Worker lendo arquivo de `/tmp` → `ENOENT` em produção porque containers ECS não compartilham filesystem
 - `.github/workflows/deploy.yml` não commitado → push para main não dispara CI/CD, produção nunca atualiza
-- Assumir que código em produção é o mais recente sem verificar timestamp no ECR → debug em código errado
+- Assumir que código em produção é o mais recente sem verificar imagem da task definition → debug em código errado
+- Usar `force-new-deployment` sem registrar nova task definition → ECS reinicia com imagem antiga, mudanças nunca chegam a produção
+- Remover `ARG CACHEBUST` dos Dockerfiles → Docker reutiliza camadas antigas silenciosamente, bundle deployado não reflete o código do commit
+- Mergar branch para main sem aprovação explícita do usuário → viola o fluxo de desenvolvimento obrigatório do projeto
 
 ---
 
