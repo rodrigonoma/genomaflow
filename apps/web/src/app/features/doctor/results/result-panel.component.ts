@@ -17,6 +17,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { signal } from '@angular/core';
 import { environment } from '../../../../environments/environment';
 import { Exam, Subject, Prescription, ClinicalResult } from '../../../shared/models/api.models';
+import { ImagingResultComponent } from './imaging-result.component';
 import { ReviewQueueService } from '../review-queue/review-queue.service';
 import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/prescription/prescription-modal.component';
 
@@ -26,7 +27,8 @@ import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/
   imports: [
     DatePipe, FormsModule, NgTemplateOutlet, UpperCasePipe,
     MatCardModule, MatSelectModule, MatDividerModule, MatButtonModule, MatIconModule, MatDialogModule,
-    AlertBadgeComponent, RiskMeterComponent, DisclaimerComponent, PrescriptionModalComponent
+    AlertBadgeComponent, RiskMeterComponent, DisclaimerComponent, PrescriptionModalComponent,
+    ImagingResultComponent
   ],
   template: `
     <div class="result-page">
@@ -134,7 +136,12 @@ import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/
           @for (result of e.results ?? []; track result.agent_type) {
             <div class="agent-card" [class]="'severity-' + getTopSeverity(result.alerts)">
               <div class="agent-header">
-                <span class="agent-badge">{{ agentLabel(result.agent_type) }}</span>
+                <span class="agent-badge">
+                @if (isImagingAgent(result.agent_type)) {
+                  <mat-icon style="font-size:14px;width:14px;height:14px;vertical-align:middle;margin-right:4px;">camera_alt</mat-icon>
+                }
+                {{ agentLabel(result.agent_type) }}
+              </span>
                 @if (result.risk_scores && objectKeys(result.risk_scores).length) {
                   <div class="risk-scores">
                     @for (key of objectKeys(result.risk_scores); track key) {
@@ -148,6 +155,12 @@ import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/
                   </div>
                 }
               </div>
+
+              @if (isImagingAgent(result.agent_type) && result.metadata?.original_image_url && e === exam) {
+                <div style="margin: 1rem 0;">
+                  <app-imaging-result [result]="result" [examId]="e.id" />
+                </div>
+              }
 
               @if (result.alerts?.length) {
                 <div class="alerts-row">
@@ -669,6 +682,10 @@ export class ResultPanelComponent implements OnInit, OnDestroy {
     return '#10b981';
   }
 
+  isImagingAgent(agentType: string): boolean {
+    return agentType.startsWith('imaging_');
+  }
+
   agentLabel(type: string): string {
     const labels: Record<string, string> = {
       metabolic:            'METABÓLICO',
@@ -679,7 +696,10 @@ export class ResultPanelComponent implements OnInit, OnDestroy {
       clinical_correlation: 'CORRELAÇÃO CLÍNICA',
       small_animals:        'PEQUENOS ANIMAIS',
       equine:               'EQUINO',
-      bovine:               'BOVINO'
+      bovine:               'BOVINO',
+      imaging_rx:           'RADIOGRAFIA (IA)',
+      imaging_ecg:          'ECG (IA)',
+      imaging_ultrasound:   'ULTRASSOM (IA)',
     };
     return labels[type] || type.toUpperCase();
   }
