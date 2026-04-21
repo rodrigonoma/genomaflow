@@ -1,6 +1,11 @@
 const { Pool } = require('pg');
-const { downloadFile, deleteFile, keyFromPath } = require('../storage/s3');
+const { downloadFile, uploadFile, deleteFile, keyFromPath, BUCKET } = require('../storage/s3');
 const Redis = require('ioredis');
+const { dicomToImage } = require('../converters/dicom');
+const { classifyModality } = require('../classifiers/imaging');
+const { runImagingRxAgent } = require('../agents/imaging-rx');
+const { runImagingEcgAgent } = require('../agents/imaging-ecg');
+const { runImagingUltrasoundAgent } = require('../agents/imaging-ultrasound');
 const { extractText } = require('../parsers/pdf');
 const { anonymize } = require('../anonymizer/patient');
 const { scrubText } = require('../anonymizer/text');
@@ -72,6 +77,31 @@ async function persistResult(client, examId, tenantId, agentType, result, usage)
   );
 }
 
+async function persistImagingResult(client, examId, tenantId, agentType, result, usage, imageMetadata) {
+  await client.query(
+    `INSERT INTO clinical_results
+       (exam_id, tenant_id, agent_type, interpretation, risk_scores, alerts,
+        recommendations, disclaimer, model_version, input_tokens, output_tokens, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+    [
+      examId, tenantId, agentType,
+      result.interpretation,
+      JSON.stringify(result.risk_scores || {}),
+      JSON.stringify(result.alerts || []),
+      JSON.stringify([]),
+      result.disclaimer,
+      'claude-sonnet-4-6',
+      usage?.input_tokens || 0,
+      usage?.output_tokens || 0,
+      JSON.stringify({
+        original_image_url: imageMetadata.original_image_url,
+        findings:           result.findings || [],
+        measurements:       result.measurements || null,
+      })
+    ]
+  );
+}
+
 async function getBalance(tenantId, pg) {
   const res = await pg.query(
     'SELECT COALESCE(balance, 0) AS balance FROM tenant_credit_balance WHERE tenant_id = $1',
@@ -105,13 +135,150 @@ async function checkLowCreditAlert(tenantId, pg, redis) {
   }
 }
 
+const IMAGING_AGENT_MAP = {
+  rx:         { type: 'imaging_rx',         runner: runImagingRxAgent },
+  ecg:        { type: 'imaging_ecg',        runner: runImagingEcgAgent },
+  ultrasound: { type: 'imaging_ultrasound', runner: runImagingUltrasoundAgent },
+};
+
+async function processImagingExam({ exam_id, tenant_id, file_path, file_type }) {
+  const client = await pool.connect();
+  let processingError = null;
+
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT set_config($1, $2, true)', ['app.tenant_id', tenant_id]);
+    await client.query(
+      `UPDATE exams SET status = 'processing', updated_at = NOW() WHERE id = $1`, [exam_id]
+    );
+
+    const { rows } = await client.query(
+      `SELECT s.name, s.sex, s.subject_type, s.species, t.module
+       FROM exams e
+       JOIN subjects s ON s.id = e.subject_id
+       JOIN tenants  t ON t.id = e.tenant_id
+       WHERE e.id = $1`,
+      [exam_id]
+    );
+    const subject = rows[0];
+    const tenantModule = subject.module;
+
+    const balance = await getBalance(tenant_id, client);
+    if (balance < 1) {
+      await client.query(
+        `UPDATE exams SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
+        ['Saldo de créditos insuficiente — recarregue seus créditos e envie novamente', exam_id]
+      );
+      await client.query('COMMIT');
+      return;
+    }
+
+    const buffer = await downloadFile(keyFromPath(file_path));
+
+    let imageBase64   = null;
+    let pdfBuffer     = null;
+    let imageMeta     = {};
+    let imageS3Key    = null;
+
+    if (file_type === 'dicom') {
+      const { pngBuffer, meta } = await dicomToImage(buffer);
+      imageMeta    = meta;
+      imageBase64  = pngBuffer.toString('base64');
+      imageS3Key   = `uploads/${tenant_id}/${exam_id}/image.png`;
+      await uploadFile(imageS3Key, pngBuffer, 'image/png');
+    } else if (file_type === 'image') {
+      imageBase64 = buffer.toString('base64');
+      imageS3Key  = keyFromPath(file_path);
+    } else if (file_type === 'pdf') {
+      pdfBuffer = buffer;
+    }
+
+    const original_image_url = imageS3Key ? `s3://${BUCKET}/${imageS3Key}` : null;
+
+    const modality = await classifyModality(imageBase64, imageMeta);
+    if (!modality) {
+      await client.query(
+        `UPDATE exams SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
+        ['Não foi possível identificar a modalidade da imagem. Verifique se é RX, ECG ou Ultrassom.', exam_id]
+      );
+      await client.query('COMMIT');
+      return;
+    }
+
+    const agentConfig = IMAGING_AGENT_MAP[modality];
+    if (!agentConfig) {
+      await client.query(
+        `UPDATE exams SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
+        [`Modalidade "${modality}" não suportada`, exam_id]
+      );
+      await client.query('COMMIT');
+      return;
+    }
+
+    let guidelines = [];
+    try {
+      const searchText = imageMeta.studyDesc || imageMeta.modality || modality;
+      guidelines = await retrieveGuidelines(client, searchText, 3, tenantModule, subject.species || null);
+    } catch (_) {}
+
+    const patientContext = { sex: subject.sex, species: subject.species || null };
+    const { result, usage } = await agentConfig.runner({ imageBase64, imageMeta, pdfBuffer, patient: patientContext, guidelines });
+
+    await persistImagingResult(client, exam_id, tenant_id, agentConfig.type, result, usage, { original_image_url });
+    await debitCredit(tenant_id, exam_id, agentConfig.type, client);
+
+    await client.query(
+      `UPDATE exams SET status = 'done', updated_at = NOW() WHERE id = $1`, [exam_id]
+    );
+    await client.query('COMMIT');
+
+  } catch (err) {
+    processingError = err;
+    await client.query('ROLLBACK').catch(() => {});
+  } finally {
+    client.release();
+  }
+
+  if (processingError) {
+    const errClient = await pool.connect();
+    try {
+      await errClient.query('BEGIN');
+      await errClient.query('SELECT set_config($1, $2, true)', ['app.tenant_id', tenant_id]);
+      await errClient.query(
+        `UPDATE exams SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2`,
+        [processingError.message, exam_id]
+      );
+      await errClient.query('COMMIT');
+    } catch (_) {
+      await errClient.query('ROLLBACK').catch(() => {});
+    } finally {
+      errClient.release();
+    }
+    try {
+      const pub = new Redis(process.env.REDIS_URL);
+      await pub.publish(`exam:error:${tenant_id}`, JSON.stringify({ exam_id, error_message: processingError.message }));
+      await pub.quit();
+    } catch (_) {}
+    throw processingError;
+  }
+
+  try {
+    const pub = new Redis(process.env.REDIS_URL);
+    await pub.publish(`exam:done:${tenant_id}`, JSON.stringify({ exam_id }));
+    await pub.quit();
+  } catch (_) {}
+}
+
 /**
  * Full exam processing pipeline:
  * parse → anonymize → RAG → phase1 agents → phase2 agents → persist → notify
  *
- * @param {{ exam_id: string, tenant_id: string, file_path: string }} jobData
+ * @param {{ exam_id: string, tenant_id: string, file_path: string, file_type: string }} jobData
  */
-async function processExam({ exam_id, tenant_id, file_path, selected_agents, chief_complaint, current_symptoms }) {
+async function processExam({ exam_id, tenant_id, file_path, file_type = 'pdf', selected_agents, chief_complaint, current_symptoms }) {
+  if (file_type === 'dicom' || file_type === 'image') {
+    return processImagingExam({ exam_id, tenant_id, file_path, file_type });
+  }
   const client = await pool.connect();
   let processingError = null;
 
