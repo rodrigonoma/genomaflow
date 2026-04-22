@@ -97,13 +97,18 @@ module.exports = async function (fastify) {
   // ── SUBJECTS ───────────────────────────────────────────────
 
   fastify.post('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { tenant_id, module } = request.user;
+    const { tenant_id, user_id, module } = request.user;
     const {
       name, birth_date, sex, cpf, phone,
       weight, height, blood_type, allergies, comorbidities, notes,
+      consent_given,
       // veterinary
       species, owner_id, breed, color, microchip, neutered
     } = request.body;
+
+    // Consentimento LGPD — se o profissional marcou, registra quem e quando.
+    const consentAt = consent_given ? new Date() : null;
+    const consentBy = consent_given ? user_id : null;
 
     if (module === 'human') {
       if (!name || !birth_date || !sex)
@@ -113,14 +118,17 @@ module.exports = async function (fastify) {
         const { rows } = await client.query(
           `INSERT INTO subjects
              (tenant_id, name, birth_date, sex, cpf_hash, phone,
-              weight, height, blood_type, allergies, comorbidities, notes, subject_type)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'human')
+              weight, height, blood_type, allergies, comorbidities, notes, subject_type,
+              consent_given_at, consent_given_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'human',$13,$14)
            RETURNING id, name, birth_date, sex, subject_type,
-                     weight, height, blood_type, allergies, comorbidities, notes, phone, created_at`,
+                     weight, height, blood_type, allergies, comorbidities, notes, phone,
+                     consent_given_at, consent_given_by, created_at`,
           [tenant_id, name, birth_date, sex,
            cpf ? hashCpf(cpf) : null, phone || null,
            weight || null, height || null, blood_type || null,
-           allergies || null, comorbidities || null, notes || null]
+           allergies || null, comorbidities || null, notes || null,
+           consentAt, consentBy]
         );
         return rows[0];
       });
@@ -140,15 +148,18 @@ module.exports = async function (fastify) {
         `INSERT INTO subjects
            (tenant_id, name, birth_date, sex, species, owner_id,
             breed, color, microchip, neutered,
-            weight, allergies, comorbidities, notes, subject_type)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'animal')
+            weight, allergies, comorbidities, notes, subject_type,
+            consent_given_at, consent_given_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'animal',$15,$16)
          RETURNING id, name, birth_date, sex, species, subject_type,
                    owner_id, breed, color, microchip, neutered,
-                   weight, allergies, comorbidities, notes, created_at`,
+                   weight, allergies, comorbidities, notes,
+                   consent_given_at, consent_given_by, created_at`,
         [tenant_id, name, birth_date || null, sex,
          species, owner_id || null,
          breed || null, color || null, microchip || null, neutered ?? null,
-         weight || null, allergies || null, comorbidities || null, notes || null]
+         weight || null, allergies || null, comorbidities || null, notes || null,
+         consentAt, consentBy]
       );
       return rows[0];
     });
@@ -215,14 +226,19 @@ module.exports = async function (fastify) {
   });
 
   fastify.put('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { tenant_id } = request.user;
+    const { tenant_id, user_id } = request.user;
     const { id } = request.params;
     const {
       name, birth_date, sex, phone,
       weight, height, blood_type, allergies, comorbidities, notes,
       breed, color, microchip, neutered, owner_id,
-      medications, smoking, alcohol, diet_type, physical_activity, family_history
+      medications, smoking, alcohol, diet_type, physical_activity, family_history,
+      consent_given
     } = request.body;
+
+    // Consentimento LGPD: apenas seta se o campo vier true. Não aceita revogação por aqui.
+    const consentAt = consent_given === true ? new Date() : null;
+    const consentBy = consent_given === true ? user_id : null;
 
     const subject = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
@@ -247,14 +263,17 @@ module.exports = async function (fastify) {
            alcohol           = COALESCE($18, alcohol),
            diet_type         = COALESCE($19, diet_type),
            physical_activity = COALESCE($20, physical_activity),
-           family_history    = COALESCE($21, family_history)
-         WHERE id = $22 AND deleted_at IS NULL
+           family_history    = COALESCE($21, family_history),
+           consent_given_at  = COALESCE($22, consent_given_at),
+           consent_given_by  = COALESCE($23, consent_given_by)
+         WHERE id = $24 AND deleted_at IS NULL
          RETURNING *`,
         [name, birth_date, sex, phone,
          weight, height, blood_type, allergies, comorbidities, notes,
          breed, color, microchip, neutered, owner_id,
          medications ?? null, smoking ?? null, alcohol ?? null,
          diet_type ?? null, physical_activity ?? null, family_history ?? null,
+         consentAt, consentBy,
          id]
       );
       return rows[0] || null;

@@ -10,11 +10,13 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatAutocompleteModule, MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { environment } from '../../../../environments/environment';
 import { Subject, Owner } from '../../../shared/models/api.models';
 import { AuthService } from '../../../core/auth/auth.service';
 import { formatCpf, formatPhone, formatCep, unmask } from '../../../shared/utils/mask';
 import { lookupCep } from '../../../shared/utils/viacep';
+import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
 
 @Component({
   selector: 'app-patient-list',
@@ -22,7 +24,7 @@ import { lookupCep } from '../../../shared/utils/viacep';
   imports: [
     RouterModule, FormsModule, AsyncPipe,
     MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatTooltipModule,
-    MatAutocompleteModule
+    MatAutocompleteModule, MatCheckboxModule
   ],
   styles: [`
     :host { display: block; background: #0b1326; min-height: 100vh; padding: 2rem; }
@@ -121,6 +123,33 @@ import { lookupCep } from '../../../shared/utils/viacep';
     @keyframes spin {
       from { transform: rotate(0deg); }
       to   { transform: rotate(360deg); }
+    }
+
+    /* ── LGPD consent ── */
+    .consent-box {
+      background: rgba(192,193,255,0.04);
+      border: 1px solid rgba(192,193,255,0.15);
+      border-radius: 6px;
+      padding: 0.875rem 1rem;
+      margin-bottom: 1rem;
+    }
+    .consent-label {
+      font-family: 'Inter', sans-serif; font-size: 13px;
+      color: #dae2fd; line-height: 1.5; margin-left: 0.375rem;
+    }
+    .template-link {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: transparent; border: 1px solid rgba(192,193,255,0.3);
+      color: #c0c1ff; border-radius: 4px;
+      padding: 0.35rem 0.75rem; margin-top: 0.625rem;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      cursor: pointer; transition: all 150ms;
+    }
+    .template-link:hover { background: rgba(192,193,255,0.1); border-color: #c0c1ff; }
+    .consent-hint {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      color: #7c7b8f; margin: 0.625rem 0 0 0; line-height: 1.5;
     }
   `],
   template: `
@@ -382,6 +411,23 @@ import { lookupCep } from '../../../shared/utils/viacep';
               </div>
             }
 
+            <div class="section-divider">Consentimento LGPD</div>
+            <div class="consent-box">
+              <mat-checkbox color="primary" [(ngModel)]="patientForm.consent_given">
+                <span class="consent-label">
+                  {{ user.module === 'veterinary' ? 'O tutor' : 'O paciente (ou responsável legal)' }}
+                  assinou o Termo de Consentimento LGPD para o uso dos dados pela plataforma com IA.
+                </span>
+              </mat-checkbox>
+              <button type="button" class="template-link" (click)="downloadConsentTemplate()">
+                <mat-icon style="font-size:14px;width:14px;height:14px">download</mat-icon>
+                Baixar template para impressão
+              </button>
+              <p class="consent-hint">
+                A guarda do termo físico assinado é responsabilidade da clínica. Aqui registramos apenas que o consentimento foi obtido.
+              </p>
+            </div>
+
             @if (formError()) {
               <p style="color:#ffb4ab;font-size:13px;margin-bottom:0.5rem">{{ formError() }}</p>
             }
@@ -474,6 +520,7 @@ export class PatientListComponent implements OnInit {
     weight?: number; height?: number; blood_type?: string; allergies?: string;
     comorbidities?: string; notes?: string;
     species?: string; breed?: string; microchip?: string; owner_id?: string | null;
+    consent_given?: boolean;
   } = {};
 
   ownerForm: {
@@ -539,6 +586,14 @@ export class PatientListComponent implements OnInit {
     if (typeof owner === 'string') return owner;
     return owner.name ?? '';
   };
+
+  downloadConsentTemplate(): void {
+    // Busca nome/CNPJ da clínica para pré-preencher o template.
+    this.http.get<{ name: string; cnpj?: string | null }>(`${environment.apiUrl}/clinic/profile`).subscribe({
+      next: p => generateConsentTemplatePdf({ name: p.name, cnpj: p.cnpj ?? null }),
+      error: () => generateConsentTemplatePdf()
+    });
+  }
 
   toggleOwnerForm(): void {
     this.showOwnerForm.update(v => !v);
