@@ -24,7 +24,8 @@ module.exports = async function (fastify) {
     const { tenant_id } = request.user;
     return withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
-        `SELECT id, name, cpf_last4, phone, email, address, notes, created_at
+        `SELECT id, name, cpf_last4, phone, email, address, notes, created_at,
+                cep, street, number, complement, neighborhood, city, state
          FROM owners ORDER BY name`
       );
       return rows;
@@ -33,18 +34,25 @@ module.exports = async function (fastify) {
 
   fastify.post('/owners', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { tenant_id } = request.user;
-    const { name, cpf, phone, email, address, notes } = request.body;
+    const {
+      name, cpf, phone, email, notes,
+      cep, street, number, complement, neighborhood, city, state
+    } = request.body;
     if (!name) return reply.status(400).send({ error: 'name is required' });
 
     const owner = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
-        `INSERT INTO owners (tenant_id, name, cpf_hash, cpf_last4, phone, email, address, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-         RETURNING id, name, cpf_last4, phone, email, address, notes, created_at`,
+        `INSERT INTO owners (tenant_id, name, cpf_hash, cpf_last4, phone, email, notes,
+                             cep, street, number, complement, neighborhood, city, state)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         RETURNING id, name, cpf_last4, phone, email, notes, created_at,
+                   cep, street, number, complement, neighborhood, city, state`,
         [tenant_id, name,
          cpf ? hashCpf(cpf) : null,
          cpf ? cpfLast4(cpf) : null,
-         phone || null, email || null, address || null, notes || null]
+         phone || null, email || null, notes || null,
+         cep || null, street || null, number || null, complement || null,
+         neighborhood || null, city || null, state || null]
       );
       return rows[0];
     });
@@ -54,19 +62,31 @@ module.exports = async function (fastify) {
   fastify.put('/owners/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { tenant_id } = request.user;
     const { id } = request.params;
-    const { name, phone, email, address, notes } = request.body;
+    const {
+      name, phone, email, notes,
+      cep, street, number, complement, neighborhood, city, state
+    } = request.body;
 
     const owner = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
         `UPDATE owners SET
-           name    = COALESCE($1, name),
-           phone   = COALESCE($2, phone),
-           email   = COALESCE($3, email),
-           address = COALESCE($4, address),
-           notes   = COALESCE($5, notes)
-         WHERE id = $6
-         RETURNING id, name, cpf_last4, phone, email, address, notes, updated_at`,
-        [name, phone, email, address, notes, id]
+           name         = COALESCE($1,  name),
+           phone        = COALESCE($2,  phone),
+           email        = COALESCE($3,  email),
+           notes        = COALESCE($4,  notes),
+           cep          = COALESCE($5,  cep),
+           street       = COALESCE($6,  street),
+           number       = COALESCE($7,  number),
+           complement   = COALESCE($8,  complement),
+           neighborhood = COALESCE($9,  neighborhood),
+           city         = COALESCE($10, city),
+           state        = COALESCE($11, state)
+         WHERE id = $12
+         RETURNING id, name, cpf_last4, phone, email, notes, updated_at,
+                   cep, street, number, complement, neighborhood, city, state`,
+        [name, phone, email, notes,
+         cep, street, number, complement, neighborhood, city, state,
+         id]
       );
       return rows[0] || null;
     });

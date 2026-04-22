@@ -12,6 +12,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { environment } from '../../../../environments/environment';
 import { Subject, Owner } from '../../../shared/models/api.models';
 import { AuthService } from '../../../core/auth/auth.service';
+import { formatCpf, formatPhone, formatCep, unmask } from '../../../shared/utils/mask';
+import { lookupCep } from '../../../shared/utils/viacep';
 
 @Component({
   selector: 'app-patient-list',
@@ -113,6 +115,11 @@ import { AuthService } from '../../../core/auth/auth.service';
       margin: 1rem 0 0.75rem; border-bottom: 1px solid rgba(70,69,84,0.18);
       padding-bottom: 0.5rem;
     }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
   `],
   template: `
     <div class="patients-page">
@@ -144,23 +151,70 @@ import { AuthService } from '../../../core/auth/auth.service';
             </mat-form-field>
             <mat-form-field appearance="outline">
               <mat-label>CPF</mat-label>
-              <input matInput [(ngModel)]="ownerForm.cpf" placeholder="000.000.000-00"/>
+              <input matInput [ngModel]="ownerForm.cpf ?? ''"
+                     (ngModelChange)="ownerForm.cpf = onCpfInput($event)"
+                     placeholder="000.000.000-00" inputmode="numeric"/>
+            </mat-form-field>
+          </div>
+          <div class="field-pair">
+            <mat-form-field appearance="outline">
+              <mat-label>Telefone</mat-label>
+              <input matInput [ngModel]="ownerForm.phone ?? ''"
+                     (ngModelChange)="ownerForm.phone = onPhoneInput($event)"
+                     placeholder="(00) 00000-0000" inputmode="tel"/>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>E-mail</mat-label>
+              <input matInput [(ngModel)]="ownerForm.email" type="email"/>
+            </mat-form-field>
+          </div>
+
+          <div class="section-divider">Endereço</div>
+          <div class="field-trio">
+            <mat-form-field appearance="outline">
+              <mat-label>CEP</mat-label>
+              <input matInput [ngModel]="ownerForm.cep ?? ''"
+                     (ngModelChange)="ownerForm.cep = onCepInput($event)"
+                     (blur)="onCepBlur()"
+                     placeholder="00000-000" inputmode="numeric"/>
+              @if (cepLoading()) {
+                <mat-icon matSuffix style="animation: spin 1s linear infinite">sync</mat-icon>
+              }
+            </mat-form-field>
+            <mat-form-field appearance="outline" style="grid-column: span 2">
+              <mat-label>Logradouro</mat-label>
+              <input matInput [(ngModel)]="ownerForm.street" readonly/>
             </mat-form-field>
           </div>
           <div class="field-trio">
             <mat-form-field appearance="outline">
-              <mat-label>Telefone</mat-label>
-              <input matInput [(ngModel)]="ownerForm.phone"/>
+              <mat-label>Número</mat-label>
+              <input matInput [(ngModel)]="ownerForm.number" placeholder="123 ou s/n"/>
             </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>E-mail</mat-label>
-              <input matInput [(ngModel)]="ownerForm.email"/>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Endereço</mat-label>
-              <input matInput [(ngModel)]="ownerForm.address"/>
+            <mat-form-field appearance="outline" style="grid-column: span 2">
+              <mat-label>Complemento</mat-label>
+              <input matInput [(ngModel)]="ownerForm.complement" placeholder="Apto 4, bloco B..."/>
             </mat-form-field>
           </div>
+          <div class="field-trio">
+            <mat-form-field appearance="outline">
+              <mat-label>Bairro</mat-label>
+              <input matInput [(ngModel)]="ownerForm.neighborhood" readonly/>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Cidade</mat-label>
+              <input matInput [(ngModel)]="ownerForm.city" readonly/>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>UF</mat-label>
+              <input matInput [(ngModel)]="ownerForm.state" maxlength="2" readonly/>
+            </mat-form-field>
+          </div>
+
+          @if (cepError()) {
+            <p style="color:#ffb4ab;font-size:12px;margin:0.25rem 0 0.75rem 0;">{{ cepError() }}</p>
+          }
+
           <div class="form-actions">
             <button mat-button (click)="showOwnerForm.set(false)">Cancelar</button>
             <button mat-flat-button style="background:#4ad6a0;color:#0b1326;font-weight:700"
@@ -201,11 +255,15 @@ import { AuthService } from '../../../core/auth/auth.service';
                 </mat-form-field>
                 <mat-form-field appearance="outline">
                   <mat-label>Telefone</mat-label>
-                  <input matInput [(ngModel)]="patientForm.phone"/>
+                  <input matInput [ngModel]="patientForm.phone ?? ''"
+                         (ngModelChange)="patientForm.phone = onPhoneInput($event)"
+                         placeholder="(00) 00000-0000" inputmode="tel"/>
                 </mat-form-field>
                 <mat-form-field appearance="outline">
                   <mat-label>CPF</mat-label>
-                  <input matInput [(ngModel)]="patientForm.cpf" placeholder="000.000.000-00"/>
+                  <input matInput [ngModel]="patientForm.cpf ?? ''"
+                         (ngModelChange)="patientForm.cpf = onCpfInput($event)"
+                         placeholder="000.000.000-00" inputmode="numeric"/>
                 </mat-form-field>
               </div>
               <div class="section-divider">Dados clínicos (opcional)</div>
@@ -380,6 +438,8 @@ export class PatientListComponent implements OnInit {
   showPatientForm = signal(false);
   showOwnerForm   = signal(false);
   formError       = signal('');
+  cepLoading      = signal(false);
+  cepError        = signal('');
 
   readonly bloodTypes = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
 
@@ -391,7 +451,9 @@ export class PatientListComponent implements OnInit {
   } = {};
 
   ownerForm: {
-    name?: string; cpf?: string; phone?: string; email?: string; address?: string;
+    name?: string; cpf?: string; phone?: string; email?: string; notes?: string;
+    cep?: string; street?: string; number?: string; complement?: string;
+    neighborhood?: string; city?: string; state?: string;
   } = {};
 
   ngOnInit(): void {
@@ -430,11 +492,41 @@ export class PatientListComponent implements OnInit {
   toggleOwnerForm(): void {
     this.showOwnerForm.update(v => !v);
     this.ownerForm = {};
+    this.cepError.set('');
+    this.cepLoading.set(false);
+  }
+
+  onCpfInput(v: string): string   { return formatCpf(v); }
+  onPhoneInput(v: string): string { return formatPhone(v); }
+  onCepInput(v: string): string   { return formatCep(v); }
+
+  onCepBlur(): void {
+    const digits = unmask(this.ownerForm.cep);
+    if (digits.length !== 8) return;
+    this.cepError.set('');
+    this.cepLoading.set(true);
+    lookupCep(this.http, digits).subscribe(addr => {
+      this.cepLoading.set(false);
+      if (!addr) {
+        this.cepError.set('CEP não encontrado. Preencha manualmente ou verifique o número.');
+        return;
+      }
+      this.ownerForm.street       = addr.street;
+      this.ownerForm.neighborhood = addr.neighborhood;
+      this.ownerForm.city         = addr.city;
+      this.ownerForm.state        = addr.state;
+    });
   }
 
   saveOwner(): void {
     if (!this.ownerForm.name) { return; }
-    this.http.post<Owner>(`${environment.apiUrl}/patients/owners`, this.ownerForm)
+    const payload = {
+      ...this.ownerForm,
+      cpf:   this.ownerForm.cpf   ? unmask(this.ownerForm.cpf)   : null,
+      phone: this.ownerForm.phone ? unmask(this.ownerForm.phone) : null,
+      cep:   this.ownerForm.cep   ? unmask(this.ownerForm.cep)   : null,
+    };
+    this.http.post<Owner>(`${environment.apiUrl}/patients/owners`, payload)
       .subscribe(o => {
         this.owners.update(list => [...list, o]);
         this.showOwnerForm.set(false);
@@ -443,7 +535,12 @@ export class PatientListComponent implements OnInit {
 
   savePatient(): void {
     this.formError.set('');
-    this.http.post<Subject>(`${environment.apiUrl}/patients`, this.patientForm)
+    const payload = {
+      ...this.patientForm,
+      cpf:   this.patientForm.cpf   ? unmask(this.patientForm.cpf)   : null,
+      phone: this.patientForm.phone ? unmask(this.patientForm.phone) : null,
+    };
+    this.http.post<Subject>(`${environment.apiUrl}/patients`, payload)
       .subscribe({
         next: s => {
           this.subjects = [s, ...this.subjects];
