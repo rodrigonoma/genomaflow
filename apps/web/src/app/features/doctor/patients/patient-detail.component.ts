@@ -11,6 +11,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatAutocompleteModule, MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -45,7 +46,7 @@ interface ComparisonBlock {
     RouterModule, DatePipe, NgClass, FormsModule,
     MatTabsModule, MatButtonModule, MatIconModule,
     MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatChipsModule, MatDialogModule, MatCheckboxModule, MatMenuModule, MatSnackBarModule, ExamCardComponent,
+    MatChipsModule, MatDialogModule, MatCheckboxModule, MatMenuModule, MatAutocompleteModule, MatSnackBarModule, ExamCardComponent,
     PrescriptionModalComponent
   ],
   styles: [`
@@ -660,15 +661,29 @@ interface ComparisonBlock {
                   <div class="section-label">Dono / Tutor</div>
                   <mat-form-field appearance="outline">
                     <mat-label>Vincular dono</mat-label>
-                    <mat-select [(ngModel)]="editForm.owner_id">
-                      <mat-option [value]="null">— sem vínculo —</mat-option>
-                      @for (o of owners(); track o.id) {
-                        <mat-option [value]="o.id">
-                          {{ o.name }}{{ o.cpf_last4 ? ' (***' + o.cpf_last4 + ')' : '' }}
-                        </mat-option>
-                      }
-                    </mat-select>
+                    <input matInput type="text"
+                           [matAutocomplete]="ownerAuto"
+                           [value]="ownerQuery()"
+                           (input)="onOwnerQueryInput($event)"
+                           placeholder="Digite o nome do dono..."/>
+                    @if (editForm.owner_id) {
+                      <button mat-icon-button matSuffix type="button" (click)="clearOwner($event)" aria-label="Remover vínculo">
+                        <mat-icon>close</mat-icon>
+                      </button>
+                    }
                   </mat-form-field>
+                  <mat-autocomplete #ownerAuto="matAutocomplete"
+                                    (optionSelected)="onOwnerSelected($event)"
+                                    [displayWith]="displayOwner">
+                    @for (o of filteredOwners(); track o.id) {
+                      <mat-option [value]="o">
+                        {{ o.name }}{{ o.cpf_last4 ? ' (***' + o.cpf_last4 + ')' : '' }}
+                      </mat-option>
+                    }
+                    @if (filteredOwners().length === 0 && ownerQuery()) {
+                      <mat-option disabled>Nenhum dono encontrado.</mat-option>
+                    }
+                  </mat-autocomplete>
                   @if (subject()!.owner_name) {
                     <div class="owner-meta" style="margin-top:0.5rem">
                       Atual: {{ subject()!.owner_name }}
@@ -1217,6 +1232,14 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   plans     = signal<TreatmentPlan[]>([]);
   prescriptions = signal<Prescription[]>([]);
   owners    = signal<Owner[]>([]);
+  ownerQuery = signal('');
+
+  filteredOwners = computed<Owner[]>(() => {
+    const q = this.ownerQuery().toLowerCase().trim();
+    const all = this.owners();
+    if (!q) return all.slice(0, 20);
+    return all.filter(o => o.name.toLowerCase().includes(q)).slice(0, 20);
+  });
   selectedTabIndex = signal(0);
   showNewPlan = signal(false);
   uploading   = signal(false);
@@ -1302,6 +1325,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
         ...s,
         birth_date: s.birth_date ? s.birth_date.toString().slice(0, 10) : undefined
       };
+      if (s.owner_name) this.ownerQuery.set(s.owner_name);
     });
   }
 
@@ -1376,6 +1400,30 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
         error: () => {}
       });
   }
+
+  onOwnerQueryInput(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.ownerQuery.set(value);
+    if (!value.trim()) this.editForm.owner_id = null;
+  }
+
+  onOwnerSelected(event: MatAutocompleteSelectedEvent): void {
+    const owner = event.option.value as Owner;
+    this.editForm.owner_id = owner.id;
+    this.ownerQuery.set(owner.name);
+  }
+
+  clearOwner(event: Event): void {
+    event.stopPropagation();
+    this.editForm.owner_id = null;
+    this.ownerQuery.set('');
+  }
+
+  displayOwner = (owner: Owner | string | null): string => {
+    if (!owner) return '';
+    if (typeof owner === 'string') return owner;
+    return owner.name ?? '';
+  };
 
   goToAnalysis(examId: string, agentType: string): void {
     this.selectedAiExamId.set(examId);
