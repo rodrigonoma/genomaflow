@@ -58,7 +58,8 @@ module.exports = async function (fastify) {
     const { rows } = await withTenant(fastify.pg, tenant_id, async (client) => {
       return client.query(
         `SELECT p.id, p.subject_id, p.exam_id, p.agent_type, p.items, p.notes, p.pdf_url, p.created_at,
-                e.created_at AS exam_created_at
+                e.created_at AS exam_created_at,
+                e.file_path AS exam_file_path
          FROM prescriptions p
          JOIN exams e ON e.id = p.exam_id
          WHERE p.subject_id = $1

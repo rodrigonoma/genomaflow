@@ -21,6 +21,7 @@ import { environment } from '../../../../environments/environment';
 import { Subject, Exam, Alert, TreatmentPlan, TreatmentItem, ClinicalResult, SPECIALTY_AGENTS, Prescription } from '../../../shared/models/api.models';
 import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/prescription/prescription-modal.component';
 import { WsService } from '../../../core/ws/ws.service';
+import { shortId, cleanFilename } from '../../../shared/utils/id-format';
 import { Subscription } from 'rxjs';
 
 interface AlertChange {
@@ -377,6 +378,14 @@ interface ComparisonBlock {
     .prescription-title {
       font-family: 'Space Grotesk', sans-serif; font-weight: 700;
       font-size: 14px; color: #dae2fd; margin-top: 6px;
+      display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+    }
+    .prescription-id-chip {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      font-weight: 700; letter-spacing: 0.06em;
+      color: #c0c1ff; background: rgba(192,193,255,0.08);
+      border: 1px solid rgba(192,193,255,0.2);
+      padding: 1px 6px; border-radius: 3px;
     }
     .prescription-meta {
       font-family: 'JetBrains Mono', monospace; font-size: 10px;
@@ -1020,12 +1029,13 @@ interface ComparisonBlock {
                     </span>
                     <div class="prescription-title">
                       Prescrição {{ p.agent_type === 'therapeutic' ? 'Terapêutica' : 'Nutricional' }}
+                      <span class="prescription-id-chip">{{ prescriptionShortId(p) }}</span>
                     </div>
                     <div class="prescription-meta">
                       Criada em {{ p.created_at | date:'dd/MM/yyyy HH:mm' }}
                       @if (p.exam_created_at) {
                         · <a class="exam-link" (click)="goToAnalysis(p.exam_id, p.agent_type)">
-                            Baseada em exame de {{ p.exam_created_at | date:'dd/MM/yyyy' }}
+                            Baseada em {{ examShortId(p.exam_id) }}{{ examContextOf(p) ? ' · ' + examContextOf(p) : '' }} ({{ p.exam_created_at | date:'dd/MM/yyyy' }})
                           </a>
                       }
                     </div>
@@ -1352,6 +1362,18 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     this.selectedAiExamId.set(examId);
     this.expandedAgents.set(new Set([agentType]));
     this.selectedTabIndex.set(this.AI_TAB_INDEX);
+  }
+
+  prescriptionShortId(p: Prescription): string {
+    return shortId(p.id, 'RX');
+  }
+
+  examShortId(examId: string): string {
+    return shortId(examId, 'EX');
+  }
+
+  examContextOf(p: Prescription): string {
+    return cleanFilename(p.exam_file_path);
   }
 
   downloadPrescriptionPdf(p: Prescription): void {
