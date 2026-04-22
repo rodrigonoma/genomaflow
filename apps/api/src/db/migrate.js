@@ -4,7 +4,10 @@ const fs = require('fs');
 const path = require('path');
 
 function poolConfig() {
-  if (process.env.DATABASE_URL) return { connectionString: process.env.DATABASE_URL };
+  // Prefer DATABASE_URL_ADMIN for schema changes (owner of tables).
+  // Fallback to DATABASE_URL for environments that don't separate admin/app users.
+  const url = process.env.DATABASE_URL_ADMIN || process.env.DATABASE_URL;
+  if (url) return { connectionString: url };
   return {
     host: process.env.DB_HOST,
     port: parseInt(process.env.DB_PORT || '5432'),

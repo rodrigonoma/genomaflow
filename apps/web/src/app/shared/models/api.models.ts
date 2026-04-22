@@ -7,6 +7,13 @@ export interface Owner {
   address?: string;
   notes?: string;
   created_at: string;
+  cep?: string;
+  street?: string;
+  number?: string;
+  complement?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
 }
 
 export interface TreatmentItem {

@@ -18,7 +18,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ExamCardComponent } from '../../../shared/components/exam-card/exam-card.component';
 import { environment } from '../../../../environments/environment';
-import { Subject, Exam, Alert, TreatmentPlan, TreatmentItem, ClinicalResult, SPECIALTY_AGENTS, Prescription } from '../../../shared/models/api.models';
+import { Subject, Exam, Alert, TreatmentPlan, TreatmentItem, ClinicalResult, SPECIALTY_AGENTS, Prescription, Owner } from '../../../shared/models/api.models';
 import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/prescription/prescription-modal.component';
 import { WsService } from '../../../core/ws/ws.service';
 import { shortId, examTypeLabel } from '../../../shared/utils/id-format';
@@ -654,19 +654,28 @@ interface ComparisonBlock {
                 </div>
               }
 
-              <!-- Owner card (vet only) -->
-              @if (subject()!.subject_type === 'animal' && subject()!.owner_name) {
+              <!-- Owner selector (vet only) -->
+              @if (subject()!.subject_type === 'animal') {
                 <div class="profile-section">
                   <div class="section-label">Dono / Tutor</div>
-                  <div class="owner-card">
-                    <div>
-                      <div class="owner-name">{{ subject()!.owner_name }}</div>
-                      <div class="owner-meta">
-                        @if (subject()!.owner_cpf_last4) { CPF ***{{ subject()!.owner_cpf_last4 }} · }
-                        @if (subject()!.owner_phone) { {{ subject()!.owner_phone }} }
-                      </div>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Vincular dono</mat-label>
+                    <mat-select [(ngModel)]="editForm.owner_id">
+                      <mat-option [value]="null">— sem vínculo —</mat-option>
+                      @for (o of owners(); track o.id) {
+                        <mat-option [value]="o.id">
+                          {{ o.name }}{{ o.cpf_last4 ? ' (***' + o.cpf_last4 + ')' : '' }}
+                        </mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  @if (subject()!.owner_name) {
+                    <div class="owner-meta" style="margin-top:0.5rem">
+                      Atual: {{ subject()!.owner_name }}
+                      @if (subject()!.owner_cpf_last4) { · CPF ***{{ subject()!.owner_cpf_last4 }} }
+                      @if (subject()!.owner_phone) { · {{ subject()!.owner_phone }} }
                     </div>
-                  </div>
+                  }
                 </div>
               }
 
@@ -1207,6 +1216,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   aiResults = signal<Exam[]>([]);
   plans     = signal<TreatmentPlan[]>([]);
   prescriptions = signal<Prescription[]>([]);
+  owners    = signal<Owner[]>([]);
   selectedTabIndex = signal(0);
   showNewPlan = signal(false);
   uploading   = signal(false);
@@ -1266,6 +1276,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     this.loadExams(id);
     this.loadPlans(id);
     this.loadPrescriptions(id);
+    this.loadOwners();
     this.http.get<{ specialty: string | null }>(`${environment.apiUrl}/auth/me`)
       .subscribe({ next: me => this.doctorSpecialty.set(me.specialty ?? null), error: () => {} });
     this.wsSub = new Subscription();
@@ -1354,6 +1365,14 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     this.http.get<Prescription[]>(`${environment.apiUrl}/prescriptions/subjects/${subjectId}`)
       .subscribe({
         next: list => this.prescriptions.set(list),
+        error: () => {}
+      });
+  }
+
+  private loadOwners(): void {
+    this.http.get<Owner[]>(`${environment.apiUrl}/patients/owners`)
+      .subscribe({
+        next: list => this.owners.set(list),
         error: () => {}
       });
   }
