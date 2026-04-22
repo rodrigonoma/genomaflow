@@ -50,6 +50,26 @@ module.exports = async function (fastify) {
     return rows;
   });
 
+  // GET /prescriptions/subjects/:subjectId — todas as receitas do paciente/animal
+  fastify.get('/subjects/:subjectId', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { tenant_id } = request.user;
+    const { subjectId } = request.params;
+
+    const { rows } = await withTenant(fastify.pg, tenant_id, async (client) => {
+      return client.query(
+        `SELECT p.id, p.subject_id, p.exam_id, p.agent_type, p.items, p.notes, p.pdf_url, p.created_at,
+                e.created_at AS exam_created_at
+         FROM prescriptions p
+         JOIN exams e ON e.id = p.exam_id
+         WHERE p.subject_id = $1
+         ORDER BY p.created_at DESC`,
+        [subjectId]
+      );
+    });
+
+    return rows;
+  });
+
   // GET /prescriptions/:id — detalhe
   fastify.get('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { tenant_id } = request.user;
