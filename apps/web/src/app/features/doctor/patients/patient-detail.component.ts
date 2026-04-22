@@ -14,6 +14,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ExamCardComponent } from '../../../shared/components/exam-card/exam-card.component';
 import { environment } from '../../../../environments/environment';
@@ -43,7 +44,7 @@ interface ComparisonBlock {
     RouterModule, DatePipe, NgClass, FormsModule,
     MatTabsModule, MatButtonModule, MatIconModule,
     MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatChipsModule, MatDialogModule, MatCheckboxModule, MatSnackBarModule, ExamCardComponent,
+    MatChipsModule, MatDialogModule, MatCheckboxModule, MatMenuModule, MatSnackBarModule, ExamCardComponent,
     PrescriptionModalComponent
   ],
   styles: [`
@@ -340,6 +341,71 @@ interface ComparisonBlock {
     .plan-status-completed { color: #c0c1ff; }
     .plan-status-cancelled { color: #7c7b8f; }
 
+    /* ── TREATMENTS — two-section layout ── */
+    .treatments-section { margin-bottom: 2rem; max-width: 900px; }
+    .section-header {
+      display: flex; align-items: center; gap: 0.75rem;
+      margin-bottom: 1rem; padding-bottom: 0.5rem;
+      border-bottom: 1px solid rgba(70,69,84,0.18);
+    }
+    .section-title {
+      font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+      font-size: 0.9375rem; color: #dae2fd;
+    }
+    .section-count {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      background: rgba(73,75,214,0.15); color: #c0c1ff;
+      border: 1px solid rgba(73,75,214,0.3);
+      padding: 2px 8px; border-radius: 20px;
+    }
+    .empty-state-small {
+      font-size: 13px; color: #7c7b8f; padding: 1rem; margin: 0;
+      font-style: italic;
+    }
+
+    /* ── PRESCRIPTION CARD ── */
+    .prescription-card {
+      background: #111929; border: 1px solid rgba(70,69,84,0.2);
+      border-left: 3px solid #c0c1ff; border-radius: 6px;
+      padding: 1.125rem 1.25rem; margin-bottom: 0.75rem;
+    }
+    .prescription-card.agent-nutrition { border-left-color: #4ad6a0; }
+    .prescription-header {
+      display: flex; justify-content: space-between;
+      align-items: flex-start; gap: 1rem; margin-bottom: 0.75rem;
+    }
+    .prescription-title {
+      font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+      font-size: 14px; color: #dae2fd; margin-top: 6px;
+    }
+    .prescription-meta {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      color: #6e6d80; margin-top: 4px;
+    }
+    .exam-link {
+      color: #c0c1ff; cursor: pointer; text-decoration: none;
+      border-bottom: 1px dashed rgba(192,193,255,0.3);
+      transition: border-color 150ms;
+    }
+    .exam-link:hover { border-bottom-color: #c0c1ff; }
+    .badge-ia {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      padding: 3px 8px; border-radius: 3px;
+    }
+    .badge-therapeutic { background: rgba(192,193,255,0.12); color: #c0c1ff; }
+    .badge-nutrition   { background: rgba(74,214,160,0.12);  color: #4ad6a0; }
+    .prescription-actions { display: flex; gap: 0.375rem; align-items: center; flex-shrink: 0; }
+    .prescription-notes {
+      font-family: 'Inter', sans-serif; font-size: 12px; color: #a09fb2;
+      padding: 0.625rem 0.875rem; background: rgba(70,69,84,0.08);
+      border-left: 2px solid rgba(192,193,255,0.3); border-radius: 3px;
+      margin-top: 0.5rem;
+    }
+    .danger { color: #ffb4ab !important; }
+    .danger ::ng-deep .mat-icon { color: #ffb4ab !important; }
+
     /* ── UPLOAD CONFIRMATION PANEL ── */
     .upload-panel {
       background: #111929; border: 1px solid rgba(192,193,255,0.15);
@@ -404,7 +470,9 @@ interface ComparisonBlock {
         </div>
       }
 
-      <mat-tab-group animationDuration="150ms">
+      <mat-tab-group animationDuration="150ms"
+                     [selectedIndex]="selectedTabIndex()"
+                     (selectedIndexChange)="selectedTabIndex.set($event)">
 
         <!-- ── PERFIL ── -->
         <mat-tab label="Perfil">
@@ -928,9 +996,97 @@ interface ComparisonBlock {
         </mat-tab>
 
         <!-- ── TRATAMENTOS ── -->
-        <mat-tab [label]="'Tratamentos (' + plans().length + ')'">
-          <div class="treatments-header">
-            <span class="treatments-title">Planos de tratamento</span>
+        <mat-tab [label]="'Tratamentos (' + (prescriptions().length + plans().length) + ')'">
+
+          <!-- ── Seção 1: Prescrições da IA ── -->
+          <div class="treatments-section">
+            <div class="section-header">
+              <span class="section-title">Prescrições da IA</span>
+              <span class="section-count">{{ prescriptions().length }}</span>
+            </div>
+
+            @if (prescriptions().length === 0) {
+              <p class="empty-state-small">
+                Nenhuma prescrição da IA. Gere uma a partir de uma análise terapêutica ou nutricional em "Análises IA".
+              </p>
+            }
+
+            @for (p of prescriptions(); track p.id) {
+              <div class="prescription-card" [class]="'agent-' + p.agent_type">
+                <div class="prescription-header">
+                  <div>
+                    <span class="badge-ia" [class]="'badge-' + p.agent_type">
+                      IA · {{ p.agent_type === 'therapeutic' ? 'Terapêutico' : 'Nutricional' }}
+                    </span>
+                    <div class="prescription-title">
+                      Prescrição {{ p.agent_type === 'therapeutic' ? 'Terapêutica' : 'Nutricional' }}
+                    </div>
+                    <div class="prescription-meta">
+                      Criada em {{ p.created_at | date:'dd/MM/yyyy HH:mm' }}
+                      @if (p.exam_created_at) {
+                        · <a class="exam-link" (click)="goToAnalysis(p.exam_id, p.agent_type)">
+                            Baseada em exame de {{ p.exam_created_at | date:'dd/MM/yyyy' }}
+                          </a>
+                      }
+                    </div>
+                  </div>
+                  <div class="prescription-actions">
+                    @if (p.pdf_url) {
+                      <button mat-stroked-button style="font-size:12px" (click)="downloadPrescriptionPdf(p)">
+                        <mat-icon style="font-size:16px;width:16px;height:16px">download</mat-icon>
+                        Baixar PDF
+                      </button>
+                    } @else {
+                      <button mat-stroked-button style="font-size:12px" (click)="editPrescription(p)">
+                        <mat-icon style="font-size:16px;width:16px;height:16px">picture_as_pdf</mat-icon>
+                        Gerar PDF
+                      </button>
+                    }
+                    <button mat-icon-button [matMenuTriggerFor]="actionMenu" style="width:32px;height:32px">
+                      <mat-icon style="font-size:18px;width:18px;height:18px">more_vert</mat-icon>
+                    </button>
+                    <mat-menu #actionMenu="matMenu">
+                      <button mat-menu-item (click)="editPrescription(p)">
+                        <mat-icon>edit</mat-icon> Editar
+                      </button>
+                      @if (p.pdf_url) {
+                        <button mat-menu-item (click)="editPrescription(p)">
+                          <mat-icon>share</mat-icon> Compartilhar
+                        </button>
+                      }
+                      <button mat-menu-item class="danger" (click)="deletePrescription(p)">
+                        <mat-icon>delete</mat-icon> Excluir
+                      </button>
+                    </mat-menu>
+                  </div>
+                </div>
+
+                @if (p.items.length) {
+                  <table class="items-table">
+                    <tr>
+                      <th>Item</th><th>Dose</th><th>Frequência</th><th>Duração</th>
+                    </tr>
+                    @for (item of p.items; track $index) {
+                      <tr>
+                        <td class="td-label">{{ item.name }}</td>
+                        <td>{{ item.dose || '—' }}</td>
+                        <td>{{ item.frequency || '—' }}</td>
+                        <td>{{ item.duration || '—' }}</td>
+                      </tr>
+                    }
+                  </table>
+                }
+
+                @if (p.notes) {
+                  <div class="prescription-notes">{{ p.notes }}</div>
+                }
+              </div>
+            }
+          </div>
+
+          <!-- ── Seção 2: Planos Manuais ── -->
+          <div class="treatments-header" style="margin-top: 0.5rem;">
+            <span class="treatments-title">Planos Manuais</span>
             <button mat-stroked-button (click)="toggleNewPlan()">
               <mat-icon>add</mat-icon> Novo plano
             </button>
@@ -1040,6 +1196,8 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   exams     = signal<Exam[]>([]);
   aiResults = signal<Exam[]>([]);
   plans     = signal<TreatmentPlan[]>([]);
+  prescriptions = signal<Prescription[]>([]);
+  selectedTabIndex = signal(0);
   showNewPlan = signal(false);
   uploading   = signal(false);
   uploadError = signal('');
@@ -1049,6 +1207,8 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   comparison      = signal<ComparisonBlock[] | null>(null);
   prescriptionsByExam = signal<Record<string, Record<string, Prescription[]>>>({});
   private evoCharts: Chart[] = [];
+
+  private readonly AI_TAB_INDEX = 2;
 
   pendingFile     = signal<File | null>(null);
   uploadAgents    = signal<string[]>([]);
@@ -1095,6 +1255,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     this.loadSubject(id);
     this.loadExams(id);
     this.loadPlans(id);
+    this.loadPrescriptions(id);
     this.http.get<{ specialty: string | null }>(`${environment.apiUrl}/auth/me`)
       .subscribe({ next: me => this.doctorSpecialty.set(me.specialty ?? null), error: () => {} });
     this.wsSub = new Subscription();
@@ -1166,12 +1327,61 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
       existingPrescription: existing
     };
     const ref = this.dialog.open(PrescriptionModalComponent, { width: '680px', panelClass: 'dark-dialog', data });
-    ref.afterClosed().subscribe(saved => { if (saved) this.loadPrescriptionsForExam(exam.id); });
+    ref.afterClosed().subscribe(saved => {
+      if (saved) {
+        this.loadPrescriptionsForExam(exam.id);
+        this.loadPrescriptions(s.id);
+      }
+    });
   }
 
   private loadPlans(id: string): void {
     this.http.get<TreatmentPlan[]>(`${environment.apiUrl}/patients/${id}/treatments`)
       .subscribe(p => this.plans.set(p));
+  }
+
+  private loadPrescriptions(subjectId: string): void {
+    this.http.get<Prescription[]>(`${environment.apiUrl}/prescriptions/subjects/${subjectId}`)
+      .subscribe({
+        next: list => this.prescriptions.set(list),
+        error: () => {}
+      });
+  }
+
+  goToAnalysis(examId: string, agentType: string): void {
+    this.selectedAiExamId.set(examId);
+    this.expandedAgents.set(new Set([agentType]));
+    this.selectedTabIndex.set(this.AI_TAB_INDEX);
+  }
+
+  downloadPrescriptionPdf(p: Prescription): void {
+    if (p.pdf_url) window.open(p.pdf_url, '_blank');
+  }
+
+  editPrescription(p: Prescription): void {
+    const exam = this.exams().find(e => e.id === p.exam_id);
+    if (!exam) {
+      this.snack.open('Exame de origem não encontrado.', '', { duration: 3000 });
+      return;
+    }
+    const result = (exam.results ?? []).find(r => r.agent_type === p.agent_type);
+    if (!result) {
+      this.snack.open('Análise de origem não encontrada.', '', { duration: 3000 });
+      return;
+    }
+    this.openPrescriptionFromDetail(exam, result, p);
+  }
+
+  deletePrescription(p: Prescription): void {
+    if (!confirm('Excluir esta prescrição? Esta ação não pode ser desfeita.')) return;
+    this.http.delete(`${environment.apiUrl}/prescriptions/${p.id}`).subscribe({
+      next: () => {
+        this.loadPrescriptions(this.subject()!.id);
+        this.loadPrescriptionsForExam(p.exam_id);
+        this.snack.open('Prescrição excluída.', '', { duration: 2500 });
+      },
+      error: () => this.snack.open('Erro ao excluir prescrição.', '', { duration: 3000 })
+    });
   }
 
   age(birthDate: string): string {
