@@ -245,6 +245,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.subs.add(
+      this.ws.examUpdates$.subscribe(() => this.reviewService.refreshCount())
+    );
+    this.subs.add(
       this.ws.examError$.subscribe(({ error_message }) => {
         const msg = this.friendlyExamError(error_message);
         this.snack.open(`Falha no processamento do exame: ${msg}`, 'Fechar',
