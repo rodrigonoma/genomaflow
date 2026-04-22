@@ -605,7 +605,7 @@ interface ComparisonBlock {
 
         <!-- ── EXAMES ── -->
         <mat-tab [label]="'Exames (' + exams().length + ')'">
-          <input #examFile type="file" accept=".pdf" style="display:none"
+          <input #examFile type="file" accept=".pdf,.dcm,.dicom,.jpg,.jpeg,.png,.tiff" style="display:none"
                  (change)="onExamFile($event)"/>
 
           @if (!pendingFile()) {
@@ -613,8 +613,11 @@ interface ComparisonBlock {
               <button mat-stroked-button class="upload-exam-btn" (click)="examFile.click()"
                       [disabled]="uploading()">
                 <mat-icon>upload_file</mat-icon>
-                Upload de Exame (PDF)
+                Upload de Exame
               </button>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6e6d80;letter-spacing:0.08em">
+                PDF · DICOM · JPG · PNG
+              </span>
               @if (uploadError()) {
                 <span class="upload-error">{{ uploadError() }}</span>
               }
@@ -1373,7 +1376,16 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     if (!file) return;
     (event.target as HTMLInputElement).value = '';
 
-    if (this.subject()?.subject_type === 'human') {
+    if (!this.isAllowedFile(file)) {
+      this.snack.open('Formato não suportado. Use PDF, DICOM (.dcm), JPG ou PNG.', '', { duration: 4000 });
+      return;
+    }
+
+    const isImage = this.isImageFile(file);
+
+    // Painel com seleção de agentes + queixa/sintomas só para PDF laboratorial (human).
+    // Imagens usam Vision classifier e agentes de imagem automaticamente.
+    if (this.subject()?.subject_type === 'human' && !isImage) {
       const specialty = this.doctorSpecialty();
       const preSelected = specialty && SPECIALTY_AGENTS[specialty]?.length
         ? SPECIALTY_AGENTS[specialty]
@@ -1386,6 +1398,16 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     } else {
       this.doUpload(file);
     }
+  }
+
+  private isImageFile(file: File): boolean {
+    const ext = file.name.toLowerCase().split('.').pop() ?? '';
+    return ['dcm', 'dicom', 'jpg', 'jpeg', 'png', 'tiff', 'tif'].includes(ext);
+  }
+
+  private isAllowedFile(file: File): boolean {
+    const ext = file.name.toLowerCase().split('.').pop() ?? '';
+    return ['pdf', 'dcm', 'dicom', 'jpg', 'jpeg', 'png', 'tiff', 'tif'].includes(ext);
   }
 
   toggleUploadAgent(type: string): void {
