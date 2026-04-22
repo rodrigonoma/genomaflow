@@ -59,7 +59,7 @@ export interface Subject {
   color?: string;
   microchip?: string;
   neutered?: boolean;
-  owner_id?: string;
+  owner_id?: string | null;
   owner_name?: string;
   owner_cpf_last4?: string;
   owner_phone?: string;

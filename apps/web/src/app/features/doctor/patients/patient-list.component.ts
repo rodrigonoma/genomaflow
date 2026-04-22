@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatAutocompleteModule, MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { environment } from '../../../../environments/environment';
 import { Subject, Owner } from '../../../shared/models/api.models';
 import { AuthService } from '../../../core/auth/auth.service';
@@ -20,7 +21,8 @@ import { lookupCep } from '../../../shared/utils/viacep';
   standalone: true,
   imports: [
     RouterModule, FormsModule, AsyncPipe,
-    MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatTooltipModule
+    MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatTooltipModule,
+    MatAutocompleteModule
   ],
   styles: [`
     :host { display: block; background: #0b1326; min-height: 100vh; padding: 2rem; }
@@ -336,13 +338,29 @@ import { lookupCep } from '../../../shared/utils/viacep';
               <div class="field-trio">
                 <mat-form-field appearance="outline">
                   <mat-label>Dono / tutor</mat-label>
-                  <mat-select [(ngModel)]="patientForm.owner_id">
-                    <mat-option [value]="null">— sem vínculo —</mat-option>
-                    @for (o of owners(); track o.id) {
-                      <mat-option [value]="o.id">{{ o.name }}{{ o.cpf_last4 ? ' (***' + o.cpf_last4 + ')' : '' }}</mat-option>
-                    }
-                  </mat-select>
+                  <input matInput type="text"
+                         [matAutocomplete]="ownerAutoNew"
+                         [value]="newOwnerQuery()"
+                         (input)="onNewOwnerQueryInput($event)"
+                         placeholder="Digite o nome do dono..."/>
+                  @if (patientForm.owner_id) {
+                    <button mat-icon-button matSuffix type="button" (click)="clearNewOwner($event)" aria-label="Remover vínculo">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  }
                 </mat-form-field>
+                <mat-autocomplete #ownerAutoNew="matAutocomplete"
+                                  (optionSelected)="onNewOwnerSelected($event)"
+                                  [displayWith]="displayOwner">
+                  @for (o of filteredOwnersForNew(); track o.id) {
+                    <mat-option [value]="o">
+                      {{ o.name }}{{ o.cpf_last4 ? ' (***' + o.cpf_last4 + ')' : '' }}
+                    </mat-option>
+                  }
+                  @if (filteredOwnersForNew().length === 0 && newOwnerQuery()) {
+                    <mat-option disabled>Nenhum dono encontrado.</mat-option>
+                  }
+                </mat-autocomplete>
                 <mat-form-field appearance="outline">
                   <mat-label>Peso (kg)</mat-label>
                   <input matInput type="number" step="0.1" [(ngModel)]="patientForm.weight"/>
@@ -440,6 +458,14 @@ export class PatientListComponent implements OnInit {
   formError       = signal('');
   cepLoading      = signal(false);
   cepError        = signal('');
+  newOwnerQuery   = signal('');
+
+  filteredOwnersForNew = computed<Owner[]>(() => {
+    const q = this.newOwnerQuery().toLowerCase().trim();
+    const all = this.owners();
+    if (!q) return all.slice(0, 20);
+    return all.filter(o => o.name.toLowerCase().includes(q)).slice(0, 20);
+  });
 
   readonly bloodTypes = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
 
@@ -486,8 +512,33 @@ export class PatientListComponent implements OnInit {
   togglePatientForm(): void {
     this.showPatientForm.update(v => !v);
     this.patientForm = {};
+    this.newOwnerQuery.set('');
     this.formError.set('');
   }
+
+  onNewOwnerQueryInput(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.newOwnerQuery.set(value);
+    if (!value.trim()) this.patientForm.owner_id = null;
+  }
+
+  onNewOwnerSelected(event: MatAutocompleteSelectedEvent): void {
+    const owner = event.option.value as Owner;
+    this.patientForm.owner_id = owner.id;
+    this.newOwnerQuery.set(owner.name);
+  }
+
+  clearNewOwner(event: Event): void {
+    event.stopPropagation();
+    this.patientForm.owner_id = null;
+    this.newOwnerQuery.set('');
+  }
+
+  displayOwner = (owner: Owner | string | null): string => {
+    if (!owner) return '';
+    if (typeof owner === 'string') return owner;
+    return owner.name ?? '';
+  };
 
   toggleOwnerForm(): void {
     this.showOwnerForm.update(v => !v);
