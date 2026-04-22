@@ -17,5 +17,17 @@ module.exports = fp(async function (fastify) {
         throw headerErr;
       }
     }
+
+    // Single-session enforcement: o jti do token precisa bater com o armazenado no Redis.
+    // Se outro login acontecer, o Redis é sobrescrito e este token passa a ser inválido.
+    // Tokens antigos (pré-jti, emitidos antes deste deploy) são tolerados para não
+    // forçar deslogamento em massa — próximo login já ganha jti e entra no regime.
+    const { user_id, jti } = request.user || {};
+    if (user_id && jti && fastify.redis) {
+      const activeJti = await fastify.redis.get(`session:${user_id}`);
+      if (activeJti && activeJti !== jti) {
+        return reply.status(401).send({ error: 'session_replaced', message: 'Sua sessão foi encerrada porque outro dispositivo fez login com esta conta.' });
+      }
+    }
   });
 });

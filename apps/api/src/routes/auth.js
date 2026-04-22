@@ -1,6 +1,9 @@
 const bcrypt = require('bcrypt');
+const { randomUUID } = require('crypto');
 const { withTenant } = require('../db/tenant');
 const { VALID_DOCTOR_SPECIALTIES, VALID_MODULES } = require('../constants');
+
+const SESSION_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 dias
 
 const DUMMY_HASH = '$2b$10$invalidhashfortimingprotection0000000000000000000000000';
 
@@ -38,12 +41,18 @@ module.exports = async function (fastify) {
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
 
+    // jti único por sessão — sobrescreve qualquer sessão anterior do mesmo usuário.
+    // A próxima requisição da sessão antiga receberá 401 (session_replaced).
+    const jti = randomUUID();
     const token = fastify.jwt.sign({
       user_id: user.id,
       tenant_id: user.tenant_id,
       role: user.role,
-      module: user.module || 'human'
+      module: user.module || 'human',
+      jti
     });
+
+    await fastify.redis.set(`session:${user.id}`, jti, 'EX', SESSION_TTL_SECONDS);
 
     return { token };
   });
