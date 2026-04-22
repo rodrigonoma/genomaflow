@@ -8,7 +8,7 @@ import { HttpClient } from '@angular/common/http';
 import { ExamStatusComponent } from '../exam-status/exam-status.component';
 import { Exam } from '../../models/api.models';
 import { environment } from '../../../../environments/environment';
-import { shortId, cleanFilename } from '../../utils/id-format';
+import { shortId, cleanFilename, examTypeLabel } from '../../utils/id-format';
 
 @Component({
   selector: 'app-exam-card',
@@ -39,6 +39,15 @@ import { shortId, cleanFilename } from '../../utils/id-format';
       font-weight: 700; letter-spacing: 0.06em;
       color: #c0c1ff; background: rgba(192,193,255,0.08);
       border: 1px solid rgba(192,193,255,0.2);
+      padding: 1px 6px; border-radius: 3px;
+      margin-right: 6px; vertical-align: middle;
+    }
+    .exam-type-chip {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      font-weight: 700; letter-spacing: 0.06em;
+      color: #4ad6a0; background: rgba(74,214,160,0.08);
+      border: 1px solid rgba(74,214,160,0.25);
       padding: 1px 6px; border-radius: 3px;
       margin-right: 6px; vertical-align: middle;
     }
@@ -110,7 +119,11 @@ import { shortId, cleanFilename } from '../../utils/id-format';
         <app-exam-status [status]="exam.status" />
         <div>
           <div class="exam-filename">
-            <span class="exam-id-chip">{{ examShortId }}</span>{{ filename }}
+            <span class="exam-id-chip">{{ examShortId }}</span>
+            @if (typeLabel) {
+              <span class="exam-type-chip">{{ typeLabel }}</span>
+            }
+            {{ filename }}
           </div>
           <div class="exam-date">{{ exam.created_at | date:'dd/MM/yyyy HH:mm' }}</div>
           @if (exam.status === 'error') {
@@ -154,6 +167,10 @@ export class ExamCardComponent {
 
   get examShortId(): string {
     return shortId(this.exam.id, 'EX');
+  }
+
+  get typeLabel(): string {
+    return examTypeLabel(this.exam.results as Array<{ agent_type: string }> | null);
   }
 
   retry(): void {

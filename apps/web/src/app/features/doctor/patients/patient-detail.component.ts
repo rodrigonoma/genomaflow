@@ -21,7 +21,7 @@ import { environment } from '../../../../environments/environment';
 import { Subject, Exam, Alert, TreatmentPlan, TreatmentItem, ClinicalResult, SPECIALTY_AGENTS, Prescription } from '../../../shared/models/api.models';
 import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/prescription/prescription-modal.component';
 import { WsService } from '../../../core/ws/ws.service';
-import { shortId, cleanFilename } from '../../../shared/utils/id-format';
+import { shortId, examTypeLabel } from '../../../shared/utils/id-format';
 import { Subscription } from 'rxjs';
 
 interface AlertChange {
@@ -1365,7 +1365,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   }
 
   prescriptionShortId(p: Prescription): string {
-    return shortId(p.id, 'RX');
+    return shortId(p.id, 'PR');
   }
 
   examShortId(examId: string): string {
@@ -1373,7 +1373,8 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   }
 
   examContextOf(p: Prescription): string {
-    return cleanFilename(p.exam_file_path);
+    const exam = this.exams().find(e => e.id === p.exam_id);
+    return examTypeLabel(exam?.results as Array<{ agent_type: string }> | null);
   }
 
   downloadPrescriptionPdf(p: Prescription): void {
