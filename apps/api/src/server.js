@@ -38,6 +38,7 @@ app.register((fastify, _opts, done) => {
   fastify.register(require('./routes/prescriptions'), { prefix: '/prescriptions' });
   fastify.register(require('./routes/clinic'),        { prefix: '/clinic' });
   fastify.register(require('./routes/master'),        { prefix: '/master' });
+  fastify.register(require('./routes/terms'),         { prefix: '/terms' });
   done();
 }, { prefix: API_PREFIX });
 

@@ -3,6 +3,7 @@ import { Routes } from '@angular/router';
 import { Router } from '@angular/router';
 import { authGuard } from './core/auth/auth.guard';
 import { masterGuard } from './core/auth/master.guard';
+import { termsGuard } from './features/terms/terms.guard';
 import { AuthService } from './core/auth/auth.service';
 
 const homeForRole = (router: Router, role: string | undefined) => {
@@ -39,21 +40,27 @@ export const routes: Routes = [
   },
   {
     path: 'doctor',
-    canActivate: [authGuard],
+    canActivate: [authGuard, termsGuard],
     loadChildren: () =>
       import('./features/doctor/doctor.routes').then(m => m.DOCTOR_ROUTES)
   },
   {
     path: 'clinic',
-    canActivate: [authGuard],
+    canActivate: [authGuard, termsGuard],
     loadChildren: () =>
       import('./features/clinic/clinic.routes').then(m => m.CLINIC_ROUTES)
   },
   {
     path: 'results/:examId',
-    canActivate: [authGuard],
+    canActivate: [authGuard, termsGuard],
     loadComponent: () =>
       import('./features/doctor/results/result-panel.component').then(m => m.ResultPanelComponent)
+  },
+  {
+    path: 'onboarding/terms',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/terms/terms-acceptance.component').then(m => m.TermsAcceptanceComponent)
   },
   {
     path: 'onboarding',
