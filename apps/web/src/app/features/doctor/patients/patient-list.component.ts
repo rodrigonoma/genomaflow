@@ -45,7 +45,7 @@ import { AuthService } from '../../../core/auth/auth.service';
       border-left: 3px solid rgba(192,193,255,0.4); border-radius: 8px;
       padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;
       transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
-      cursor: default;
+      cursor: pointer;
     }
     .patient-card:hover {
       background: #131b2e;
@@ -80,7 +80,6 @@ import { AuthService } from '../../../core/auth/auth.service';
     .card-actions { display: flex; gap: 0.5rem; align-items: center; }
     .delete-btn { color: rgba(255,100,80,0.6) !important; margin-left: auto; transition: color 150ms ease !important; }
     .delete-btn:hover { color: #ff6450 !important; }
-    .detail-btn { border: 1px solid rgba(192,193,255,0.25) !important; color: #c0c1ff !important; font-size: 0.8rem; }
     .exam-btn { border-color: rgba(70,69,84,0.3) !important; color: #a09fb2 !important; font-size: 0.8rem; }
 
     .empty-state {
@@ -331,7 +330,8 @@ import { AuthService } from '../../../core/auth/auth.service';
       <!-- ── LIST ── -->
       <div class="patients-grid">
         @for (p of filtered; track p.id) {
-          <div class="patient-card" [class.animal]="p.subject_type === 'animal'">
+          <div class="patient-card" [class.animal]="p.subject_type === 'animal'"
+               [routerLink]="['/doctor/patients', p.id]" role="link" tabindex="0">
             <div>
               <h3 class="patient-name">{{ p.name }}</h3>
               <p class="patient-meta">
@@ -353,8 +353,7 @@ import { AuthService } from '../../../core/auth/auth.service';
                 </div>
               }
             </div>
-            <div class="card-actions">
-              <a mat-button class="detail-btn" [routerLink]="['/doctor/patients', p.id]">Ver perfil</a>
+            <div class="card-actions" (click)="$event.stopPropagation()">
               <a mat-stroked-button class="exam-btn" [routerLink]="['/doctor/patients', p.id, 'exams']">Novo exame</a>
               <button mat-icon-button class="delete-btn" (click)="deletePatient(p.id, p.name, $event)" matTooltip="Excluir">
                 <mat-icon>delete_outline</mat-icon>
