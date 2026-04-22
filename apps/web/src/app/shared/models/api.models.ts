@@ -64,6 +64,8 @@ export interface Subject {
   owner_cpf_last4?: string;
   owner_phone?: string;
   owner_email?: string;
+  consent_given_at?: string | null;
+  consent_given_by?: string | null;
   created_at: string;
   // clinical context (human only)
   medications?: string;

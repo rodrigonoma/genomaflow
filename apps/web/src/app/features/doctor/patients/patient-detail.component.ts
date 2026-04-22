@@ -23,6 +23,7 @@ import { Subject, Exam, Alert, TreatmentPlan, TreatmentItem, ClinicalResult, SPE
 import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/prescription/prescription-modal.component';
 import { WsService } from '../../../core/ws/ws.service';
 import { shortId, examTypeLabel } from '../../../shared/utils/id-format';
+import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
 import { Subscription } from 'rxjs';
 
 interface AlertChange {
@@ -342,6 +343,24 @@ interface ComparisonBlock {
     .plan-status-active    { color: #4ad6a0; }
     .plan-status-completed { color: #c0c1ff; }
     .plan-status-cancelled { color: #7c7b8f; }
+
+    /* ── CONSENT status ── */
+    .consent-status {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.75rem 1rem; border-radius: 6px;
+      font-family: 'Inter', sans-serif; font-size: 13px;
+    }
+    .consent-status mat-icon { font-size: 22px; width: 22px; height: 22px; flex-shrink: 0; }
+    .consent-ok {
+      background: rgba(74,214,160,0.08); color: #4ad6a0;
+      border: 1px solid rgba(74,214,160,0.2);
+    }
+    .consent-ok mat-icon { color: #4ad6a0; }
+    .consent-missing {
+      background: rgba(255,203,107,0.08); color: #f5c14a;
+      border: 1px solid rgba(255,203,107,0.2);
+    }
+    .consent-missing mat-icon { color: #f5c14a; }
 
     /* ── TREATMENTS — two-section layout ── */
     .treatments-section { margin-bottom: 2rem; max-width: 900px; }
@@ -693,6 +712,40 @@ interface ComparisonBlock {
                   }
                 </div>
               }
+
+              <div class="profile-section span-2">
+                <div class="section-label">Consentimento LGPD</div>
+                @if (subject()!.consent_given_at) {
+                  <div class="consent-status consent-ok">
+                    <mat-icon>verified</mat-icon>
+                    <div>
+                      <div style="font-weight:600">Consentimento registrado</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#a09fb2;margin-top:2px">
+                        em {{ subject()!.consent_given_at | date:'dd/MM/yyyy HH:mm' }}
+                      </div>
+                    </div>
+                  </div>
+                } @else {
+                  <div class="consent-status consent-missing">
+                    <mat-icon>warning</mat-icon>
+                    <div>
+                      <div style="font-weight:600">Consentimento não registrado</div>
+                      <div style="font-size:12px;color:#d4b464;margin-top:2px">
+                        Obtenha a assinatura do termo físico antes de marcar como aceito.
+                      </div>
+                    </div>
+                  </div>
+                  <mat-checkbox color="primary" [(ngModel)]="editForm.consent_given" style="margin-top:0.75rem">
+                    <span style="font-family:'Inter',sans-serif;font-size:13px;color:#dae2fd">
+                      Confirmo que o paciente (ou responsável legal) assinou o termo de consentimento LGPD.
+                    </span>
+                  </mat-checkbox>
+                  <button type="button" mat-stroked-button style="margin-top:0.5rem;font-size:11px" (click)="downloadConsentTemplate()">
+                    <mat-icon>download</mat-icon>
+                    Baixar template para impressão
+                  </button>
+                }
+              </div>
 
               <div class="profile-section span-2 save-row">
                 <button mat-flat-button style="background:#c0c1ff;color:#1000a9;font-weight:700"
@@ -1288,7 +1341,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
 
   readonly bloodTypes = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
 
-  editForm: Partial<Subject> = {};
+  editForm: Partial<Subject> & { consent_given?: boolean } = {};
   newPlan: { title: string; type: 'therapeutic'|'nutritional'; description: string; items: Partial<TreatmentItem>[] } = {
     title: '', type: 'therapeutic', description: '', items: []
   };
@@ -1442,6 +1495,13 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   examContextOf(p: Prescription): string {
     const exam = this.exams().find(e => e.id === p.exam_id);
     return examTypeLabel(exam?.results as Array<{ agent_type: string }> | null);
+  }
+
+  downloadConsentTemplate(): void {
+    this.http.get<{ name: string; cnpj?: string | null }>(`${environment.apiUrl}/clinic/profile`).subscribe({
+      next: p => generateConsentTemplatePdf({ name: p.name, cnpj: p.cnpj ?? null }),
+      error: () => generateConsentTemplatePdf()
+    });
   }
 
   downloadPrescriptionPdf(p: Prescription): void {
