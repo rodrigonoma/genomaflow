@@ -109,6 +109,7 @@ export interface Prescription {
   created_at: string;
   created_by_email?: string;
   exam_created_at?: string;
+  exam_file_path?: string;
 }
 
 export interface ClinicProfile {

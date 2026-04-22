@@ -8,6 +8,7 @@ import { HttpClient } from '@angular/common/http';
 import { ExamStatusComponent } from '../exam-status/exam-status.component';
 import { Exam } from '../../models/api.models';
 import { environment } from '../../../../environments/environment';
+import { shortId, cleanFilename } from '../../utils/id-format';
 
 @Component({
   selector: 'app-exam-card',
@@ -32,6 +33,15 @@ import { environment } from '../../../../environments/environment';
     .exam-card.status-error { border-left-color: #ffb4ab; background: rgba(255,180,171,0.04); }
 
     .exam-info { display: flex; align-items: center; gap: 0.875rem; flex: 1; min-width: 0; }
+    .exam-id-chip {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      font-weight: 700; letter-spacing: 0.06em;
+      color: #c0c1ff; background: rgba(192,193,255,0.08);
+      border: 1px solid rgba(192,193,255,0.2);
+      padding: 1px 6px; border-radius: 3px;
+      margin-right: 6px; vertical-align: middle;
+    }
     .exam-filename {
       font-size: 13px; font-weight: 500; color: #dae2fd;
       word-break: break-all;
@@ -99,7 +109,9 @@ import { environment } from '../../../../environments/environment';
       <div class="exam-info">
         <app-exam-status [status]="exam.status" />
         <div>
-          <div class="exam-filename">{{ filename }}</div>
+          <div class="exam-filename">
+            <span class="exam-id-chip">{{ examShortId }}</span>{{ filename }}
+          </div>
           <div class="exam-date">{{ exam.created_at | date:'dd/MM/yyyy HH:mm' }}</div>
           @if (exam.status === 'error') {
             <div class="error-msg">
@@ -137,7 +149,11 @@ export class ExamCardComponent {
   retrying = false;
 
   get filename(): string {
-    return this.exam.file_path?.split('/').pop() ?? 'exame.pdf';
+    return cleanFilename(this.exam.file_path) || 'exame';
+  }
+
+  get examShortId(): string {
+    return shortId(this.exam.id, 'EX');
   }
 
   retry(): void {
