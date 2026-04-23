@@ -1,9 +1,12 @@
 -- Migration 047: Chat entre tenants V1 — schema base
 -- Cria 10 tabelas novas (zero ALTER em tabelas existentes), índices, extensão pg_trgm.
--- RLS policies e triggers entram nas migrations subsequentes do mesmo número (047a, 047b)
--- ou nesta mesma migration nos passos seguintes do plano.
+-- RLS policies e triggers serão adicionados a este mesmo arquivo nas tasks 2-5 da fase 1.
 --
 -- Spec: docs/superpowers/specs/2026-04-23-inter-tenant-chat-design.md
+
+-- Política de FK ON DELETE: padrão (RESTRICT) preserva auditoria. Se
+-- precisar deletar tenant/user no futuro, criar fluxo explícito de purge
+-- antes da exclusão (não cascade silencioso).
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
@@ -108,6 +111,12 @@ CREATE INDEX IF NOT EXISTS tenant_messages_conv_created_idx
 CREATE INDEX IF NOT EXISTS tenant_messages_search_gin
   ON tenant_messages USING GIN (body_tsv);
 
+DO $$ BEGIN
+  ALTER TABLE tenant_messages
+    ADD CONSTRAINT tenant_messages_body_or_attachment
+    CHECK (body <> '' OR has_attachment = true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
 -- 5.7 Anexos
 CREATE TABLE IF NOT EXISTS tenant_message_attachments (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -124,6 +133,16 @@ CREATE TABLE IF NOT EXISTS tenant_message_attachments (
 
 CREATE INDEX IF NOT EXISTS tenant_attachments_message_idx
   ON tenant_message_attachments(message_id);
+
+DO $$ BEGIN
+  ALTER TABLE tenant_message_attachments
+    ADD CONSTRAINT tenant_attachments_kind_payload_check
+    CHECK (
+      (kind = 'ai_analysis_card' AND payload IS NOT NULL AND s3_key IS NULL)
+      OR
+      (kind IN ('pdf', 'image') AND s3_key IS NOT NULL)
+    );
+EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- 5.8 Audit do filtro PII
 CREATE TABLE IF NOT EXISTS tenant_message_pii_checks (
@@ -157,3 +176,23 @@ CREATE TABLE IF NOT EXISTS tenant_conversation_reads (
   last_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (conversation_id, tenant_id)
 );
+
+CREATE INDEX IF NOT EXISTS tenant_conversation_reads_tenant_idx
+  ON tenant_conversation_reads(tenant_id);
+
+CREATE INDEX IF NOT EXISTS tenant_message_pii_checks_attachment_idx
+  ON tenant_message_pii_checks(attachment_id);
+
+-- GRANTs ao runtime user (genomaflow_app é o owner das queries da API/worker)
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+  tenant_chat_settings,
+  tenant_directory_listing,
+  tenant_invitations,
+  tenant_blocks,
+  tenant_conversations,
+  tenant_messages,
+  tenant_message_attachments,
+  tenant_message_pii_checks,
+  tenant_message_reactions,
+  tenant_conversation_reads
+TO genomaflow_app;
