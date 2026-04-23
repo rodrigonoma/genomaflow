@@ -246,7 +246,7 @@ describe('RLS — UPDATE WITH CHECK (anti-hijack)', () => {
           [newA, newB, convId]
         );
       })
-    ).rejects.toThrow(/policy|check|denied/i);
+    ).rejects.toThrow(/policy|check|denied|proibido|imutáveis/i);
   });
 
   it('tenant não consegue mover mensagem para conversa alheia (tenant_messages)', async () => {

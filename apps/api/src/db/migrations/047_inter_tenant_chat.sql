@@ -222,7 +222,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 DROP TRIGGER IF EXISTS tenant_conversations_same_module ON tenant_conversations;
 CREATE TRIGGER tenant_conversations_same_module
@@ -233,6 +233,21 @@ DROP TRIGGER IF EXISTS tenant_invitations_same_module ON tenant_invitations;
 CREATE TRIGGER tenant_invitations_same_module
   BEFORE INSERT OR UPDATE ON tenant_invitations
   FOR EACH ROW EXECUTE FUNCTION enforce_chat_same_module();
+
+-- Trigger: impede reassign dos membros de uma conversa (tenant_a_id/tenant_b_id são imutáveis)
+CREATE OR REPLACE FUNCTION enforce_conversation_members_immutable() RETURNS trigger AS $$
+BEGIN
+  IF OLD.tenant_a_id <> NEW.tenant_a_id OR OLD.tenant_b_id <> NEW.tenant_b_id THEN
+    RAISE EXCEPTION 'reassign de membros de conversa proibido (tenant_a_id e tenant_b_id são imutáveis)';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS tenant_conversations_members_immutable ON tenant_conversations;
+CREATE TRIGGER tenant_conversations_members_immutable
+  BEFORE UPDATE ON tenant_conversations
+  FOR EACH ROW EXECUTE FUNCTION enforce_conversation_members_immutable();
 
 -- Trigger: sincroniza tenant_directory_listing com tenant_chat_settings
 CREATE OR REPLACE FUNCTION sync_tenant_directory() RETURNS trigger AS $$
