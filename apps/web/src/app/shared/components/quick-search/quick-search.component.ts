@@ -97,7 +97,7 @@ import { AuthService } from '../../../core/auth/auth.service';
              (ngModelChange)="onQueryChange($event)"
              (focus)="onFocus()"
              (keydown)="onKeydown($event)"
-             placeholder="Buscar paciente..."
+             [placeholder]="placeholderText()"
              autocomplete="off"/>
       @if (query) {
         <button class="clear-btn" (click)="clear($event)" aria-label="Limpar">
@@ -156,12 +156,26 @@ export class QuickSearchComponent implements OnInit {
   filtered = computed<SubjectModel[]>(() => {
     const q = this.query.toLowerCase().trim();
     if (!q) return [];
-    const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-    const nq = norm(q);
+    const nq = this.normalize(q);
     return this.allSubjects().filter(p =>
-      norm(p.name).includes(nq) || norm(p.owner_name ?? '').includes(nq)
+      this.normalize(p.name).includes(nq) ||
+      this.normalize(p.owner_name ?? '').includes(nq)
     ).slice(0, 8);
   });
+
+  /**
+   * Remove acentos para busca case/diacritic-insensitive.
+   * Decompõe via NFD e remove o bloco Unicode de Combining Diacritical Marks (U+0300–U+036F).
+   * Usa RegExp() com string escape explícito para evitar ambiguidade de encoding do arquivo.
+   */
+  private readonly DIACRITICS_REGEX = new RegExp('[\\u0300-\\u036f]', 'g');
+  private normalize(s: string): string {
+    return s.toLowerCase().normalize('NFD').replace(this.DIACRITICS_REGEX, '');
+  }
+
+  placeholderText(): string {
+    return this.auth.currentUser?.module === 'veterinary' ? 'Buscar animal...' : 'Buscar paciente...';
+  }
 
   recentResults = computed<SubjectModel[]>(() => this.allSubjects().slice(0, 5));
 
@@ -183,7 +197,11 @@ export class QuickSearchComponent implements OnInit {
     if (inp) inp.focus();
   }
 
-  onFocus(): void { this.isOpenSig.set(true); }
+  onFocus(): void {
+    this.isOpenSig.set(true);
+    // Recarrega caso a busca inicial não tenha retornado (ex: timing de login)
+    if (this.allSubjects().length === 0) this.loadSubjects();
+  }
 
   onQueryChange(_v: string): void {
     this.isOpenSig.set(true);
