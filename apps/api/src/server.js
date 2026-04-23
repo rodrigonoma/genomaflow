@@ -41,6 +41,7 @@ app.register((fastify, _opts, done) => {
   fastify.register(require('./routes/clinic'),        { prefix: '/clinic' });
   fastify.register(require('./routes/master'),        { prefix: '/master' });
   fastify.register(require('./routes/terms'),         { prefix: '/terms' });
+  fastify.register(require('./routes/inter-tenant-chat'), { prefix: '/inter-tenant-chat' });
   done();
 }, { prefix: API_PREFIX });
 
