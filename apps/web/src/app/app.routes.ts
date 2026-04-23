@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { authGuard } from './core/auth/auth.guard';
 import { masterGuard } from './core/auth/master.guard';
 import { termsGuard } from './features/terms/terms.guard';
+import { professionalInfoGuard } from './features/professional/professional.guard';
 import { AuthService } from './core/auth/auth.service';
 
 const homeForRole = (router: Router, role: string | undefined) => {
@@ -40,19 +41,19 @@ export const routes: Routes = [
   },
   {
     path: 'doctor',
-    canActivate: [authGuard, termsGuard],
+    canActivate: [authGuard, termsGuard, professionalInfoGuard],
     loadChildren: () =>
       import('./features/doctor/doctor.routes').then(m => m.DOCTOR_ROUTES)
   },
   {
     path: 'clinic',
-    canActivate: [authGuard, termsGuard],
+    canActivate: [authGuard, termsGuard, professionalInfoGuard],
     loadChildren: () =>
       import('./features/clinic/clinic.routes').then(m => m.CLINIC_ROUTES)
   },
   {
     path: 'results/:examId',
-    canActivate: [authGuard, termsGuard],
+    canActivate: [authGuard, termsGuard, professionalInfoGuard],
     loadComponent: () =>
       import('./features/doctor/results/result-panel.component').then(m => m.ResultPanelComponent)
   },
@@ -61,6 +62,12 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/terms/terms-acceptance.component').then(m => m.TermsAcceptanceComponent)
+  },
+  {
+    path: 'onboarding/professional-info',
+    canActivate: [authGuard, termsGuard],
+    loadComponent: () =>
+      import('./features/professional/professional-info.component').then(m => m.ProfessionalInfoComponent)
   },
   {
     path: 'onboarding',

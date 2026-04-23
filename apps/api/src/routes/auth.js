@@ -118,11 +118,50 @@ module.exports = async function (fastify) {
   fastify.get('/me', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { user_id, tenant_id } = request.user;
     const { rows } = await fastify.pg.query(
-      `SELECT u.id, u.email, u.role, u.specialty, u.created_at, t.module
+      `SELECT u.id, u.email, u.role, u.specialty, u.created_at,
+              u.crm_number, u.crm_uf, u.professional_data_confirmed_at,
+              t.module
        FROM users u
        JOIN tenants t ON t.id = u.tenant_id
        WHERE u.id = $1 AND u.tenant_id = $2`,
       [user_id, tenant_id]
+    );
+    if (!rows[0]) return reply.status(404).send({ error: 'User not found' });
+    return rows[0];
+  });
+
+  // POST /auth/professional-info
+  // Registra CRM/CRMV + UF + declaração de veracidade. Requer checkbox de consentimento.
+  // IP e user-agent são registrados como evidência documental.
+  const VALID_UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+  fastify.post('/professional-info', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { user_id } = request.user;
+    const { crm_number, crm_uf, truthfulness_confirmed } = request.body || {};
+
+    if (!crm_number || typeof crm_number !== 'string' || !/^\d{3,10}$/.test(crm_number.trim())) {
+      return reply.status(400).send({ error: 'Número do registro profissional inválido. Use apenas dígitos.' });
+    }
+    if (!crm_uf || !VALID_UFS.includes(String(crm_uf).toUpperCase())) {
+      return reply.status(400).send({ error: 'UF inválida.' });
+    }
+    if (truthfulness_confirmed !== true) {
+      return reply.status(400).send({ error: 'É obrigatório confirmar a veracidade das informações.' });
+    }
+
+    const xff = request.headers['x-forwarded-for'];
+    const ip = xff ? xff.split(',')[0].trim() : request.ip;
+    const ua = request.headers['user-agent'] || null;
+
+    const { rows } = await fastify.pg.query(
+      `UPDATE users
+         SET crm_number = $1,
+             crm_uf = $2,
+             professional_data_confirmed_at = NOW(),
+             professional_data_confirmed_ip = $3,
+             professional_data_user_agent = $4
+       WHERE id = $5
+       RETURNING id, crm_number, crm_uf, professional_data_confirmed_at`,
+      [crm_number.trim(), String(crm_uf).toUpperCase(), ip, ua, user_id]
     );
     if (!rows[0]) return reply.status(404).send({ error: 'User not found' });
     return rows[0];
