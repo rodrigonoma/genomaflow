@@ -12,7 +12,7 @@ function getPool() {
 async function createTenant({ name, module = 'human', uf = 'SP' }) {
   const p = getPool();
   const { rows: [t] } = await p.query(
-    `INSERT INTO tenants (name, type, module) VALUES ($1, 'clinic', $2) RETURNING id`,
+    `INSERT INTO tenants (name, type, module, active) VALUES ($1, 'clinic', $2, true) RETURNING id`,
     [PREFIX + name, module]
   );
   const hash = await bcrypt.hash('test-password', 10);
