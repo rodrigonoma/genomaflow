@@ -131,6 +131,81 @@ interface ComparisonBlock {
       color: #7c7b8f; margin-top: 3px;
     }
 
+    /* ── Evolução — mode toggle ── */
+    .evolution-mode-toggle {
+      display: inline-flex; gap: 0; margin-bottom: 1.5rem;
+      background: #111929; border: 1px solid rgba(70,69,84,0.25);
+      border-radius: 6px; padding: 2px;
+    }
+    .mode-btn {
+      display: inline-flex; align-items: center; gap: 0.375rem;
+      background: transparent; border: none; cursor: pointer;
+      padding: 0.5rem 0.875rem; border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: #7c7b8f; transition: all 150ms;
+    }
+    .mode-btn:hover { color: #dae2fd; }
+    .mode-btn.active {
+      background: rgba(192,193,255,0.12); color: #c0c1ff;
+    }
+    .mode-btn mat-icon { font-size: 14px; width: 14px; height: 14px; }
+
+    /* ── Por marcador ── */
+    .marker-controls { margin-bottom: 1.25rem; }
+    .marker-hint {
+      font-family: 'Inter', sans-serif; font-size: 12px;
+      color: #7c7b8f; margin-bottom: 0.625rem;
+    }
+    .marker-chips {
+      display: flex; flex-wrap: wrap; gap: 0.375rem;
+    }
+    .marker-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: #0b1326; border: 1px solid rgba(70,69,84,0.3);
+      color: #a09fb2; border-radius: 20px;
+      padding: 0.375rem 0.75rem; cursor: pointer;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      transition: all 150ms;
+    }
+    .marker-chip:hover:not(:disabled) {
+      border-color: rgba(192,193,255,0.4); color: #dae2fd;
+    }
+    .marker-chip.selected {
+      background: rgba(192,193,255,0.12); border-color: #c0c1ff; color: #c0c1ff;
+    }
+    .marker-chip:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .marker-chart-wrap {
+      background: #111929; border: 1px solid rgba(70,69,84,0.18);
+      border-radius: 8px; padding: 1rem; height: 320px; position: relative;
+      max-width: 900px;
+    }
+    .marker-chart-wrap canvas { height: 100% !important; }
+
+    .marker-legend {
+      display: flex; flex-direction: column; gap: 0.5rem;
+      margin-top: 1rem; max-width: 900px;
+    }
+    .legend-item {
+      display: flex; align-items: center; gap: 0.625rem;
+      padding: 0.5rem 0.75rem; background: #0b1326;
+      border-radius: 4px; border: 1px solid rgba(70,69,84,0.15);
+    }
+    .legend-color {
+      width: 12px; height: 12px; border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .legend-marker {
+      font-family: 'Space Grotesk', sans-serif; font-weight: 600;
+      font-size: 13px; color: #dae2fd; flex: 1;
+    }
+    .legend-stats {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      color: #7c7b8f; display: inline-flex; align-items: center; gap: 0.375rem;
+    }
+    .trend-icon { font-size: 16px !important; width: 16px !important; height: 16px !important; }
+
     /* ── Evolução ── */
     .evolution-select-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; }
     .evolution-exam-row {
@@ -1003,7 +1078,64 @@ interface ComparisonBlock {
 
         <!-- ── EVOLUÇÃO ── -->
         <mat-tab label="Evolução">
-          @if (doneExams().length < 2) {
+          <div class="evolution-mode-toggle">
+            <button class="mode-btn" [class.active]="evolutionMode() === 'compare'"
+                    (click)="evolutionMode.set('compare')">
+              <mat-icon>compare_arrows</mat-icon> Comparar exames
+            </button>
+            <button class="mode-btn" [class.active]="evolutionMode() === 'marker'"
+                    (click)="evolutionMode.set('marker')">
+              <mat-icon>show_chart</mat-icon> Por marcador
+            </button>
+          </div>
+
+          @if (evolutionMode() === 'marker') {
+            @if (availableMarkers().length === 0) {
+              <p class="empty-state">Nenhum marcador numérico disponível nos exames analisados.</p>
+            } @else {
+              <div class="marker-controls">
+                <div class="marker-hint">
+                  Selecione até 3 marcadores para comparar a evolução no tempo.
+                </div>
+                <div class="marker-chips">
+                  @for (m of availableMarkers(); track m) {
+                    <button class="marker-chip"
+                            [class.selected]="selectedMarkers().has(m)"
+                            [disabled]="!selectedMarkers().has(m) && selectedMarkers().size >= 3"
+                            (click)="toggleMarker(m)">
+                      @if (selectedMarkers().has(m)) {
+                        <mat-icon style="font-size:13px;width:13px;height:13px">check</mat-icon>
+                      }
+                      {{ m }}
+                    </button>
+                  }
+                </div>
+              </div>
+
+              @if (selectedMarkers().size === 0) {
+                <p class="empty-state">Selecione pelo menos 1 marcador acima para visualizar o gráfico.</p>
+              } @else {
+                <div class="marker-chart-wrap">
+                  <canvas id="marker-evolution-chart"></canvas>
+                </div>
+
+                <div class="marker-legend">
+                  @for (entry of markerSeriesPreview(); track entry.marker) {
+                    <div class="legend-item">
+                      <span class="legend-color" [style.background]="entry.color"></span>
+                      <span class="legend-marker">{{ entry.marker }}</span>
+                      <span class="legend-stats">
+                        min {{ entry.min }} · max {{ entry.max }} · último {{ entry.last }}
+                        @if (entry.trend) {
+                          <mat-icon class="trend-icon" [style.color]="entry.trendColor">{{ entry.trendIcon }}</mat-icon>
+                        }
+                      </span>
+                    </div>
+                  }
+                </div>
+              }
+            }
+          } @else if (doneExams().length < 2) {
             <p class="empty-state">São necessários pelo menos 2 exames concluídos com análise de IA para comparar.</p>
           } @else {
             <div class="evolution-select-list">
@@ -1301,6 +1433,8 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   expandedAgents   = signal<Set<string>>(new Set());
   selectedExamIds = signal(new Set<string>());
   comparison      = signal<ComparisonBlock[] | null>(null);
+  evolutionMode   = signal<'compare' | 'marker'>('marker');
+  selectedMarkers = signal(new Set<string>());
   prescriptionsByExam = signal<Record<string, Record<string, Prescription[]>>>({});
   private evoCharts: Chart[] = [];
 
@@ -1631,6 +1765,156 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     this.comparison.set(null);
   }
 
+  // ── Evolução por marcador ──────────────────────────────────────────────
+
+  private readonly MARKER_COLORS = ['#c0c1ff', '#4ad6a0', '#ffcb6b'];
+  private markerChart: Chart | null = null;
+
+  private parseNumeric(value: string | null | undefined): number | null {
+    if (value === null || value === undefined) return null;
+    const s = String(value).replace(',', '.').replace(/[^\d.\-]/g, '');
+    if (!s) return null;
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  availableMarkers = computed<string[]>(() => {
+    const exams = this.doneExams();
+    const markerSet = new Set<string>();
+    for (const e of exams) {
+      for (const r of (e.results ?? [])) {
+        for (const [k, v] of Object.entries(r.risk_scores ?? {})) {
+          if (this.parseNumeric(v) !== null) markerSet.add(k);
+        }
+      }
+    }
+    return [...markerSet].sort((a, b) => a.localeCompare(b));
+  });
+
+  toggleMarker(marker: string): void {
+    const s = new Set(this.selectedMarkers());
+    if (s.has(marker)) s.delete(marker);
+    else if (s.size < 3) s.add(marker);
+    this.selectedMarkers.set(s);
+    setTimeout(() => this.renderMarkerChart(), 0);
+  }
+
+  markerSeriesPreview = computed(() => {
+    const selected = [...this.selectedMarkers()];
+    const exams = [...this.doneExams()].sort((a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+
+    return selected.map((marker, i) => {
+      const values: number[] = [];
+      for (const e of exams) {
+        for (const r of (e.results ?? [])) {
+          const raw = r.risk_scores?.[marker];
+          const n = this.parseNumeric(raw);
+          if (n !== null) { values.push(n); break; }
+        }
+      }
+      const min = values.length ? Math.min(...values) : 0;
+      const max = values.length ? Math.max(...values) : 0;
+      const last = values.length ? values[values.length - 1] : 0;
+      const first = values.length ? values[0] : 0;
+
+      let trend: 'up' | 'down' | 'flat' | null = null;
+      let trendIcon = 'remove';
+      let trendColor = '#7c7b8f';
+      if (values.length >= 2) {
+        const delta = last - first;
+        const threshold = Math.max(Math.abs(first) * 0.05, 0.01);
+        if (delta > threshold) { trend = 'up'; trendIcon = 'trending_up'; trendColor = '#ffcb6b'; }
+        else if (delta < -threshold) { trend = 'down'; trendIcon = 'trending_down'; trendColor = '#4ad6a0'; }
+        else { trend = 'flat'; trendIcon = 'trending_flat'; trendColor = '#7c7b8f'; }
+      }
+
+      return {
+        marker,
+        color: this.MARKER_COLORS[i % this.MARKER_COLORS.length],
+        min: min.toFixed(2).replace(/\.?0+$/, ''),
+        max: max.toFixed(2).replace(/\.?0+$/, ''),
+        last: last.toFixed(2).replace(/\.?0+$/, ''),
+        trend,
+        trendIcon,
+        trendColor,
+      };
+    });
+  });
+
+  private renderMarkerChart(): void {
+    if (this.markerChart) { this.markerChart.destroy(); this.markerChart = null; }
+    const canvas = document.getElementById('marker-evolution-chart') as HTMLCanvasElement | null;
+    if (!canvas) return;
+    const selected = [...this.selectedMarkers()];
+    if (selected.length === 0) return;
+
+    const exams = [...this.doneExams()].sort((a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+    const labels = exams.map(e => new Date(e.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }));
+
+    const datasets = selected.map((marker, i) => {
+      const color = this.MARKER_COLORS[i % this.MARKER_COLORS.length];
+      const data = exams.map(e => {
+        for (const r of (e.results ?? [])) {
+          const raw = r.risk_scores?.[marker];
+          const n = this.parseNumeric(raw);
+          if (n !== null) return n;
+        }
+        return null as unknown as number;
+      });
+      return {
+        label: marker,
+        data,
+        borderColor: color,
+        backgroundColor: color + '22',
+        pointBackgroundColor: color,
+        pointRadius: 4, pointHoverRadius: 6,
+        tension: 0.3, spanGaps: true, fill: false,
+      };
+    });
+
+    this.markerChart = new Chart(canvas, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            labels: {
+              color: '#c8c7d9',
+              font: { family: "'JetBrains Mono', monospace", size: 10 },
+              boxWidth: 8, padding: 10,
+            }
+          },
+          tooltip: {
+            backgroundColor: '#1a2440',
+            borderColor: 'rgba(70,69,84,0.4)', borderWidth: 1,
+            titleColor: '#dae2fd', bodyColor: '#a09fb2',
+            titleFont: { family: "'Space Grotesk'" },
+            bodyFont: { family: "'JetBrains Mono'", size: 11 },
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#7c7b8f', font: { family: "'JetBrains Mono'", size: 10 } },
+            grid: { color: 'rgba(70,69,84,0.18)' },
+            border: { color: 'rgba(70,69,84,0.18)' },
+          },
+          y: {
+            ticks: { color: '#7c7b8f', font: { family: "'JetBrains Mono'", size: 10 } },
+            grid: { color: 'rgba(70,69,84,0.18)' },
+            border: { color: 'rgba(70,69,84,0.18)' },
+          }
+        }
+      }
+    });
+  }
+
   compareExams(): void {
     const sorted = this.selectedSortedExams().filter(e => e.results?.length);
 
@@ -1833,6 +2117,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.evoCharts.forEach(c => c.destroy());
+    if (this.markerChart) { this.markerChart.destroy(); this.markerChart = null; }
     this.wsSub?.unsubscribe();
     if (this.pollInterval) clearInterval(this.pollInterval);
   }
