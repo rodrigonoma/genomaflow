@@ -57,10 +57,10 @@ async function createConversedPair(app, { module = 'human' } = {}) {
 
 async function cleanup() {
   const p = getPool();
-  // FK-safe order
+  // FK-safe order: reactions → reads (FK aponta pra messages) → messages → tenants
   await p.query(`DELETE FROM tenant_message_reactions WHERE reactor_tenant_id IN (SELECT id FROM tenants WHERE name LIKE $1)`, [PREFIX + '%']);
-  await p.query(`DELETE FROM tenant_messages WHERE sender_tenant_id IN (SELECT id FROM tenants WHERE name LIKE $1)`, [PREFIX + '%']);
   await p.query(`DELETE FROM tenant_conversation_reads WHERE tenant_id IN (SELECT id FROM tenants WHERE name LIKE $1)`, [PREFIX + '%']);
+  await p.query(`DELETE FROM tenant_messages WHERE sender_tenant_id IN (SELECT id FROM tenants WHERE name LIKE $1)`, [PREFIX + '%']);
   await p.query(`DELETE FROM tenants WHERE name LIKE $1`, [PREFIX + '%']);
 }
 
