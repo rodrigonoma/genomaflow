@@ -72,3 +72,17 @@ type: feedback
 **Why:** Em 2026-04-23, o QuickSearchComponent tinha `query = ''` (string comum) e `filtered = computed(() => ... this.query ...)`. Quando o usuário digitava, `query` mudava, mas o `computed` só re-rodava quando signals lidos mudavam. `filtered()` ficava cacheado com o resultado da primeira avaliação (query vazia → []) e a busca retornava "Nenhum resultado" para tudo. Levou um deploy em prod + screenshot do usuário pra detectar porque não dá pra reproduzir sem digitar e inspecionar.
 
 **How to apply:** Se um valor é lido por `computed()` ou `effect()`, ele **precisa** ser `signal()`. Para `[(ngModel)]="x"` + computed que lê `x`, trocar para `[ngModel]="x()"` e `(ngModelChange)="x.set($event)"`. Também checar: `template` reavalia `computed()` só quando uma dependência signal muda — alterações em propriedades comuns **não invalidam o cache**. Regra: na dúvida, convertar para signal.
+
+---
+
+**Defesa em profundidade multi-tenant: toda query em tabela tenant-scoped precisa de `AND tenant_id = $X` EXPLÍCITO — nunca confiar só em RLS.**
+
+**Why:** 2026-04-23, usuário criou nova conta (`rafaela.noma@hotmail.com`, tenant human) e viu "Amendoim" (animal do tenant `rafaelanoma@hotmail.com`, vet). Investigação provou que RLS em produção está OK (`genomaflow_app` sem BYPASSRLS/SUPERUSER, dados nos tenants corretos). Causa mais provável: JWT antigo em localStorage + ausência de indicador visual de qual tenant o usuário estava logado. MAS a auditoria expôs bugs reais que teriam causado vazamento se RLS falhasse: (1) queries sem filtro explícito de tenant em `patients.js`, `exams.js`, `prescriptions.js` etc., (2) SQL injection em `exams.js:257` via template literal em `SET LOCAL app.tenant_id`, (3) ACL trocada em `feedback.js`/`error-log.js` (checava `role !== 'admin'` mas todo admin de clínica é 'admin' — qualquer admin via feedback de todos os tenants).
+
+**How to apply:** 
+1. Toda query SELECT/UPDATE/DELETE em tabela com RLS deve ter `AND tenant_id = $X` explícito — RLS é a última camada, não a única.
+2. `set_config('app.tenant_id', $1, true)` SEMPRE parametrizado. Template literal em SQL = proibido (SQL Injection).
+3. Endpoints de escopo master (feedback, error-log, tenants) checam `role !== 'master'`, nunca `role !== 'admin'`.
+4. UI deve mostrar tenant_name + módulo em local sempre visível (topbar). Incidente mostrou que confusão visual do usuário gera falsos reports de vazamento.
+5. Ao navegar para `/onboarding`, limpar sessão ativa (JWT antigo não pode persistir quando se cria novo tenant).
+6. Em PR que toca tabela com RLS, revisor deve verificar: filtro explícito de tenant_id + parametrização + teste com dois tenants.

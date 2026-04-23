@@ -6,7 +6,7 @@
 - [Dev Workflow Rules](feedback_dev_workflow.md) — Branch, validação local, AGUARDAR aprovação explícita, depois merge — nunca mergar sem ok do usuário
 - [DB Migration Discipline](feedback_db_migrations.md) — Schema changes via numbered migration files only; dev and prod must always be identical
 - [URL Routing Rules](project_url_routing.md) — www + root domain → landing page; Entrar/Registrar CTAs check auth state before redirecting
-- [Security Hardening Apr/2026](project_security_hardening.md) — RLS completo (032-034), rate limiting, trustProxy, senha master rotacionada, /auth/activate removido
+- [Security Hardening Apr/2026](project_security_hardening.md) — RLS completo (032-034) + auditoria 2026-04-23 (defense in depth: tenant_id explícito em toda query, ACL master-only, UX tenant chip)
 - [ECS/S3/Deploy — lições críticas](feedback_ecs_s3_deploy.md) — ECS isolado, CACHEBUST nos Dockerfiles, task definition deve ser atualizada (não só force-new-deployment), verificar imagem real antes de debugar
 - [Regras de edição de código](feedback_code_editing_rules.md) — Write proibido, stash proibido, vibe coding proibido, sem afirmações sem verificar, signals reativos no Angular (computed só reage a signals lidos), verificar stash no início de sessão
 - [Personas seniores obrigatórias](feedback_senior_personas.md) — Engenheiro, Arquiteto, PO, Design/UX, Eng. Dados e DBA seniores em todo raciocínio técnico

@@ -198,6 +198,19 @@ export interface JwtPayload {
   module: 'human' | 'veterinary';
 }
 
+export interface UserProfile {
+  id: string;
+  email: string;
+  role: 'admin' | 'master';
+  specialty?: string | null;
+  created_at: string;
+  crm_number?: string | null;
+  crm_uf?: string | null;
+  professional_data_confirmed_at?: string | null;
+  module: 'human' | 'veterinary';
+  tenant_name: string;
+}
+
 export interface Connector {
   id: string;
   name: string;
