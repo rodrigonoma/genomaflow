@@ -233,3 +233,31 @@ DROP TRIGGER IF EXISTS tenant_invitations_same_module ON tenant_invitations;
 CREATE TRIGGER tenant_invitations_same_module
   BEFORE INSERT OR UPDATE ON tenant_invitations
   FOR EACH ROW EXECUTE FUNCTION enforce_chat_same_module();
+
+-- Trigger: sincroniza tenant_directory_listing com tenant_chat_settings
+CREATE OR REPLACE FUNCTION sync_tenant_directory() RETURNS trigger AS $$
+BEGIN
+  IF (TG_OP = 'DELETE') OR (NEW.visible_in_directory = false) THEN
+    DELETE FROM tenant_directory_listing
+    WHERE tenant_id = COALESCE(OLD.tenant_id, NEW.tenant_id);
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+
+  -- INSERT ou UPDATE com visible=true
+  INSERT INTO tenant_directory_listing (tenant_id, name, module, last_active_month, updated_at)
+    SELECT t.id, t.name, t.module, date_trunc('month', NOW())::date, NOW()
+    FROM tenants t WHERE t.id = NEW.tenant_id
+  ON CONFLICT (tenant_id) DO UPDATE
+    SET name = EXCLUDED.name,
+        module = EXCLUDED.module,
+        last_active_month = EXCLUDED.last_active_month,
+        updated_at = NOW();
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS tenant_chat_settings_sync_directory ON tenant_chat_settings;
+CREATE TRIGGER tenant_chat_settings_sync_directory
+  AFTER INSERT OR UPDATE OR DELETE ON tenant_chat_settings
+  FOR EACH ROW EXECUTE FUNCTION sync_tenant_directory();
