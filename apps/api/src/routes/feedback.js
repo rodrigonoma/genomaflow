@@ -20,7 +20,9 @@ module.exports = async function (fastify) {
 
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { role } = request.user;
-    if (role !== 'admin') return reply.status(403).send({ error: 'Acesso restrito' });
+    // Apenas role 'master' (superusuário) pode ver feedback de todas as clínicas.
+    // 'admin' é role de tenant (clínica) — NUNCA pode ver dados cross-tenant.
+    if (role !== 'master') return reply.status(403).send({ error: 'Acesso restrito' });
 
     const { rows } = await fastify.pg.query(
       `SELECT f.id, f.type, f.message, f.created_at,

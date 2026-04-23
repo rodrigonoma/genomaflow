@@ -151,6 +151,7 @@ module.exports = async function (fastify) {
     const xff = request.headers['x-forwarded-for'];
     const ip = xff ? xff.split(',')[0].trim() : request.ip;
     const ua = request.headers['user-agent'] || null;
+    const { tenant_id } = request.user;
 
     const { rows } = await fastify.pg.query(
       `UPDATE users
@@ -159,16 +160,16 @@ module.exports = async function (fastify) {
              professional_data_confirmed_at = NOW(),
              professional_data_confirmed_ip = $3,
              professional_data_user_agent = $4
-       WHERE id = $5
+       WHERE id = $5 AND tenant_id = $6
        RETURNING id, crm_number, crm_uf, professional_data_confirmed_at`,
-      [crm_number.trim(), String(crm_uf).toUpperCase(), ip, ua, user_id]
+      [crm_number.trim(), String(crm_uf).toUpperCase(), ip, ua, user_id, tenant_id]
     );
     if (!rows[0]) return reply.status(404).send({ error: 'User not found' });
     return rows[0];
   });
 
   fastify.put('/me/specialty', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { user_id } = request.user;
+    const { user_id, tenant_id } = request.user;
     const { specialty } = request.body;
 
     if (!specialty || !VALID_DOCTOR_SPECIALTIES.includes(specialty)) {
@@ -176,8 +177,8 @@ module.exports = async function (fastify) {
     }
 
     const { rows } = await fastify.pg.query(
-      `UPDATE users SET specialty = $1 WHERE id = $2 RETURNING id, email, role, specialty`,
-      [specialty, user_id]
+      `UPDATE users SET specialty = $1 WHERE id = $2 AND tenant_id = $3 RETURNING id, email, role, specialty`,
+      [specialty, user_id, tenant_id]
     );
     if (!rows[0]) return reply.status(404).send({ error: 'User not found' });
     return rows[0];

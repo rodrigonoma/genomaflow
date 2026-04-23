@@ -38,8 +38,9 @@ async function indexExam(exam_id, tenant_id) {
       `SELECT s.id AS subject_id, s.name, s.birth_date, s.sex, s.weight,
               s.species, s.medications, s.comorbidities, s.allergies,
               s.family_history, e.created_at AS exam_date
-       FROM exams e JOIN subjects s ON s.id = e.subject_id WHERE e.id = $1`,
-      [exam_id]
+       FROM exams e JOIN subjects s ON s.id = e.subject_id AND s.tenant_id = $2
+       WHERE e.id = $1 AND e.tenant_id = $2`,
+      [exam_id, tenant_id]
     );
     if (!examRows.length) { await client.query('ROLLBACK'); return; }
 
@@ -106,9 +107,9 @@ async function indexSubject(subject_id, tenant_id) {
       `SELECT s.*, o.name AS owner_name, o.phone AS owner_phone,
               o.email AS owner_email, o.cpf_last4 AS owner_cpf_last4
        FROM subjects s
-       LEFT JOIN owners o ON o.id = s.owner_id
-       WHERE s.id = $1 AND s.deleted_at IS NULL`,
-      [subject_id]
+       LEFT JOIN owners o ON o.id = s.owner_id AND o.tenant_id = $2
+       WHERE s.id = $1 AND s.tenant_id = $2 AND s.deleted_at IS NULL`,
+      [subject_id, tenant_id]
     );
     if (!rows.length) { await client.query('ROLLBACK'); return; }
     const s = rows[0];
@@ -199,7 +200,7 @@ async function indexAggregates(tenant_id) {
         COUNT(*) FILTER (WHERE species = 'bird')             AS birds,
         COUNT(*) FILTER (WHERE species = 'reptile')          AS reptiles,
         COUNT(*) FILTER (WHERE species = 'other')            AS others
-      FROM subjects WHERE deleted_at IS NULL`);
+      FROM subjects WHERE tenant_id = $1 AND deleted_at IS NULL`, [tenant_id]);
 
     const creditRes = await client.query(`
       SELECT
@@ -211,15 +212,16 @@ async function indexAggregates(tenant_id) {
 
     const patientsRes = await client.query(`
       SELECT id, name, subject_type, species, sex, birth_date, breed, allergies, comorbidities
-      FROM subjects WHERE deleted_at IS NULL ORDER BY name`);
+      FROM subjects WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY name`, [tenant_id]);
 
     const ownersRes = await client.query(`
       SELECT o.name, o.phone, o.cpf_last4,
              STRING_AGG(s.name || ' (' || COALESCE(s.species,'?') || ')', ', ') AS animals
       FROM owners o
-      LEFT JOIN subjects s ON s.owner_id = o.id AND s.deleted_at IS NULL
+      LEFT JOIN subjects s ON s.owner_id = o.id AND s.tenant_id = $1 AND s.deleted_at IS NULL
+      WHERE o.tenant_id = $1
       GROUP BY o.id, o.name, o.phone, o.cpf_last4
-      ORDER BY o.name`);
+      ORDER BY o.name`, [tenant_id]);
 
     const st = statsRes.rows[0];
     const cr = creditRes.rows[0];
