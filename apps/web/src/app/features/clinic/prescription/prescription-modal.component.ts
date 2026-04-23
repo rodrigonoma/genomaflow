@@ -3,10 +3,20 @@ import { HttpClient } from '@angular/common/http';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { FormsModule } from '@angular/forms';
 import { environment } from '../../../../environments/environment';
 import { Prescription, PrescriptionItem, Subject, ClinicalResult, ClinicProfile } from '../../../shared/models/api.models';
+
+export interface PrescriptionTemplate {
+  id: string;
+  name: string;
+  agent_type: 'therapeutic' | 'nutrition';
+  items: PrescriptionItem[];
+  notes?: string | null;
+  created_at: string;
+}
 
 export interface PrescriptionModalData {
   examId: string;
@@ -20,7 +30,7 @@ export interface PrescriptionModalData {
 @Component({
   selector: 'app-prescription-modal',
   standalone: true,
-  imports: [MatDialogModule, MatButtonModule, MatIconModule, MatSnackBarModule, FormsModule],
+  imports: [MatDialogModule, MatButtonModule, MatIconModule, MatMenuModule, MatSnackBarModule, FormsModule],
   styles: [`
     :host { display: block; }
     .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem 1.5rem 0; }
@@ -37,12 +47,80 @@ export interface PrescriptionModalData {
     input[type=text] { width: 100%; background: #0b1326; border: 1px solid rgba(70,69,84,0.3); border-radius: 4px; padding: 0.5rem 0.75rem; color: #dae2fd; font-size: 13px; font-family: 'JetBrains Mono', monospace; box-sizing: border-box; }
     input[type=text]:focus { outline: none; border-color: #c0c1ff; }
     textarea { width: 100%; background: #0b1326; border: 1px solid rgba(70,69,84,0.3); border-radius: 4px; padding: 0.5rem 0.75rem; color: #dae2fd; font-size: 13px; font-family: 'JetBrains Mono', monospace; resize: vertical; min-height: 80px; box-sizing: border-box; }
+
+    /* ── Templates bar ── */
+    .templates-bar {
+      display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+      padding: 0.75rem 1.5rem; background: rgba(192,193,255,0.03);
+      border-top: 1px solid rgba(70,69,84,0.15);
+      border-bottom: 1px solid rgba(70,69,84,0.15);
+    }
+    .tpl-label {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      text-transform: uppercase; letter-spacing: 0.1em; color: #7c7b8f;
+      margin-right: 0.25rem;
+    }
+    .tpl-btn {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px !important;
+      color: #c0c1ff !important; border-color: rgba(192,193,255,0.3) !important;
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .tpl-btn-primary {
+      color: #4ad6a0 !important; border-color: rgba(74,214,160,0.35) !important;
+    }
+    .tpl-menu-item {
+      display: flex; align-items: center; justify-content: space-between;
+      min-width: 280px; gap: 0.5rem;
+    }
+    .tpl-menu-item .tpl-name {
+      font-family: 'Inter', sans-serif; font-size: 13px; color: #dae2fd; flex: 1;
+    }
+    .tpl-menu-item .tpl-count {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #7c7b8f;
+    }
   `],
   template: `
     <div class="modal-header">
         <h2>{{ data.result.agent_type === 'therapeutic' ? 'Gerar Receita Médica' : 'Gerar Prescrição Nutricional' }}</h2>
         <button mat-icon-button (click)="close()"><mat-icon>close</mat-icon></button>
       </div>
+
+      @if (!pdfReady()) {
+        <div class="templates-bar">
+          <span class="tpl-label">Templates:</span>
+
+          <button mat-stroked-button class="tpl-btn"
+                  [matMenuTriggerFor]="tplMenu"
+                  [disabled]="templates().length === 0">
+            <mat-icon style="font-size:14px;width:14px;height:14px">playlist_add_check</mat-icon>
+            Aplicar template
+            @if (templates().length > 0) {
+              <span style="margin-left:4px;opacity:0.6">({{ templates().length }})</span>
+            }
+          </button>
+
+          <mat-menu #tplMenu="matMenu">
+            @for (tpl of templates(); track tpl.id) {
+              <button mat-menu-item class="tpl-menu-item" (click)="applyTemplate(tpl)">
+                <span class="tpl-name">{{ tpl.name }}</span>
+                <span class="tpl-count">{{ tpl.items.length }} {{ tpl.items.length === 1 ? 'item' : 'itens' }}</span>
+                <button mat-icon-button style="width:24px;height:24px"
+                        (click)="$event.stopPropagation(); deleteTemplate(tpl)"
+                        matTooltip="Excluir template">
+                  <mat-icon style="font-size:14px;width:14px;height:14px;color:#ffb4ab">delete_outline</mat-icon>
+                </button>
+              </button>
+            }
+          </mat-menu>
+
+          <button mat-stroked-button class="tpl-btn tpl-btn-primary"
+                  [disabled]="items.length === 0 || saving()"
+                  (click)="saveAsTemplate()">
+            <mat-icon style="font-size:14px;width:14px;height:14px">bookmark_add</mat-icon>
+            Salvar como template
+          </button>
+        </div>
+      }
 
       <div class="modal-body">
         @for (item of items; track $index) {
@@ -116,14 +194,17 @@ export class PrescriptionModalComponent {
 
   items: PrescriptionItem[] = [];
   notes = '';
-  saving   = signal(false);
-  pdfReady = signal(false);
+  saving    = signal(false);
+  pdfReady  = signal(false);
+  templates = signal<PrescriptionTemplate[]>([]);
 
   private savedPrescriptionId: string | null = null;
   private pdfBlob: Blob | null = null;
   private clinicProfile: ClinicProfile | null = null;
 
   constructor() {
+    this.loadTemplates();
+
     if (this.data.existingPrescription) {
       this.items = [...this.data.existingPrescription.items];
       this.notes = this.data.existingPrescription.notes ?? '';
@@ -159,6 +240,57 @@ export class PrescriptionModalComponent {
 
   removeItem(index: number): void {
     this.items.splice(index, 1);
+  }
+
+  private loadTemplates(): void {
+    this.http.get<PrescriptionTemplate[]>(
+      `${environment.apiUrl}/prescription-templates?agent_type=${this.data.result.agent_type}`
+    ).subscribe({
+      next: list => this.templates.set(list),
+      error: () => {}
+    });
+  }
+
+  applyTemplate(tpl: PrescriptionTemplate): void {
+    // Substitui itens e observações gerais pelos do template.
+    this.items = tpl.items.map(i => ({ ...i }));
+    if (tpl.notes) this.notes = tpl.notes;
+    this.snack.open(`Template "${tpl.name}" aplicado.`, '', { duration: 2500 });
+  }
+
+  saveAsTemplate(): void {
+    if (this.items.length === 0) {
+      this.snack.open('Adicione ao menos um item antes de salvar como template.', '', { duration: 3000 });
+      return;
+    }
+    const name = window.prompt('Nome do template:', '');
+    if (!name || !name.trim()) return;
+
+    this.http.post<PrescriptionTemplate>(`${environment.apiUrl}/prescription-templates`, {
+      name: name.trim(),
+      agent_type: this.data.result.agent_type,
+      items: this.items,
+      notes: this.notes || null
+    }).subscribe({
+      next: (tpl) => {
+        this.templates.update(list => [...list, tpl].sort((a, b) => a.name.localeCompare(b.name)));
+        this.snack.open(`Template "${tpl.name}" salvo.`, '', { duration: 2500 });
+      },
+      error: (err) => {
+        this.snack.open(err?.error?.error ?? 'Erro ao salvar template.', '', { duration: 3500 });
+      }
+    });
+  }
+
+  deleteTemplate(tpl: PrescriptionTemplate): void {
+    if (!confirm(`Excluir o template "${tpl.name}"? Esta ação não pode ser desfeita.`)) return;
+    this.http.delete(`${environment.apiUrl}/prescription-templates/${tpl.id}`).subscribe({
+      next: () => {
+        this.templates.update(list => list.filter(t => t.id !== tpl.id));
+        this.snack.open('Template excluído.', '', { duration: 2000 });
+      },
+      error: () => this.snack.open('Erro ao excluir template.', '', { duration: 3000 })
+    });
   }
 
   saveAndGeneratePdf(): void {
