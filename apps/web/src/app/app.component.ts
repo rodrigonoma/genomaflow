@@ -115,6 +115,38 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
     .topbar-search { flex: 0 1 380px; margin-right: auto; }
     .topbar-spacer { flex: 1; }
 
+    /* Chip de identidade do tenant — sempre visível, mitiga confusão
+     * entre contas. Incidente 2026-04-23 mostrou que usuário não tinha
+     * como saber em qual tenant estava logado. */
+    .tenant-chip {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.375rem 0.75rem;
+      border-radius: 4px;
+      background: rgba(192,193,255,0.06);
+      border: 1px solid rgba(192,193,255,0.18);
+      max-width: 320px;
+    }
+    .tenant-chip mat-icon {
+      font-size: 16px !important; width: 16px !important; height: 16px !important;
+      color: #c0c1ff;
+    }
+    .tenant-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600; font-size: 0.8125rem;
+      color: #dae2fd;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 180px;
+    }
+    .tenant-module-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 2px 6px; border-radius: 3px;
+      background: rgba(73,75,214,0.18);
+      color: #c0c1ff;
+      white-space: nowrap;
+    }
+
     .user-chip {
       display: flex; align-items: center; gap: 0.5rem;
       cursor: pointer; padding: 0.375rem 0.75rem;
@@ -188,6 +220,10 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
       .topbar-spacer { flex: 1; }
       .user-chip .user-role-label { display: none; }
       .user-chip { padding: 0.375rem 0.5rem !important; }
+      /* Tenant chip: mantém nome visível no mobile (encurta se preciso) */
+      .tenant-chip { padding: 0.375rem 0.5rem; gap: 0.375rem; }
+      .tenant-chip .tenant-name { max-width: 120px; font-size: 0.75rem; }
+      .tenant-chip .tenant-module-badge { display: none; }
 
       /* sidebar com espaço extra no topo pra não sobrepor nada */
       .sidebar-brand { padding: 1rem 1.25rem; }
@@ -254,6 +290,14 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
         <button class="hamburger-btn" (click)="toggleDrawer()" aria-label="Abrir menu">
           <mat-icon>menu</mat-icon>
         </button>
+        @if (user.role !== 'master' && (auth.currentProfile$ | async); as profile) {
+          <div class="tenant-chip"
+               [matTooltip]="'Tenant: ' + profile.tenant_name + ' · ' + (profile.module === 'veterinary' ? 'Clínica Veterinária' : 'Clínica Humana')">
+            <mat-icon>{{ profile.module === 'veterinary' ? 'pets' : 'local_hospital' }}</mat-icon>
+            <span class="tenant-name">{{ profile.tenant_name }}</span>
+            <span class="tenant-module-badge">{{ profile.module === 'veterinary' ? 'VET' : 'HUMAN' }}</span>
+          </div>
+        }
         @if (user.role !== 'master') {
           <app-quick-search class="topbar-search" />
         }

@@ -1,9 +1,10 @@
-import { Component, signal } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { AuthService } from '../../core/auth/auth.service';
 
 interface OnboardingData {
   clinic_name: string;
@@ -230,7 +231,7 @@ interface OnboardingData {
 </div>
   `,
 })
-export class OnboardingComponent {
+export class OnboardingComponent implements OnInit {
   step = signal<number>(1);
   errorMsg = signal<string>('');
   loading = signal<boolean>(false);
@@ -245,6 +246,15 @@ export class OnboardingComponent {
     gateway: '',
     tenant_id: ''
   };
+
+  ngOnInit(): void {
+    // Limpa qualquer sessão ativa antes de registrar novo tenant.
+    // Incidente 2026-04-23: JWT de tenant antigo persistia em localStorage após
+    // criação de nova conta, causando percepção de "dados vazando" entre tenants.
+    if (this.auth.getToken()) {
+      this.auth.resetSession();
+    }
+  }
 
   readonly specialtiesMap: Record<string, { key: string; label: string; phase2?: boolean }[]> = {
     human: [
@@ -263,7 +273,7 @@ export class OnboardingComponent {
     ]
   };
 
-  constructor(private http: HttpClient, private router: Router) {}
+  constructor(private http: HttpClient, private router: Router, private auth: AuthService) {}
 
   get currentSpecialties() {
     return this.specialtiesMap[this.data.module as string] ?? [];

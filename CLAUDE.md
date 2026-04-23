@@ -145,6 +145,24 @@ OR tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
 ```
 Quando nenhum tenant está configurado, o SELECT é livre. Com `withTenant`, restringe ao tenant. **Nunca simplificar para comparação direta** — quebra o login.
 
+### Defesa em profundidade: `AND tenant_id = $X` explícito em TODA query (OBRIGATÓRIO)
+
+RLS é a ÚLTIMA camada de defesa, nunca a ÚNICA. Toda query SELECT/UPDATE/DELETE em tabela com RLS **deve** ter `AND tenant_id = $X` explícito na cláusula WHERE, mesmo dentro de `withTenant`.
+
+- Tenant_id do `request.user.tenant_id` (JWT verificado) é a fonte de verdade — passar explicitamente nas queries
+- RLS pode falhar (BYPASSRLS acidental no role, migration mal aplicada, política quebrada) — filtro explícito garante que mesmo nesse caso nenhum dado vaza
+- Mesma regra vale para o `worker`: queries em `patients`, `exams`, `clinical_results`, `treatment_plans`, etc. devem incluir `AND tenant_id = $X`
+- Interpolação de tenant_id em SQL (`` `...app.tenant_id = '${tenant_id}'` ``) = proibido. Sempre `SELECT set_config('app.tenant_id', $1, true)` parametrizado
+- Incidente 2026-04-23: auditoria completa aplicou esta regra em `patients.js`, `exams.js`, `prescriptions.js`, `dashboard.js`, `alerts.js`, `integrations.js`, `worker/rag/indexer.js`; ver `docs/superpowers/specs/2026-04-23-tenant-isolation-defense-in-depth.md`
+
+### ACL de rotas cross-tenant: só `role === 'master'`
+
+Endpoints que retornam dados de múltiplos tenants (feedback, error-log, tenants, audit-log) **devem** checar `role !== 'master'`, **nunca** `role !== 'admin'`. Todo admin de clínica tem role `'admin'` — checar por `admin` = vazamento cross-tenant.
+
+### UX: tenant_name sempre visível
+
+A UI deve sempre mostrar tenant_name + módulo em local visível (topbar). Confusão visual sobre "em qual tenant estou logado" gera falsos reports de vazamento e mascara bugs reais. Ao navegar para `/onboarding` (registro de novo tenant), limpar sessão ativa — JWT antigo não pode persistir durante criação de novo tenant.
+
 ### `withTenant` é obrigatório para escritas em tabelas de dados
 
 - Toda rota que faz INSERT/UPDATE/DELETE em tabela com RLS **deve usar `withTenant`**
@@ -299,6 +317,7 @@ docker run --rm <image:tag> grep -rl "termo_do_novo_código" /usr/share/nginx/ht
 - **Verificar stash e histórico WIP antes de qualquer sessão de trabalho** — rodar `git stash list` e `git log --all --oneline | grep -i "wip\|stash"` no início de cada sessão para detectar código perdido
 - **Vibe coding é proibido** — nunca fazer múltiplas correções sequenciais pequenas sem diagnóstico completo primeiro. O fluxo obrigatório é: ler todos os arquivos relevantes → diagnosticar a causa raiz → propor solução → executar de uma vez
 - **Angular `computed()` só reage a signals lidos** — se um valor é consumido dentro de `computed()` ou `effect()`, ele **precisa** ser `signal()`. Propriedades string/boolean/object comuns NÃO invalidam o cache do computed. Para `[(ngModel)]` sobre signals, usar `[ngModel]="x()"` + `(ngModelChange)="x.set($event)"`. Bug real de 2026-04-23: busca rápida retornava sempre `[]` porque `query` era string enquanto `filtered` era computed — só saiu em produção
+- **Toda query tenant-scoped precisa de `AND tenant_id = $X` explícito** — RLS é a última camada, nunca a única. Confiar só em RLS = vazamento quando role tem BYPASSRLS por engano, policy quebra, ou query escapa de `withTenant`. Incidente 2026-04-23 motivou auditoria completa; regra detalhada em `## Arquitetura Multi-tenant` acima
 
 ---
 
@@ -320,6 +339,10 @@ docker run --rm <image:tag> grep -rl "termo_do_novo_código" /usr/share/nginx/ht
 - Afirmar que código "nunca existiu" ou "não há stash" sem verificar o histórico completo → mentira que causa perda de código
 - Fazer correções em cadeia sem diagnóstico completo (vibe coding) → regressões acumuladas e raiz do problema não resolvida
 - Propriedade comum (string/boolean/object) lida dentro de `computed()` Angular → computed nunca reavalia ao mudar o valor, UI mostra cache da primeira execução (bug 2026-04-23 na busca rápida)
+- Query em tabela tenant-scoped sem filtro explícito `AND tenant_id = $X` → se RLS falhar (BYPASSRLS, policy quebrada), vazamento cross-tenant silencioso (auditoria 2026-04-23)
+- `SET LOCAL app.tenant_id = '${tenant_id}'` com template literal → SQL Injection + potencial bypass de RLS via payload malicioso no tenant_id. Sempre `SELECT set_config('app.tenant_id', $1, true)` parametrizado
+- ACL master usando `role !== 'admin'` → todo admin de clínica tem role `'admin'`, portanto qualquer admin vê dados cross-tenant. Correto é `role !== 'master'` (bug 2026-04-23 em `feedback.js` e `error-log.js`)
+- UI sem indicador visível de tenant_name atual → usuário confunde contas e reporta falso vazamento; JWT antigo em localStorage após registro de novo tenant só piora a confusão
 
 ---
 
