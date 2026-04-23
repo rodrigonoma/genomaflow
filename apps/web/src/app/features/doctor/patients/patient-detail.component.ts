@@ -17,6 +17,7 @@ import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { ExamCardComponent } from '../../../shared/components/exam-card/exam-card.component';
 import { environment } from '../../../../environments/environment';
 import { Subject, Exam, Alert, TreatmentPlan, TreatmentItem, ClinicalResult, SPECIALTY_AGENTS, Prescription, Owner } from '../../../shared/models/api.models';
@@ -47,7 +48,7 @@ interface ComparisonBlock {
     RouterModule, DatePipe, NgClass, FormsModule,
     MatTabsModule, MatButtonModule, MatIconModule,
     MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatChipsModule, MatDialogModule, MatCheckboxModule, MatMenuModule, MatAutocompleteModule, MatSnackBarModule, ExamCardComponent,
+    MatChipsModule, MatDialogModule, MatCheckboxModule, MatMenuModule, MatAutocompleteModule, MatSnackBarModule, MatTooltipModule, ExamCardComponent,
     PrescriptionModalComponent
   ],
   styles: [`
@@ -209,14 +210,62 @@ interface ComparisonBlock {
     /* ── Evolução ── */
     .evolution-select-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; }
     .evolution-exam-row {
-      display: flex; align-items: center; gap: 0.75rem;
-      padding: 0.6rem 1rem; border-radius: 6px;
+      display: flex; align-items: flex-start; gap: 0.75rem;
+      padding: 0.75rem 1rem; border-radius: 6px;
       background: #111929; border: 1px solid rgba(70,69,84,0.15);
       cursor: pointer;
+      transition: border-color 150ms, background 150ms;
     }
-    .evolution-exam-row.selected { border-color: #c0c1ff; }
-    .evolution-exam-meta { font-size: 13px; color: #7c7b8f; }
-    .evolution-exam-date { font-weight: 600; color: #dae2fd; margin-right: 0.5rem; }
+    .evolution-exam-row:hover:not(.disabled) { background: #15203b; }
+    .evolution-exam-row.selected { border-color: #c0c1ff; background: #1a2540; }
+    .evolution-exam-row.disabled {
+      opacity: 0.45; cursor: not-allowed; background: #0d1422;
+    }
+    .evolution-exam-row.disabled:hover { background: #0d1422; }
+    .evolution-exam-body { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
+    .evolution-exam-headline {
+      display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+    }
+    .evolution-exam-date { font-weight: 600; color: #dae2fd; font-size: 13px; }
+    .evolution-exam-file {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #7c7b8f;
+      max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .evolution-exam-file mat-icon {
+      font-size: 14px !important; width: 14px !important; height: 14px !important;
+      color: #6e6d80;
+    }
+    .evolution-sev-badge {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      padding: 2px 6px; border-radius: 3px; font-weight: 700;
+      background: rgba(0,0,0,0.2);
+    }
+    .evolution-agent-chips {
+      display: flex; flex-wrap: wrap; gap: 0.3rem;
+    }
+    .evolution-agent-chip {
+      display: inline-flex; align-items: center;
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 2px 8px; border-radius: 3px;
+      background: rgba(192,193,255,0.08);
+      border: 1px solid rgba(192,193,255,0.18);
+      color: #c0c1ff;
+    }
+    .evolution-agent-chip.shared {
+      background: rgba(74,214,160,0.12);
+      border-color: rgba(74,214,160,0.4);
+      color: #4ad6a0;
+    }
+    .evolution-exam-stats {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #7c7b8f;
+    }
+    .evolution-incompatible-tag {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      color: #ffb4ab; text-transform: uppercase; letter-spacing: 0.05em;
+    }
     .compare-btn { margin-bottom: 2rem; }
     .comparison-header {
       font-family: 'JetBrains Mono', monospace; font-size: 11px;
@@ -1212,16 +1261,50 @@ interface ComparisonBlock {
           } @else {
             <div class="evolution-select-list">
               @for (e of doneExams(); track e.id) {
+                @let compatible = isExamCompatible(e);
+                @let sev = examMaxSeverity(e);
+                @let alertCount = examAlertCount(e);
                 <div class="evolution-exam-row"
                      [class.selected]="selectedExamIds().has(e.id)"
-                     (click)="toggleExamSelection(e.id)">
+                     [class.disabled]="!compatible"
+                     [matTooltip]="compatible ? '' : examIncompatibilityReason(e)"
+                     matTooltipPosition="above"
+                     (click)="compatible && toggleExamSelection(e.id)">
                   <mat-checkbox [checked]="selectedExamIds().has(e.id)"
+                                [disabled]="!compatible"
                                 (click)="$event.stopPropagation()"
-                                (change)="toggleExamSelection(e.id)"/>
-                  <span class="evolution-exam-date">{{ e.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
-                  <span class="evolution-exam-meta">
-                    {{ e.results!.length }} {{ e.results!.length === 1 ? 'agente' : 'agentes' }}
-                  </span>
+                                (change)="compatible && toggleExamSelection(e.id)"/>
+                  <div class="evolution-exam-body">
+                    <div class="evolution-exam-headline">
+                      <span class="evolution-exam-date">{{ e.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
+                      <span class="evolution-exam-file">
+                        <mat-icon>{{ examFileIcon(e) }}</mat-icon>
+                        {{ examFileName(e) }}
+                      </span>
+                      @if (sev !== 'none') {
+                        <span class="evolution-sev-badge"
+                              [style.color]="severityColor(sev)"
+                              [style.border]="'1px solid ' + severityColor(sev) + '55'">
+                          {{ sev }}
+                        </span>
+                      }
+                      @if (!compatible) {
+                        <span class="evolution-incompatible-tag">⊘ não comparável</span>
+                      }
+                    </div>
+                    <div class="evolution-agent-chips">
+                      @for (a of examAgents(e); track a) {
+                        <span class="evolution-agent-chip"
+                              [class.shared]="selectedAgents().has(a) && selectedExamIds().size > 0">
+                          {{ agentLabel(a) }}
+                        </span>
+                      }
+                    </div>
+                    <div class="evolution-exam-stats">
+                      {{ alertCount }} {{ alertCount === 1 ? 'alerta' : 'alertas' }} ·
+                      {{ examAgents(e).length }} {{ examAgents(e).length === 1 ? 'agente' : 'agentes' }}
+                    </div>
+                  </div>
                 </div>
               }
             </div>
@@ -1545,6 +1628,15 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
   );
 
+  /** Conjunto de agent_types presentes em qualquer exame selecionado. */
+  selectedAgents = computed<Set<string>>(() => {
+    const agents = new Set<string>();
+    for (const e of this.selectedSortedExams()) {
+      for (const r of (e.results ?? [])) agents.add(r.agent_type);
+    }
+    return agents;
+  });
+
   readonly bloodTypes = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
 
   editForm: Partial<Subject> & { consent_given?: boolean } = {};
@@ -1832,9 +1924,75 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
 
   toggleExamSelection(id: string): void {
     const s = new Set(this.selectedExamIds());
-    s.has(id) ? s.delete(id) : s.add(id);
+    if (s.has(id)) {
+      s.delete(id);
+    } else {
+      // Bloqueia exames sem agent_type em comum com a seleção atual.
+      // Comparar exames clinicamente diferentes (ex: hemograma vs ECG) não faz sentido.
+      const exam = this.exams().find(e => e.id === id);
+      if (exam && !this.isExamCompatible(exam)) return;
+      s.add(id);
+    }
     this.selectedExamIds.set(s);
     this.comparison.set(null);
+  }
+
+  /** Agentes únicos de um exame (já analisados pela IA). */
+  examAgents(exam: Exam): string[] {
+    return [...new Set((exam.results ?? []).map(r => r.agent_type))];
+  }
+
+  /**
+   * Exame é compatível para comparação se:
+   * - nada ainda foi selecionado (qualquer um pode ser o primeiro), OU
+   * - já está selecionado (poder desmarcar), OU
+   * - compartilha pelo menos um agent_type com a seleção atual.
+   */
+  isExamCompatible(exam: Exam): boolean {
+    if (this.selectedExamIds().has(exam.id)) return true;
+    const selected = this.selectedAgents();
+    if (selected.size === 0) return true;
+    return this.examAgents(exam).some(a => selected.has(a));
+  }
+
+  /** Tooltip explicando por que o exame está bloqueado. */
+  examIncompatibilityReason(exam: Exam): string {
+    const selected = [...this.selectedAgents()].map(a => this.agentLabel(a)).join(', ');
+    const own = this.examAgents(exam).map(a => this.agentLabel(a)).join(', ') || '—';
+    return `Não comparável: nenhum agente em comum com a seleção (${selected}). Este exame foi analisado por: ${own}.`;
+  }
+
+  /** Nome amigável do arquivo a partir de file_path (S3 key ou local). */
+  examFileName(exam: Exam): string {
+    const path = exam.file_path || '';
+    const name = path.split('/').pop() || path;
+    // Remove timestamp prefix tipo "1714000000-relatorio.pdf"
+    return name.replace(/^\d+-/, '') || 'exame';
+  }
+
+  /** Ícone Material para o tipo de arquivo. */
+  examFileIcon(exam: Exam): string {
+    switch (exam.file_type) {
+      case 'pdf':   return 'picture_as_pdf';
+      case 'dicom': return 'medical_services';
+      case 'image': return 'image';
+      default:      return 'description';
+    }
+  }
+
+  /** Pior severidade entre todos os agentes do exame. */
+  examMaxSeverity(exam: Exam): string {
+    let worst = 'none';
+    for (const r of (exam.results ?? [])) {
+      const s = this.topSeverity(r.alerts ?? []);
+      if (this.severityOf(s) > this.severityOf(worst)) worst = s;
+    }
+    return worst;
+  }
+
+  /** Total de alertas no exame (todos agentes). */
+  examAlertCount(exam: Exam): number {
+    return (exam.results ?? []).reduce((sum, r) => sum + (r.alerts?.length ?? 0), 0);
   }
 
   // ── Evolução por marcador ──────────────────────────────────────────────
