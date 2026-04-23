@@ -15,38 +15,38 @@ const { withTenant } = require('../db/tenant');
 const DOCUMENTS = [
   {
     type: 'contrato_saas',
-    version: '1.1',
+    version: '1.2',
     title: 'Contrato SaaS',
     file: 'contrato_saas.pdf',
-    content_hash: '420763de77c81e81ffb553c8d142ba3632d93e0d519cad916cf57cc8872efede',
+    content_hash: '55d768782660c012bb0b957f2d8542718d1ee1b9f17422ad29041c59874acf60',
   },
   {
     type: 'dpa',
-    version: '1.1',
+    version: '1.2',
     title: 'DPA — Proteção de Dados',
     file: 'dpa.pdf',
-    content_hash: '94a11abaf5bd78a6710333658bb919ce18e0551abf84a25dcd4785ed62f76d9b',
+    content_hash: 'b3313f53a8a804a735a343b53520abf83598851d8c17268ead188dfc050c110c',
   },
   {
     type: 'politica_incidentes',
-    version: '1.1',
+    version: '1.2',
     title: 'Política de Incidentes',
     file: 'politica_incidentes.pdf',
-    content_hash: '7c78c7d654ebd6eee11814400eecc865cca9bb7cebfcc06f022c4067c46728c3',
+    content_hash: '116fb20d8aefeeea3a8327eaf3e9fd2ea7740aecff0cb6c0e35e7a82f91a23a1',
   },
   {
     type: 'politica_seguranca',
-    version: '1.1',
+    version: '1.2',
     title: 'Política de Segurança',
     file: 'politica_seguranca.pdf',
-    content_hash: '5005e001f21d517c24303aa3ee58ce617ddc77390c7b2ac9d05895850be20606',
+    content_hash: '3b5b2dd66a3824b09e16964b52420d09c92d2f0da60e3f617b22663b1c2c76a8',
   },
   {
     type: 'politica_uso_aceitavel',
-    version: '1.1',
+    version: '1.2',
     title: 'Política de Uso Aceitável',
     file: 'politica_uso_aceitavel.pdf',
-    content_hash: 'cbe20974372b7295da04d80326d0b9fa1aa56320bf34bcee9dd51aa69512a051',
+    content_hash: 'b624af09829fb0b4095a37f252f93f6032f087465f5c792cb78b47dc8d9c28c5',
   },
 ];
 

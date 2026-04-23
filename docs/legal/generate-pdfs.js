@@ -115,8 +115,15 @@ async function contratoSaas() {
   bullet(doc, 'A qualidade do resultado depende da qualidade dos dados de entrada (imagens nítidas, laudos legíveis, dados clínicos estruturados).');
   bullet(doc, 'A plataforma não considera contexto clínico fora dos dados inseridos — integrar o quadro clínico completo é prerrogativa e dever do profissional.');
 
-  section(doc, 6, 'SLA e Disponibilidade');
-  p(doc, 'A GenomaFlow envidará esforços comercialmente razoáveis para manter a plataforma disponível, com meta de 99,5% de uptime medido mensalmente, excluídas janelas programadas de manutenção e indisponibilidades decorrentes de terceiros, força maior ou ataques externos fora do controle razoável.');
+  section(doc, 6, 'SLA — Disponibilidade, Suporte e Escopo');
+  p(doc, 'Disponibilidade da plataforma: meta de 99,5% de uptime medido mensalmente, excluídas janelas programadas de manutenção e indisponibilidades decorrentes de terceiros, força maior ou ataques externos fora do controle razoável.');
+  p(doc, 'Suporte a incidentes:');
+  bullet(doc, 'Primeiro contato em incidente com operação parada: até 24 (vinte e quatro) horas corridas a partir da abertura do chamado.');
+  bullet(doc, 'Resolução de bug crítico com operação parada: até 48 (quarenta e oito) horas úteis a partir da confirmação do incidente.');
+  bullet(doc, 'Solicitações de melhoria, novas funcionalidades e ajustes que não envolvam operação parada: sem SLA — priorizadas no roadmap do produto a critério da Contratada.');
+  p(doc, 'Escopo fora do SLA:');
+  bullet(doc, 'Treinamento de uso da plataforma não está incluído no contrato. Materiais de suporte (documentação, vídeos e base de ajuda) são disponibilizados quando existentes.');
+  bullet(doc, 'Customizações, integrações sob medida e consultoria são contratadas separadamente.');
 
   section(doc, 7, 'Proteção de Dados (LGPD)');
   bullet(doc, 'Clínica = Controladora dos dados dos pacientes.');
