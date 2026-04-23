@@ -30,8 +30,8 @@ module.exports = async function (fastify) {
                   )
                 ) FILTER (WHERE cr.id IS NOT NULL) AS results
          FROM exams e
-         JOIN subjects s ON s.id = e.subject_id AND s.deleted_at IS NULL
-         LEFT JOIN clinical_results cr ON cr.exam_id = e.id
+         JOIN subjects s ON s.id = e.subject_id AND s.tenant_id = $1 AND s.deleted_at IS NULL
+         LEFT JOIN clinical_results cr ON cr.exam_id = e.id AND cr.tenant_id = $1
          WHERE e.tenant_id = $1 AND e.status IN ('done')
          GROUP BY e.id, e.subject_id, e.status, e.review_status, e.file_type, e.created_at,
                   s.name, s.subject_type
@@ -41,7 +41,8 @@ module.exports = async function (fastify) {
 
       // Count de pacientes ativos (para % de alteração)
       const { rows: subjectRows } = await client.query(
-        `SELECT COUNT(*)::int AS c FROM subjects WHERE deleted_at IS NULL`
+        `SELECT COUNT(*)::int AS c FROM subjects WHERE tenant_id = $1 AND deleted_at IS NULL`,
+        [tenant_id]
       );
 
       return { exams: examRows, subjectCount: subjectRows[0].c };

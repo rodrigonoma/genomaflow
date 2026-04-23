@@ -40,10 +40,10 @@ module.exports = async function (fastify) {
         `SELECT p.id, p.agent_type, p.items, p.notes, p.pdf_url, p.created_at,
                 u.email as created_by_email
          FROM prescriptions p
-         LEFT JOIN users u ON u.id = p.created_by
-         WHERE p.exam_id = $1
+         LEFT JOIN users u ON u.id = p.created_by AND u.tenant_id = $2
+         WHERE p.exam_id = $1 AND p.tenant_id = $2
          ORDER BY p.created_at DESC`,
-        [examId]
+        [examId, tenant_id]
       );
     });
 
@@ -61,10 +61,10 @@ module.exports = async function (fastify) {
                 e.created_at AS exam_created_at,
                 e.file_path AS exam_file_path
          FROM prescriptions p
-         JOIN exams e ON e.id = p.exam_id
-         WHERE p.subject_id = $1
+         JOIN exams e ON e.id = p.exam_id AND e.tenant_id = $2
+         WHERE p.subject_id = $1 AND p.tenant_id = $2
          ORDER BY p.created_at DESC`,
-        [subjectId]
+        [subjectId, tenant_id]
       );
     });
 
@@ -80,9 +80,9 @@ module.exports = async function (fastify) {
       return client.query(
         `SELECT p.*, u.email as created_by_email
          FROM prescriptions p
-         LEFT JOIN users u ON u.id = p.created_by
-         WHERE p.id = $1`,
-        [id]
+         LEFT JOIN users u ON u.id = p.created_by AND u.tenant_id = $2
+         WHERE p.id = $1 AND p.tenant_id = $2`,
+        [id, tenant_id]
       );
     });
 
@@ -103,9 +103,9 @@ module.exports = async function (fastify) {
              notes = COALESCE($2, notes),
              pdf_url = COALESCE($3, pdf_url),
              updated_at = NOW()
-         WHERE id = $4
+         WHERE id = $4 AND tenant_id = $5
          RETURNING id, items, notes, pdf_url, updated_at`,
-        [items ? JSON.stringify(items) : null, notes ?? null, pdf_url ?? null, id]
+        [items ? JSON.stringify(items) : null, notes ?? null, pdf_url ?? null, id, tenant_id]
       );
     });
 
@@ -119,7 +119,10 @@ module.exports = async function (fastify) {
     const { id } = request.params;
 
     await withTenant(fastify.pg, tenant_id, async (client) => {
-      await client.query('DELETE FROM prescriptions WHERE id = $1', [id]);
+      await client.query(
+        'DELETE FROM prescriptions WHERE id = $1 AND tenant_id = $2',
+        [id, tenant_id]
+      );
     });
 
     return reply.status(204).send();

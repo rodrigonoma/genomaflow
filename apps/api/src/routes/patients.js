@@ -26,7 +26,8 @@ module.exports = async function (fastify) {
       const { rows } = await client.query(
         `SELECT id, name, cpf_last4, phone, email, address, notes, created_at,
                 cep, street, number, complement, neighborhood, city, state
-         FROM owners ORDER BY name`
+         FROM owners WHERE tenant_id = $1 ORDER BY name`,
+        [tenant_id]
       );
       return rows;
     });
@@ -81,12 +82,12 @@ module.exports = async function (fastify) {
            neighborhood = COALESCE($9,  neighborhood),
            city         = COALESCE($10, city),
            state        = COALESCE($11, state)
-         WHERE id = $12
+         WHERE id = $12 AND tenant_id = $13
          RETURNING id, name, cpf_last4, phone, email, notes, updated_at,
                    cep, street, number, complement, neighborhood, city, state`,
         [name, phone, email, notes,
          cep, street, number, complement, neighborhood, city, state,
-         id]
+         id, tenant_id]
       );
       return rows[0] || null;
     });
@@ -169,15 +170,19 @@ module.exports = async function (fastify) {
 
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request) => {
     const { tenant_id } = request.user;
+    // Defesa em profundidade: filtra por tenant_id explícito ALÉM do RLS.
+    // Garante isolamento mesmo se RLS falhar por qualquer motivo (user com
+    // BYPASSRLS, app.tenant_id não setado, configuração de prod diferente).
     return withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
         `SELECT s.id, s.name, s.birth_date, s.sex, s.subject_type, s.species,
                 s.weight, s.breed, s.created_at, s.cpf_last4,
                 o.name AS owner_name, o.cpf_last4 AS owner_cpf_last4, o.phone AS owner_phone
          FROM subjects s
-         LEFT JOIN owners o ON o.id = s.owner_id
-         WHERE s.deleted_at IS NULL
-         ORDER BY s.created_at DESC`
+         LEFT JOIN owners o ON o.id = s.owner_id AND o.tenant_id = $1
+         WHERE s.tenant_id = $1 AND s.deleted_at IS NULL
+         ORDER BY s.created_at DESC`,
+        [tenant_id]
       );
       return rows;
     });
@@ -194,12 +199,12 @@ module.exports = async function (fastify) {
         `SELECT s.id, s.name, s.sex, s.species, s.subject_type, s.created_at,
                 o.name AS owner_name
          FROM subjects s
-         LEFT JOIN owners o ON o.id = s.owner_id
-         WHERE (s.owner_cpf_hash = $1 OR o.cpf_hash = $1)
+         LEFT JOIN owners o ON o.id = s.owner_id AND o.tenant_id = $2
+         WHERE s.tenant_id = $2 AND (s.owner_cpf_hash = $1 OR o.cpf_hash = $1)
            AND s.subject_type = 'animal'
            AND s.deleted_at IS NULL
          ORDER BY s.name`,
-        [hash]
+        [hash, tenant_id]
       );
       return rows;
     });
@@ -215,9 +220,9 @@ module.exports = async function (fastify) {
                 o.name AS owner_name, o.cpf_last4 AS owner_cpf_last4,
                 o.phone AS owner_phone, o.email AS owner_email
          FROM subjects s
-         LEFT JOIN owners o ON o.id = s.owner_id
-         WHERE s.id = $1 AND s.deleted_at IS NULL`,
-        [id]
+         LEFT JOIN owners o ON o.id = s.owner_id AND o.tenant_id = $2
+         WHERE s.id = $1 AND s.tenant_id = $2 AND s.deleted_at IS NULL`,
+        [id, tenant_id]
       );
       return rows[0] || null;
     });
@@ -266,7 +271,7 @@ module.exports = async function (fastify) {
            family_history    = COALESCE($21, family_history),
            consent_given_at  = COALESCE($22, consent_given_at),
            consent_given_by  = COALESCE($23, consent_given_by)
-         WHERE id = $24 AND deleted_at IS NULL
+         WHERE id = $24 AND tenant_id = $25 AND deleted_at IS NULL
          RETURNING *`,
         [name, birth_date, sex, phone,
          weight, height, blood_type, allergies, comorbidities, notes,
@@ -274,7 +279,7 @@ module.exports = async function (fastify) {
          medications ?? null, smoking ?? null, alcohol ?? null,
          diet_type ?? null, physical_activity ?? null, family_history ?? null,
          consentAt, consentBy,
-         id]
+         id, tenant_id]
       );
       return rows[0] || null;
     });
@@ -289,8 +294,8 @@ module.exports = async function (fastify) {
     const deleted = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
         `UPDATE subjects SET deleted_at = NOW()
-         WHERE id = $1 AND deleted_at IS NULL
-         RETURNING id`, [id]
+         WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+         RETURNING id`, [id, tenant_id]
       );
       return rows[0] || null;
     });
@@ -310,10 +315,10 @@ module.exports = async function (fastify) {
                 json_agg(ti ORDER BY ti.sort_order) FILTER (WHERE ti.id IS NOT NULL) AS items
          FROM treatment_plans tp
          LEFT JOIN treatment_items ti ON ti.plan_id = tp.id
-         WHERE tp.subject_id = $1
+         WHERE tp.subject_id = $1 AND tp.tenant_id = $2
          GROUP BY tp.id
          ORDER BY tp.created_at DESC`,
-        [id]
+        [id, tenant_id]
       );
       return rows;
     });
@@ -363,9 +368,9 @@ module.exports = async function (fastify) {
            status      = COALESCE($1, status),
            title       = COALESCE($2, title),
            description = COALESCE($3, description)
-         WHERE id = $4
+         WHERE id = $4 AND tenant_id = $5
          RETURNING *`,
-        [status, title, description, plan_id]
+        [status, title, description, plan_id, tenant_id]
       );
       if (!rows[0]) return null;
       const plan = rows[0];
@@ -397,9 +402,9 @@ module.exports = async function (fastify) {
                 json_agg(ti ORDER BY ti.sort_order) FILTER (WHERE ti.id IS NOT NULL) AS items
          FROM treatment_plans tp
          LEFT JOIN treatment_items ti ON ti.plan_id = tp.id
-         WHERE tp.id = $1
+         WHERE tp.id = $1 AND tp.tenant_id = $2
          GROUP BY tp.id`,
-        [plan_id]
+        [plan_id, tenant_id]
       );
       return rows[0] || null;
     });

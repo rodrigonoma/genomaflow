@@ -406,9 +406,9 @@ module.exports = async function (fastify) {
         const birthDate = mapped['patient.birth_date'] || null;
         const { rows: existing } = await client.query(
           `SELECT id FROM subjects
-           WHERE name = $1 AND (birth_date = $2 OR ($2 IS NULL AND birth_date IS NULL))
+           WHERE tenant_id = $3 AND name = $1 AND (birth_date = $2 OR ($2 IS NULL AND birth_date IS NULL))
            LIMIT 1`,
-          [patientName, birthDate]
+          [patientName, birthDate, tenant_id]
         );
         if (existing.length > 0) {
           subjectId = existing[0].id;

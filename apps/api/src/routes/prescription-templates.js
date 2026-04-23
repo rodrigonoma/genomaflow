@@ -15,12 +15,13 @@ module.exports = async function (fastify) {
       const q = agent_type
         ? `SELECT id, name, agent_type, items, notes, created_at, updated_at
            FROM prescription_templates
-           WHERE agent_type = $1
+           WHERE tenant_id = $1 AND agent_type = $2
            ORDER BY name ASC`
         : `SELECT id, name, agent_type, items, notes, created_at, updated_at
            FROM prescription_templates
+           WHERE tenant_id = $1
            ORDER BY agent_type, name ASC`;
-      const params = agent_type ? [agent_type] : [];
+      const params = agent_type ? [tenant_id, agent_type] : [tenant_id];
       const result = await client.query(q, params);
       return result.rows;
     });
@@ -76,9 +77,9 @@ module.exports = async function (fastify) {
                  items = COALESCE($2, items),
                  notes = COALESCE($3, notes),
                  updated_at = NOW()
-           WHERE id = $4
+           WHERE id = $4 AND tenant_id = $5
            RETURNING id, name, agent_type, items, notes, updated_at`,
-          [name?.trim() ?? null, items ? JSON.stringify(items) : null, notes ?? null, id]
+          [name?.trim() ?? null, items ? JSON.stringify(items) : null, notes ?? null, id, tenant_id]
         );
         return rows[0] || null;
       });
@@ -99,8 +100,8 @@ module.exports = async function (fastify) {
 
     const deleted = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
-        `DELETE FROM prescription_templates WHERE id = $1 RETURNING id`,
-        [id]
+        `DELETE FROM prescription_templates WHERE id = $1 AND tenant_id = $2 RETURNING id`,
+        [id, tenant_id]
       );
       return rows[0] || null;
     });

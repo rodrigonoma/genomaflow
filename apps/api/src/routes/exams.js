@@ -156,7 +156,7 @@ module.exports = async function (fastify) {
             END) AS max_severity_score
           FROM clinical_results cr,
             jsonb_array_elements(cr.alerts) AS alert
-          WHERE cr.tenant_id = current_setting('app.tenant_id', true)::uuid
+          WHERE cr.tenant_id = $1
           GROUP BY cr.exam_id
         )
         SELECT
@@ -173,14 +173,14 @@ module.exports = async function (fastify) {
             )
           ) FILTER (WHERE cr.id IS NOT NULL) AS results
         FROM exams e
-        LEFT JOIN clinical_results cr ON cr.exam_id = e.id
+        LEFT JOIN clinical_results cr ON cr.exam_id = e.id AND cr.tenant_id = $1
         LEFT JOIN exam_alerts ea ON ea.exam_id = e.id
-        WHERE e.status = 'done' AND e.review_status = 'pending'
+        WHERE e.tenant_id = $1 AND e.status = 'done' AND e.review_status = 'pending'
         GROUP BY e.id, e.subject_id, e.status, e.source, e.review_status,
                  e.reviewed_by, e.reviewed_at, e.created_at, e.updated_at,
                  ea.max_severity_score
         ORDER BY ea.max_severity_score DESC NULLS LAST, e.created_at ASC
-      `);
+      `, [tenant_id]);
       return rows;
     });
 
@@ -192,7 +192,8 @@ module.exports = async function (fastify) {
 
     const result = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
-        `SELECT COUNT(*)::int AS count FROM exams WHERE status = 'done' AND review_status = 'pending'`
+        `SELECT COUNT(*)::int AS count FROM exams WHERE tenant_id = $1 AND status = 'done' AND review_status = 'pending'`,
+        [tenant_id]
       );
       return rows[0];
     });
@@ -221,15 +222,15 @@ module.exports = async function (fastify) {
             END) AS max_severity_score
           FROM clinical_results cr,
             jsonb_array_elements(cr.alerts) AS alert
-          WHERE cr.tenant_id = current_setting('app.tenant_id', true)::uuid
+          WHERE cr.tenant_id = $1
           GROUP BY cr.exam_id
         )
         SELECT e.id
         FROM exams e
         LEFT JOIN exam_alerts ea ON ea.exam_id = e.id
-        WHERE e.status = 'done' AND e.review_status IN ('pending', 'viewed')
+        WHERE e.tenant_id = $1 AND e.status = 'done' AND e.review_status IN ('pending', 'viewed')
         ORDER BY ea.max_severity_score DESC NULLS LAST, e.created_at ASC
-      `);
+      `, [tenant_id]);
 
       const idx = rows.findIndex(r => r.id === current_id);
       const targetIdx = direction === 'next' ? idx + 1 : idx - 1;
@@ -250,35 +251,39 @@ module.exports = async function (fastify) {
       return reply.status(400).send({ error: 'Invalid review_status. Must be viewed or reviewed.' });
     }
 
+    // Transação controlada manualmente (precisa BEGIN antes de set_config true),
+    // com tenant_id parametrizado (nunca interpolação) e filtro explícito em toda query.
     let client;
     try {
       client = await fastify.pg.connect();
-      await client.query(`SET LOCAL app.tenant_id = '${tenant_id}'`);
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [tenant_id]);
 
       const { rows } = await client.query(
-        `SELECT review_status FROM exams WHERE id = $1`, [id]
+        `SELECT review_status FROM exams WHERE id = $1 AND tenant_id = $2`,
+        [id, tenant_id]
       );
       if (rows.length === 0) {
+        await client.query('ROLLBACK');
         return reply.status(404).send({ error: 'Exam not found' });
       }
       const fromStatus = rows[0].review_status;
 
       const validTransitions = { pending: ['viewed', 'reviewed'], viewed: ['reviewed'] };
       if (!validTransitions[fromStatus]?.includes(toStatus)) {
+        await client.query('ROLLBACK');
         return reply.status(409).send({
           error: `Cannot transition from '${fromStatus}' to '${toStatus}'`
         });
       }
 
-      await client.query('BEGIN');
-
       const isReviewed = toStatus === 'reviewed';
       const { rows: updated } = await client.query(
         `UPDATE exams SET review_status = $1, updated_at = NOW()
-         ${isReviewed ? ', reviewed_by = $3, reviewed_at = NOW()' : ''}
-         WHERE id = $2
+         ${isReviewed ? ', reviewed_by = $4, reviewed_at = NOW()' : ''}
+         WHERE id = $2 AND tenant_id = $3
          RETURNING id, review_status, reviewed_by, reviewed_at`,
-        isReviewed ? [toStatus, id, user_id] : [toStatus, id]
+        isReviewed ? [toStatus, id, tenant_id, user_id] : [toStatus, id, tenant_id]
       );
 
       await client.query(
@@ -317,11 +322,11 @@ module.exports = async function (fastify) {
                   )
                 ) FILTER (WHERE cr.id IS NOT NULL) AS results
          FROM exams e
-         LEFT JOIN clinical_results cr ON cr.exam_id = e.id
-         WHERE e.id = $1
+         LEFT JOIN clinical_results cr ON cr.exam_id = e.id AND cr.tenant_id = $2
+         WHERE e.id = $1 AND e.tenant_id = $2
          GROUP BY e.id, e.subject_id, e.status, e.source, e.file_path, e.file_type,
                   e.created_at, e.updated_at`,
-        [id]
+        [id, tenant_id]
       );
       return rows[0] || null;
     });
@@ -338,12 +343,12 @@ module.exports = async function (fastify) {
       const { rows } = await client.query(
         `SELECT cr.metadata
          FROM clinical_results cr
-         JOIN exams e ON e.id = cr.exam_id
-         WHERE e.id = $1
+         JOIN exams e ON e.id = cr.exam_id AND e.tenant_id = $2
+         WHERE e.id = $1 AND cr.tenant_id = $2
            AND cr.agent_type LIKE 'imaging_%'
            AND cr.metadata->>'original_image_url' IS NOT NULL
          LIMIT 1`,
-        [id]
+        [id, tenant_id]
       );
       return rows[0] ?? null;
     });
@@ -377,7 +382,10 @@ module.exports = async function (fastify) {
     if (!exam.file_path) return reply.status(422).send({ error: 'Exam has no file — please upload again' });
 
     await withTenant(fastify.pg, tenant_id, async (client) => {
-      await client.query(`UPDATE exams SET status = 'pending' WHERE id = $1`, [id]);
+      await client.query(
+        `UPDATE exams SET status = 'pending' WHERE id = $1 AND tenant_id = $2`,
+        [id, tenant_id]
+      );
     });
 
     await examQueue.add('process-exam', { exam_id: exam.id, tenant_id, file_path: exam.file_path, file_type: exam.file_type || 'pdf' });
