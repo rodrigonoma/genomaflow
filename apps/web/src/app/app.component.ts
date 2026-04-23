@@ -1,5 +1,6 @@
-import { Component, inject, OnInit, OnDestroy } from '@angular/core';
-import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { Component, inject, OnInit, OnDestroy, signal } from '@angular/core';
+import { ViewportService } from './core/viewport/viewport.service';
+import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
 import { AsyncPipe, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -11,7 +12,7 @@ import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angu
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { HttpClient } from '@angular/common/http';
-import { Observable, Subscription } from 'rxjs';
+import { Observable, Subscription, filter } from 'rxjs';
 import { AuthService } from './core/auth/auth.service';
 import { ReviewQueueService } from './features/doctor/review-queue/review-queue.service';
 import { WsService } from './core/ws/ws.service';
@@ -137,10 +138,67 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
       background: #0b1326;
       transition: margin-right 180ms cubic-bezier(0.4,0,0.2,1);
     }
+
+    /* ── Mobile hamburger + drawer backdrop ── */
+    .hamburger-btn {
+      display: none;
+      background: transparent; border: none; cursor: pointer;
+      padding: 8px; margin-right: 0.25rem;
+      color: #dae2fd;
+    }
+    .drawer-backdrop { display: none; }
+
+    /* ══════════════ RESPONSIVO — mobile (< 640px) ══════════════
+     * Estratégia: sidebar vira drawer (slide-in da esquerda), topbar
+     * ganha hamburger, main-content usa viewport inteiro.
+     * Desktop e tablet (≥ 640px) permanecem com o layout atual intacto.
+     */
+    @media (max-width: 639px) {
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 220ms cubic-bezier(0.4,0,0.2,1);
+        width: 280px;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+      }
+      .sidebar.drawer-open {
+        transform: translateX(0);
+      }
+      .topbar {
+        left: 0 !important;
+        padding: 0 0.75rem;
+      }
+      .main-content {
+        margin-left: 0 !important;
+      }
+      .hamburger-btn {
+        display: inline-flex; align-items: center;
+      }
+      .drawer-backdrop {
+        display: none;
+        position: fixed; inset: 0; z-index: 99;
+        background: rgba(0,0,0,0.6);
+        backdrop-filter: blur(2px);
+        animation: fadeIn 180ms ease;
+      }
+      .drawer-backdrop.visible { display: block; }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+      /* topbar compactada no mobile */
+      .topbar-search { display: none !important; }
+      .topbar-spacer { flex: 1; }
+      .user-chip .user-role-label { display: none; }
+      .user-chip { padding: 0.375rem 0.5rem !important; }
+
+      /* sidebar com espaço extra no topo pra não sobrepor nada */
+      .sidebar-brand { padding: 1rem 1.25rem; }
+      .nav-item { padding: 0.75rem 1.25rem; font-size: 0.9375rem; }
+    }
   `],
   template: `
     @if (auth.currentUser$ | async; as user) {
-      <aside class="sidebar">
+      <div class="drawer-backdrop" [class.visible]="drawerOpen()" (click)="closeDrawer()"></div>
+
+      <aside class="sidebar" [class.drawer-open]="drawerOpen()">
         <div class="sidebar-brand">
           <img class="brand-logo" src="logo_genoma.png" alt="GenomaFlow"/>
           <div class="brand-text">
@@ -193,6 +251,9 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
       </aside>
 
       <header class="topbar">
+        <button class="hamburger-btn" (click)="toggleDrawer()" aria-label="Abrir menu">
+          <mat-icon>menu</mat-icon>
+        </button>
         @if (user.role !== 'master') {
           <app-quick-search class="topbar-search" />
         }
@@ -246,10 +307,23 @@ export class AppComponent implements OnInit, OnDestroy {
   ws = inject(WsService);
   snack = inject(MatSnackBar);
   dialog = inject(MatDialog);
+  viewport = inject(ViewportService);
+  private router = inject(Router);
   reviewCount$: Observable<number> = this.reviewService.pendingCount$;
   chatOpen = false;
+  drawerOpen = signal(false);
 
   private subs = new Subscription();
+
+  toggleDrawer(): void { this.drawerOpen.update(v => !v); }
+  closeDrawer(): void { this.drawerOpen.set(false); }
+
+  constructor() {
+    // Fecha o drawer ao navegar para qualquer rota (UX mobile padrão)
+    this.router.events.pipe(filter(e => e instanceof NavigationEnd)).subscribe(() => {
+      if (this.drawerOpen()) this.drawerOpen.set(false);
+    });
+  }
 
   ngOnInit() {
     this.subs.add(

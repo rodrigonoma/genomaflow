@@ -252,3 +252,44 @@ html, body {
   background: #3d0e0e !important;
   border-color: rgba(255,180,171,0.3) !important;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Responsividade mobile — desktop-first
+ * Breakpoints: < 640px mobile, 640-1024 tablet, > 1024 desktop
+ * O layout desktop permanece intacto; abaixo só overrides para viewports menores.
+ * ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --bp-mobile: 640px;
+  --bp-tablet: 1024px;
+}
+
+/* Utilities visibility */
+.mobile-only  { display: none; }
+.desktop-only { display: initial; }
+
+body.is-mobile .mobile-only  { display: initial; }
+body.is-mobile .desktop-only { display: none !important; }
+
+/* Inputs: evita zoom no iOS — font-size mínimo 16px */
+body.is-mobile input,
+body.is-mobile textarea,
+body.is-mobile select {
+  font-size: 16px !important;
+}
+
+/* Diálogos Material: fullscreen no mobile */
+body.is-mobile .cdk-overlay-pane.dark-dialog {
+  max-width: 100vw !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  margin: 0 !important;
+}
+body.is-mobile .cdk-overlay-pane.dark-dialog .mat-mdc-dialog-surface {
+  border-radius: 0 !important;
+  max-height: 100vh !important;
+}
+
+/* Scrollbar mais visível no mobile (toque precisa feedback) */
+body.is-mobile ::-webkit-scrollbar { width: 8px; height: 8px; }

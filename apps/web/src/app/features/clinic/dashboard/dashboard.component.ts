@@ -426,6 +426,32 @@ const AGENT_LABELS: Record<string, string> = {
     }
 
     .empty-panel { font-family: 'Inter', sans-serif; font-size: 13px; color: #908fa0; margin: 0; }
+
+    /* ══════════════ MOBILE (< 640px) ══════════════ */
+    @media (max-width: 639px) {
+      :host { padding: 1rem; }
+
+      .metrics-grid { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+      .metric-card { padding: 1rem; }
+      .metric-value { font-size: 1.5rem; }
+
+      .charts-row { grid-template-columns: 1fr; gap: 0.875rem; }
+      .chart-card { padding: 1rem; }
+      .chart-title { font-size: 0.9375rem; }
+      .bar-svg { height: 120px; }
+
+      .panels-grid { grid-template-columns: 1fr; gap: 0.875rem; }
+      .panel-card { padding: 1rem; }
+
+      .donut-wrap { flex-direction: column; align-items: center; gap: 0.875rem; }
+      .donut-legend { align-self: stretch; }
+    }
+
+    /* ══════════════ TABLET (640–1024px) ══════════════ */
+    @media (min-width: 640px) and (max-width: 1023px) {
+      .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+      .charts-row { grid-template-columns: 1fr; }
+    }
   `]
 })
 export class DashboardComponent implements OnInit {

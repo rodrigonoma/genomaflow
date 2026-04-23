@@ -522,6 +522,39 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
     }
     .compare-chart-wrap { height: 180px; position: relative; }
     .compare-chart-wrap canvas { height: 100% !important; }
+
+    /* ══════════════ MOBILE (< 640px) ══════════════ */
+    @media (max-width: 639px) {
+      .result-page { padding: 1rem; }
+      .result-header { flex-direction: column; align-items: flex-start; }
+      .patient-title { font-size: 1.25rem; }
+      .header-right { width: 100%; justify-content: space-between; }
+      .export-btn { flex: 1; font-size: 11px; }
+
+      /* Layout 2col → 1col: sidebar vira card no topo (não sticky) */
+      .content-layout {
+        grid-template-columns: 1fr !important;
+        gap: 1rem;
+      }
+      .sidebar-card {
+        position: static !important;
+        padding: 1rem;
+      }
+      .compare-field { width: 100% !important; }
+
+      /* Agent cards */
+      .agent-card { padding: 1rem; }
+      .agent-header { flex-wrap: wrap; gap: 0.5rem; }
+      .risk-scores { gap: 0.5rem; flex-wrap: wrap; }
+      .risk-score-item { min-width: 0; }
+
+      /* Compare charts */
+      .compare-chart-wrap { height: 160px; }
+      .compare-chart-block { padding: 0.875rem; }
+
+      /* Subject identity chip wrap */
+      .subject-identity { flex-wrap: wrap; }
+    }
   `]
 })
 export class ResultPanelComponent implements OnInit, OnDestroy {
