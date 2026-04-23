@@ -1,8 +1,7 @@
 ---
 name: Regras de edição de código — lições de abril/2026
-description: Write proibido em arquivos existentes, git stash proibido, sem vibe coding, sem afirmações sem verificar, uma concern por branch, smoke test antes de aprovar
+description: Write proibido, stash proibido, sem vibe coding, sem afirmações sem verificar, signals reativos no Angular, uma concern por branch, smoke test antes de aprovar
 type: feedback
-originSessionId: 70201c53-e120-4e84-a6d1-e96d8946598d
 ---
 **Write é proibido em arquivos existentes.** Usar sempre Edit cirúrgico.
 
@@ -65,3 +64,11 @@ originSessionId: 70201c53-e120-4e84-a6d1-e96d8946598d
 **Why:** Código perdido em stashes anteriores (412fe26d, b559156a) só foi descoberto porque o usuário insistiu. Sem verificação proativa, código válido fica enterrado no histórico.
 
 **How to apply:** No início de cada sessão: `git stash list` e `git log --all --oneline | grep -i "wip\|stash"`. Se houver stash ou WIP, analisar antes de qualquer trabalho novo.
+
+---
+
+**Angular signals: computed() só reage a signals lidos — nunca a propriedades comuns.**
+
+**Why:** Em 2026-04-23, o QuickSearchComponent tinha `query = ''` (string comum) e `filtered = computed(() => ... this.query ...)`. Quando o usuário digitava, `query` mudava, mas o `computed` só re-rodava quando signals lidos mudavam. `filtered()` ficava cacheado com o resultado da primeira avaliação (query vazia → []) e a busca retornava "Nenhum resultado" para tudo. Levou um deploy em prod + screenshot do usuário pra detectar porque não dá pra reproduzir sem digitar e inspecionar.
+
+**How to apply:** Se um valor é lido por `computed()` ou `effect()`, ele **precisa** ser `signal()`. Para `[(ngModel)]="x"` + computed que lê `x`, trocar para `[ngModel]="x()"` e `(ngModelChange)="x.set($event)"`. Também checar: `template` reavalia `computed()` só quando uma dependência signal muda — alterações em propriedades comuns **não invalidam o cache**. Regra: na dúvida, convertar para signal.
