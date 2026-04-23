@@ -255,9 +255,53 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 DROP TRIGGER IF EXISTS tenant_chat_settings_sync_directory ON tenant_chat_settings;
 CREATE TRIGGER tenant_chat_settings_sync_directory
   AFTER INSERT OR UPDATE OR DELETE ON tenant_chat_settings
   FOR EACH ROW EXECUTE FUNCTION sync_tenant_directory();
+
+-- ── RLS: single-tenant tables ─────────────────────────────────────────
+
+ALTER TABLE tenant_chat_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_chat_settings FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tcs_select ON tenant_chat_settings;
+CREATE POLICY tcs_select ON tenant_chat_settings FOR SELECT
+  USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+DROP POLICY IF EXISTS tcs_insert ON tenant_chat_settings;
+CREATE POLICY tcs_insert ON tenant_chat_settings FOR INSERT
+  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+DROP POLICY IF EXISTS tcs_update ON tenant_chat_settings;
+CREATE POLICY tcs_update ON tenant_chat_settings FOR UPDATE
+  USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
+  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+DROP POLICY IF EXISTS tcs_delete ON tenant_chat_settings;
+CREATE POLICY tcs_delete ON tenant_chat_settings FOR DELETE
+  USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+ALTER TABLE tenant_blocks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_blocks FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tb_select ON tenant_blocks;
+CREATE POLICY tb_select ON tenant_blocks FOR SELECT
+  USING (blocker_tenant_id = current_setting('app.tenant_id', true)::uuid);
+DROP POLICY IF EXISTS tb_insert ON tenant_blocks;
+CREATE POLICY tb_insert ON tenant_blocks FOR INSERT
+  WITH CHECK (blocker_tenant_id = current_setting('app.tenant_id', true)::uuid);
+DROP POLICY IF EXISTS tb_delete ON tenant_blocks;
+CREATE POLICY tb_delete ON tenant_blocks FOR DELETE
+  USING (blocker_tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+ALTER TABLE tenant_directory_listing ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_directory_listing FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tdl_select ON tenant_directory_listing;
+CREATE POLICY tdl_select ON tenant_directory_listing FOR SELECT USING (true);
+DROP POLICY IF EXISTS tdl_update ON tenant_directory_listing;
+CREATE POLICY tdl_update ON tenant_directory_listing FOR UPDATE
+  USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+DROP POLICY IF EXISTS tdl_delete ON tenant_directory_listing;
+CREATE POLICY tdl_delete ON tenant_directory_listing FOR DELETE
+  USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
