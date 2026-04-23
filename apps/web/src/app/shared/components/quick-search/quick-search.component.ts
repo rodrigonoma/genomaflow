@@ -93,13 +93,13 @@ import { AuthService } from '../../../core/auth/auth.service';
     <div class="search-box" (click)="focusInput()">
       <mat-icon>search</mat-icon>
       <input #inp type="text"
-             [(ngModel)]="query"
+             [ngModel]="query()"
              (ngModelChange)="onQueryChange($event)"
              (focus)="onFocus()"
              (keydown)="onKeydown($event)"
              [placeholder]="placeholderText()"
              autocomplete="off"/>
-      @if (query) {
+      @if (query()) {
         <button class="clear-btn" (click)="clear($event)" aria-label="Limpar">
           <mat-icon style="font-size:16px;width:16px;height:16px">close</mat-icon>
         </button>
@@ -108,11 +108,11 @@ import { AuthService } from '../../../core/auth/auth.service';
       }
     </div>
 
-    @if (isOpen() && (query.trim() || recentResults().length > 0)) {
+    @if (isOpen() && (query().trim() || recentResults().length > 0)) {
       <div class="results">
         @if (filtered().length === 0) {
           <div class="empty">
-            @if (query.trim()) { Nenhum resultado para "{{ query }}". }
+            @if (query().trim()) { Nenhum resultado para "{{ query() }}". }
             @else { Digite para buscar... }
           </div>
         } @else {
@@ -148,13 +148,13 @@ export class QuickSearchComponent implements OnInit {
   private el = inject(ElementRef);
   auth = inject(AuthService);
 
-  query = '';
+  query = signal('');
   private allSubjects = signal<SubjectModel[]>([]);
   private isOpenSig = signal(false);
   activeIndex = signal(0);
 
   filtered = computed<SubjectModel[]>(() => {
-    const q = this.query.toLowerCase().trim();
+    const q = this.query().toLowerCase().trim();
     if (!q) return [];
     const nq = this.normalize(q);
     return this.allSubjects().filter(p =>
@@ -203,7 +203,8 @@ export class QuickSearchComponent implements OnInit {
     if (this.allSubjects().length === 0) this.loadSubjects();
   }
 
-  onQueryChange(_v: string): void {
+  onQueryChange(v: string): void {
+    this.query.set(v ?? '');
     this.isOpenSig.set(true);
     this.activeIndex.set(0);
   }
@@ -227,7 +228,7 @@ export class QuickSearchComponent implements OnInit {
 
   select(p: SubjectModel): void {
     this.router.navigate(['/doctor/patients', p.id]);
-    this.query = '';
+    this.query.set('');
     this.isOpenSig.set(false);
     // recarrega lista em background para pegar pacientes novos
     this.loadSubjects();
@@ -235,7 +236,7 @@ export class QuickSearchComponent implements OnInit {
 
   clear(event: Event): void {
     event.stopPropagation();
-    this.query = '';
+    this.query.set('');
     this.isOpenSig.set(false);
   }
 
