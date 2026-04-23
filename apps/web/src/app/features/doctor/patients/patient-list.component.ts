@@ -151,6 +151,33 @@ import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
       font-family: 'JetBrains Mono', monospace; font-size: 10px;
       color: #7c7b8f; margin: 0.625rem 0 0 0; line-height: 1.5;
     }
+
+    /* ══════════════ MOBILE (< 640px) ══════════════ */
+    @media (max-width: 639px) {
+      :host { padding: 1rem; }
+      .page-header {
+        flex-direction: column; align-items: flex-start; gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
+      .page-title { font-size: 1.25rem; }
+      .header-actions {
+        width: 100%; flex-wrap: wrap;
+      }
+      .header-actions button { flex: 1 1 auto; }
+
+      .patients-grid { grid-template-columns: 1fr; gap: 0.75rem; }
+      .patient-card { padding: 1rem; }
+
+      /* Forms de dono e paciente */
+      .form-panel { padding: 1rem; }
+      .field-pair, .field-trio { grid-template-columns: 1fr !important; gap: 0.5rem; }
+      .form-actions { flex-direction: column-reverse; align-items: stretch; }
+      .form-actions button { width: 100%; }
+
+      /* Card actions — buttons stack em telas muito estreitas */
+      .card-actions { flex-wrap: wrap; gap: 0.375rem; }
+      .card-actions .exam-btn { flex: 1; }
+    }
   `],
   template: `
     <div class="patients-page">

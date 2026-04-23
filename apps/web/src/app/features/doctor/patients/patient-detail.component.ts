@@ -545,6 +545,78 @@ interface ComparisonBlock {
     }
     .upload-panel-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1rem; }
     .upload-panel-error { color: #ffb4ab; font-size: 12px; margin-top: 0.5rem; }
+
+    /* ══════════════ MOBILE (< 640px) ══════════════
+     * Desktop permanece intacto. Abaixo só reduções de grid, padding e font
+     * onde o viewport exige. Tablet (640–1024) herda a maior parte.
+     */
+    @media (max-width: 639px) {
+      .page-header { padding: 1rem 1rem 0; }
+      .subject-header { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+      .subject-name { font-size: 1.25rem; }
+      ::ng-deep .mat-mdc-tab-labels { padding: 0 0.5rem !important; }
+      ::ng-deep .mat-mdc-tab-body-wrapper { padding: 1rem !important; }
+
+      .profile-grid { grid-template-columns: 1fr !important; gap: 1rem; max-width: 100%; }
+      .profile-section.span-2 { grid-column: span 1; }
+      .profile-section { padding: 1rem; }
+
+      .field-pair, .field-trio { grid-template-columns: 1fr !important; gap: 0.75rem; }
+
+      /* Tabela de itens: cabeçalho some, cada linha vira card empilhado */
+      .items-table { display: block; width: 100%; }
+      .items-table tr {
+        display: block;
+        padding: 0.625rem 0;
+        border-bottom: 1px dashed rgba(70,69,84,0.2);
+      }
+      .items-table tr:first-child { display: none; }
+      .items-table td {
+        display: inline-block;
+        padding: 2px 10px 2px 0;
+        font-size: 12.5px;
+        color: #a09fb2;
+        border-bottom: none !important;
+      }
+      .items-table td.td-label {
+        display: block;
+        font-size: 14px; color: #dae2fd; font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      /* Cards de evolução e comparação */
+      .comp-chart-wrap { height: 160px; }
+      .marker-chart-wrap { height: 260px; padding: 0.5rem; }
+      .marker-legend { gap: 0.375rem; }
+
+      /* Card de prescrição da IA */
+      .prescription-card { padding: 0.875rem 1rem; }
+      .prescription-header { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+      .prescription-actions { width: 100%; justify-content: flex-end; }
+      .treatments-header { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+
+      /* Owner card */
+      .owner-card { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+
+      /* Formulário de novo plano — item rows */
+      .item-row { grid-template-columns: 1fr !important; gap: 0.375rem; }
+      .item-row .btn-icon { justify-self: flex-end; }
+
+      /* Upload panel */
+      .upload-panel { padding: 1rem; }
+      .upload-panel-actions { flex-direction: column; align-items: stretch; }
+      .upload-panel-actions button { width: 100%; }
+
+      /* Evolução mode toggle — wrap se muitos botões */
+      .evolution-mode-toggle { flex-wrap: wrap; }
+
+      /* Marker chips — não disabled aparência pesada */
+      .marker-chips { gap: 0.25rem; }
+      .marker-chip { padding: 0.3125rem 0.625rem; font-size: 10.5px; }
+
+      /* Back link */
+      .back-link { margin-bottom: 0.75rem; }
+    }
   `],
   template: `
     <div class="page-header">

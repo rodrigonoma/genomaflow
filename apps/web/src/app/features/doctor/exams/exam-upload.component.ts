@@ -128,6 +128,18 @@ import { Exam } from '../../../shared/models/api.models';
       border: 1px solid rgba(73,75,214,0.3);
       padding: 2px 8px; border-radius: 20px;
     }
+
+    /* ══════════════ MOBILE (< 640px) ══════════════ */
+    @media (max-width: 639px) {
+      :host { padding: 1rem; }
+      .page-title { font-size: 1.25rem; }
+      .drop-zone { padding: 2rem 1rem; }
+      .drop-icon { font-size: 2rem; width: 2rem; height: 2rem; }
+      .drop-title { font-size: 0.9375rem; }
+      .actions { flex-direction: column-reverse; }
+      .actions button { width: 100%; }
+      .credit-bar { flex-wrap: wrap; gap: 0.375rem; padding: 0.625rem 0.875rem; }
+    }
   `],
   template: `
     <div class="page">
