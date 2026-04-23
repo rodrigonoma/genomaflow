@@ -131,7 +131,7 @@ docker compose exec api node src/db/migrate.js
 
 ### Tabelas com RLS ativo (ENABLE + FORCE)
 
-`patients`, `exams`, `clinical_results`, `integration_connectors`, `integration_logs`, `review_audit_log`, `owners`, `treatment_plans`, `chat_embeddings`, `users`, `treatment_items`
+`patients`, `exams`, `clinical_results`, `integration_connectors`, `integration_logs`, `review_audit_log`, `owners`, `treatment_plans`, `chat_embeddings`, `users`, `treatment_items`, `tenant_chat_settings`, `tenant_blocks`, `tenant_directory_listing`, `tenant_invitations`, `tenant_conversations`, `tenant_messages`, `tenant_message_attachments`, `tenant_message_pii_checks`, `tenant_message_reactions`, `tenant_conversation_reads`
 
 - `rag_documents` **não tem RLS** — armazena diretrizes clínicas compartilhadas entre tenants (sem `tenant_id` por design)
 - Adicionar RLS a uma nova tabela de dados clínicos = sempre ENABLE + FORCE; nunca apenas ENABLE
