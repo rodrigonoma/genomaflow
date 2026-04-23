@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const fixtures = require('./fixtures/chat-fixtures');
 
 const TABLES = [
   'tenant_chat_settings',
@@ -129,3 +130,87 @@ describe('Migration 047 — privileges and constraints', () => {
     await pool.query(`DELETE FROM tenants WHERE id IN ($1, $2)`, [t.id, t2.id]);
   });
 });
+
+describe('Migration 047 — constraints', () => {
+  afterEach(() => fixtures.cleanupChatFixtures());
+
+  it('rejeita conversa com tenant_a_id >= tenant_b_id', async () => {
+    const { a, b } = await fixtures.createPair();
+    // tenta inserir invertido (b primeiro, a depois)
+    await expect(
+      pool.query(
+        `INSERT INTO tenant_conversations (tenant_a_id, tenant_b_id, module)
+         VALUES ($1, $2, 'human')`,
+        [b.tenantId, a.tenantId]
+      )
+    ).rejects.toThrow(/check constraint|violates check/i);
+  });
+
+  it('aceita conversa com par canônico', async () => {
+    const { a, b } = await fixtures.createPair();
+    const { rows } = await pool.query(
+      `INSERT INTO tenant_conversations (tenant_a_id, tenant_b_id, module)
+       VALUES ($1, $2, 'human') RETURNING id`,
+      [a.tenantId, b.tenantId]
+    );
+    expect(rows[0].id).toBeDefined();
+  });
+
+  it('rejeita conversa cross-module via trigger', async () => {
+    const human = await fixtures.createTenant({ name: 'CrossH-' + Date.now(), module: 'human' });
+    const vet   = await fixtures.createTenant({ name: 'CrossV-' + Date.now(), module: 'veterinary' });
+    const [a, b] = human.tenantId < vet.tenantId ? [human, vet] : [vet, human];
+    await expect(
+      pool.query(
+        `INSERT INTO tenant_conversations (tenant_a_id, tenant_b_id, module)
+         VALUES ($1, $2, 'human')`,
+        [a.tenantId, b.tenantId]
+      )
+    ).rejects.toThrow(/cross-module|módulo/i);
+  });
+
+  it('rejeita convite cross-module via trigger', async () => {
+    const human = await fixtures.createTenant({ name: 'InvH-' + Date.now(), module: 'human' });
+    const vet   = await fixtures.createTenant({ name: 'InvV-' + Date.now(), module: 'veterinary' });
+    await expect(
+      pool.query(
+        `INSERT INTO tenant_invitations (from_tenant_id, to_tenant_id, module, status, sent_by_user_id)
+         VALUES ($1, $2, 'human', 'pending', $3)`,
+        [human.tenantId, vet.tenantId, human.userId]
+      )
+    ).rejects.toThrow(/cross-module|módulo/i);
+  });
+
+  it('rejeita 2 convites pending para o mesmo par direcionado', async () => {
+    const { a, b } = await fixtures.createPair();
+    await pool.query(
+      `INSERT INTO tenant_invitations (from_tenant_id, to_tenant_id, module, status, sent_by_user_id)
+       VALUES ($1, $2, 'human', 'pending', $3)`,
+      [a.tenantId, b.tenantId, a.userId]
+    );
+    await expect(
+      pool.query(
+        `INSERT INTO tenant_invitations (from_tenant_id, to_tenant_id, module, status, sent_by_user_id)
+         VALUES ($1, $2, 'human', 'pending', $3)`,
+        [a.tenantId, b.tenantId, a.userId]
+      )
+    ).rejects.toThrow(/duplicate|unique|tenant_invitations_pending_unique/i);
+  });
+
+  it('aceita 2º convite pending após o primeiro virar rejected', async () => {
+    const { a, b } = await fixtures.createPair();
+    await pool.query(
+      `INSERT INTO tenant_invitations (from_tenant_id, to_tenant_id, module, status, sent_by_user_id, responded_at)
+       VALUES ($1, $2, 'human', 'rejected', $3, NOW())`,
+      [a.tenantId, b.tenantId, a.userId]
+    );
+    const { rows } = await pool.query(
+      `INSERT INTO tenant_invitations (from_tenant_id, to_tenant_id, module, status, sent_by_user_id)
+       VALUES ($1, $2, 'human', 'pending', $3) RETURNING id`,
+      [a.tenantId, b.tenantId, a.userId]
+    );
+    expect(rows[0].id).toBeDefined();
+  });
+});
+
+afterAll(async () => { await fixtures.closePool(); });

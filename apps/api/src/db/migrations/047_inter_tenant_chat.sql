@@ -196,3 +196,40 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON
   tenant_message_reactions,
   tenant_conversation_reads
 TO genomaflow_app;
+
+-- Trigger: valida que ambos os tenants têm o mesmo módulo da conversa/convite
+CREATE OR REPLACE FUNCTION enforce_chat_same_module() RETURNS trigger AS $$
+DECLARE
+  module_a TEXT;
+  module_b TEXT;
+BEGIN
+  IF TG_TABLE_NAME = 'tenant_conversations' THEN
+    SELECT module INTO module_a FROM tenants WHERE id = NEW.tenant_a_id;
+    SELECT module INTO module_b FROM tenants WHERE id = NEW.tenant_b_id;
+  ELSIF TG_TABLE_NAME = 'tenant_invitations' THEN
+    SELECT module INTO module_a FROM tenants WHERE id = NEW.from_tenant_id;
+    SELECT module INTO module_b FROM tenants WHERE id = NEW.to_tenant_id;
+  END IF;
+
+  IF module_a IS NULL OR module_b IS NULL THEN
+    RAISE EXCEPTION 'tenant não encontrado ao validar cross-module em %', TG_TABLE_NAME;
+  END IF;
+
+  IF module_a <> NEW.module OR module_b <> NEW.module THEN
+    RAISE EXCEPTION 'cross-module proibido: tenants devem ser do módulo % (got % e %)',
+      NEW.module, module_a, module_b;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS tenant_conversations_same_module ON tenant_conversations;
+CREATE TRIGGER tenant_conversations_same_module
+  BEFORE INSERT OR UPDATE ON tenant_conversations
+  FOR EACH ROW EXECUTE FUNCTION enforce_chat_same_module();
+
+DROP TRIGGER IF EXISTS tenant_invitations_same_module ON tenant_invitations;
+CREATE TRIGGER tenant_invitations_same_module
+  BEFORE INSERT OR UPDATE ON tenant_invitations
+  FOR EACH ROW EXECUTE FUNCTION enforce_chat_same_module();
