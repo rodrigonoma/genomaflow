@@ -231,6 +231,12 @@ A UI deve sempre mostrar tenant_name + módulo em local visível (topbar). Confu
 - Rate limit excedido retorna `429 { error: 'Muitas tentativas. Tente novamente em X.' }`
 - Embedding model é configurável via `EMBEDDING_MODEL` env var (fallback: `text-embedding-3-small`)
 - Claim `module` no JWT nunca é `null` — fallback para `'human'` no sign
+- Chat entre tenants é **admin-only** (V1): role diferente de `admin` cai em 403 em todo endpoint `/inter-tenant-chat/*`
+- Convite cross-module retorna **400** (human só conversa com human, vet só com vet)
+- Rate limit `POST /inter-tenant-chat/invitations`: 20/dia por tenant
+- Rate limit `POST /inter-tenant-chat/conversations/:id/messages`: 200/dia por tenant
+- Cooldown de convite: 3 rejeições consecutivas de um mesmo destinatário nos últimos 30 dias resultam em 429 até expirar
+- Bloqueio bilateral (`tenant_blocks`): convite de qualquer direção retorna 429 quando existe bloqueio — mensagem genérica para não revelar quem bloqueou
 
 ## Dados de Usuário — Normalização (OBRIGATÓRIO)
 
