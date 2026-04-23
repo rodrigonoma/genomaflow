@@ -229,3 +229,68 @@ describe('RLS — tenant_invitations', () => {
     expect(seen).toBe(0);
   });
 });
+
+describe('RLS — UPDATE WITH CHECK (anti-hijack)', () => {
+  it('tenant não consegue reassignar tenant_b para tenant alheio (tenant_conversations)', async () => {
+    const { a, b } = await fixtures.createPair();
+    const c3 = await fixtures.createTenant({ name: 'Hijack-' + Date.now() });
+    const convId = await createConversation(a, b);
+
+    // tenant a tries to swap b for c3
+    await expect(
+      withTenant(appPool, a.tenantId, async (client) => {
+        // canonical order: rebuild pair with c3
+        const [newA, newB] = a.tenantId < c3.tenantId ? [a.tenantId, c3.tenantId] : [c3.tenantId, a.tenantId];
+        return client.query(
+          `UPDATE tenant_conversations SET tenant_a_id = $1, tenant_b_id = $2 WHERE id = $3`,
+          [newA, newB, convId]
+        );
+      })
+    ).rejects.toThrow(/policy|check|denied/i);
+  });
+
+  it('tenant não consegue mover mensagem para conversa alheia (tenant_messages)', async () => {
+    const { a, b } = await fixtures.createPair();
+    const { a: x, b: y } = await fixtures.createPair();
+    const convAB = await createConversation(a, b);
+    const convXY = await createConversation(x, y);
+
+    const { rows: [msg] } = await pool.query(
+      `INSERT INTO tenant_messages (conversation_id, sender_tenant_id, sender_user_id, body, has_attachment)
+       VALUES ($1, $2, $3, 'oi', false) RETURNING id`,
+      [convAB, a.tenantId, a.userId]
+    );
+
+    // tenant a (member of A↔B but NOT of X↔Y) tries to move the message to X↔Y conv
+    await expect(
+      withTenant(appPool, a.tenantId, async (client) => {
+        return client.query(
+          `UPDATE tenant_messages SET conversation_id = $1 WHERE id = $2`,
+          [convXY, msg.id]
+        );
+      })
+    ).rejects.toThrow(/policy|check|denied/i);
+  });
+
+  it('tenant não consegue reassignar tenant_id em tenant_conversation_reads', async () => {
+    const { a, b } = await fixtures.createPair();
+    const c3 = await fixtures.createTenant({ name: 'HijackReads-' + Date.now() });
+    const convId = await createConversation(a, b);
+
+    // a creates a read receipt for itself
+    await pool.query(
+      `INSERT INTO tenant_conversation_reads (conversation_id, tenant_id) VALUES ($1, $2)`,
+      [convId, a.tenantId]
+    );
+
+    // a tries to swap tenant_id to c3
+    await expect(
+      withTenant(appPool, a.tenantId, async (client) => {
+        return client.query(
+          `UPDATE tenant_conversation_reads SET tenant_id = $1 WHERE conversation_id = $2 AND tenant_id = $3`,
+          [c3.tenantId, convId, a.tenantId]
+        );
+      })
+    ).rejects.toThrow(/policy|check|denied/i);
+  });
+});

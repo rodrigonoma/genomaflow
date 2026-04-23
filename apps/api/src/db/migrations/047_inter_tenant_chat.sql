@@ -363,6 +363,10 @@ CREATE POLICY tc_update ON tenant_conversations FOR UPDATE
   USING (
     tenant_a_id = current_setting('app.tenant_id', true)::uuid OR
     tenant_b_id = current_setting('app.tenant_id', true)::uuid
+  )
+  WITH CHECK (
+    tenant_a_id = current_setting('app.tenant_id', true)::uuid OR
+    tenant_b_id = current_setting('app.tenant_id', true)::uuid
   );
 
 ALTER TABLE tenant_messages ENABLE ROW LEVEL SECURITY;
@@ -378,7 +382,8 @@ CREATE POLICY tm_insert ON tenant_messages FOR INSERT
   );
 DROP POLICY IF EXISTS tm_update ON tenant_messages;
 CREATE POLICY tm_update ON tenant_messages FOR UPDATE
-  USING (app_is_conversation_member(conversation_id));
+  USING (app_is_conversation_member(conversation_id))
+  WITH CHECK (app_is_conversation_member(conversation_id));
 
 ALTER TABLE tenant_message_attachments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenant_message_attachments FORCE ROW LEVEL SECURITY;
@@ -446,4 +451,5 @@ CREATE POLICY tcr_upsert ON tenant_conversation_reads FOR INSERT
   );
 DROP POLICY IF EXISTS tcr_update ON tenant_conversation_reads;
 CREATE POLICY tcr_update ON tenant_conversation_reads FOR UPDATE
-  USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+  USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
+  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);

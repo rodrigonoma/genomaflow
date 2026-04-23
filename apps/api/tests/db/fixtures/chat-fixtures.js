@@ -34,12 +34,20 @@ async function createPair({ module = 'human' } = {}) {
 
 async function cleanupChatFixtures() {
   const p = getPool();
-  // Delete in FK-safe order: messages (non-cascade sender_tenant_id fkey) first,
-  // then conversations cascade remaining rows, then tenants.
+  // Delete in FK-safe order. tenant_conversation_reads has a non-cascading
+  // FK on tenant_id, so it must be removed before tenant_conversations (which
+  // would cascade the conversation_id FK) and before tenants.
+  await p.query(`
+    DELETE FROM tenant_conversation_reads
+    WHERE tenant_id IN (SELECT id FROM tenants WHERE name LIKE $1)
+  `, [PREFIX + '%']);
+  // tenant_messages has a non-cascading FK on sender_tenant_id.
   await p.query(`
     DELETE FROM tenant_messages
     WHERE sender_tenant_id IN (SELECT id FROM tenants WHERE name LIKE $1)
   `, [PREFIX + '%']);
+  // Deleting tenants cascades to: tenant_conversations → tenant_messages (remaining),
+  // tenant_invitations, tenant_blocks, tenant_chat_settings, tenant_directory_listing.
   await p.query(`DELETE FROM tenants WHERE name LIKE $1`, [PREFIX + '%']);
 }
 
