@@ -17,13 +17,15 @@ import { ReviewQueueService } from './features/doctor/review-queue/review-queue.
 import { WsService } from './core/ws/ws.service';
 import { ChatPanelComponent } from './features/chat/chat-panel.component';
 import { ClinicProfileModalComponent } from './features/clinic/profile/clinic-profile-modal.component';
+import { QuickSearchComponent } from './shared/components/quick-search/quick-search.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
   imports: [RouterOutlet, RouterLink, RouterLinkActive, AsyncPipe,
             MatIconModule, MatMenuModule, MatButtonModule, MatTooltipModule,
-            MatSnackBarModule, MatDialogModule, ChatPanelComponent, ClinicProfileModalComponent],
+            MatSnackBarModule, MatDialogModule, ChatPanelComponent, ClinicProfileModalComponent,
+            QuickSearchComponent],
   styles: [`
     :host { display: block; }
 
@@ -106,9 +108,11 @@ import { ClinicProfileModalComponent } from './features/clinic/profile/clinic-pr
       position: fixed; top: 0; left: 240px; right: 0;
       height: 56px; background: #0b1326;
       border-bottom: 1px solid rgba(70,69,84,0.15);
-      display: flex; align-items: center; justify-content: flex-end;
+      display: flex; align-items: center; gap: 0.75rem;
       padding: 0 1.5rem; z-index: 99;
     }
+    .topbar-search { flex: 0 1 380px; margin-right: auto; }
+    .topbar-spacer { flex: 1; }
 
     .user-chip {
       display: flex; align-items: center; gap: 0.5rem;
@@ -189,6 +193,10 @@ import { ClinicProfileModalComponent } from './features/clinic/profile/clinic-pr
       </aside>
 
       <header class="topbar">
+        @if (user.role !== 'master') {
+          <app-quick-search class="topbar-search" />
+        }
+        <div class="topbar-spacer"></div>
         <button mat-icon-button
                 matTooltip="Assistente clínico"
                 style="color:#908fa0;margin-right:0.5rem"
