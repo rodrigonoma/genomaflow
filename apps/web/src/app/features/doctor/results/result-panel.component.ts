@@ -16,10 +16,12 @@ import { DisclaimerComponent } from '../../../shared/components/disclaimer/discl
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { signal } from '@angular/core';
 import { environment } from '../../../../environments/environment';
-import { Exam, Subject, Prescription, ClinicalResult } from '../../../shared/models/api.models';
+import { Exam, Subject, Prescription, ClinicalResult, ClinicProfile } from '../../../shared/models/api.models';
 import { ImagingResultComponent } from './imaging-result.component';
 import { ReviewQueueService } from '../review-queue/review-queue.service';
 import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/prescription/prescription-modal.component';
+import { exportAnalysisPdf } from '../../../shared/utils/analysis-pdf';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 @Component({
   selector: 'app-result-panel',
@@ -27,6 +29,7 @@ import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/
   imports: [
     DatePipe, FormsModule, NgTemplateOutlet, UpperCasePipe,
     MatCardModule, MatSelectModule, MatDividerModule, MatButtonModule, MatIconModule, MatDialogModule,
+    MatSnackBarModule,
     AlertBadgeComponent, RiskMeterComponent, DisclaimerComponent, PrescriptionModalComponent,
     ImagingResultComponent, RouterModule
   ],
@@ -49,7 +52,17 @@ import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/
             <h1 class="patient-title">Resultado do Exame</h1>
             <span class="exam-date">{{ exam.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
           </div>
-          <span class="exam-status-badge" [class]="'status-' + exam.status">{{ exam.status | uppercase }}</span>
+          <div class="header-right">
+            @if (exam.status === 'done' && (exam.results?.length ?? 0) > 0) {
+              <button mat-stroked-button class="export-btn"
+                      [disabled]="exporting()"
+                      (click)="exportAnalysisAsPdf()">
+                <mat-icon>picture_as_pdf</mat-icon>
+                {{ exporting() ? 'Gerando...' : 'Exportar análise' }}
+              </button>
+            }
+            <span class="exam-status-badge" [class]="'status-' + exam.status">{{ exam.status | uppercase }}</span>
+          </div>
         </div>
 
         @if (subject) {
@@ -307,6 +320,15 @@ import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/
       display: flex; align-items: flex-start; justify-content: space-between;
       margin-bottom: 1.75rem; flex-wrap: wrap; gap: 1rem;
     }
+    .header-right {
+      display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+    }
+    .export-btn {
+      font-family: 'Space Grotesk', sans-serif; font-weight: 600;
+      font-size: 12px; letter-spacing: 0.03em;
+      color: #c0c1ff !important; border-color: rgba(192,193,255,0.3) !important;
+    }
+    .export-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .patient-title {
       font-family: 'Space Grotesk', sans-serif; font-weight: 700;
       font-size: 1.5rem; color: #dae2fd; margin: 0 0 0.25rem 0;
@@ -508,12 +530,15 @@ export class ResultPanelComponent implements OnInit, OnDestroy {
   private reviewService = inject(ReviewQueueService);
   private dialog = inject(MatDialog);
 
+  private snack = inject(MatSnackBar);
+
   exam: Exam | null = null;
   compareExam: Exam | null = null;
   compareExamId: string | null = null;
   allExams: Exam[] = [];
   subject: Subject | null = null;
   prescriptionsByAgent = signal<Record<string, Prescription[]>>({});
+  exporting = signal(false);
   private cmpCharts: Chart[] = [];
 
   objectKeys = Object.keys;
@@ -575,6 +600,31 @@ export class ResultPanelComponent implements OnInit, OnDestroy {
     this.reviewService.markReviewed(this.exam.id).subscribe({
       next: () => { if (this.exam) this.exam.review_status = 'reviewed'; },
       error: () => {}
+    });
+  }
+
+  exportAnalysisAsPdf(): void {
+    if (!this.exam || !this.subject || this.exporting()) return;
+    this.exporting.set(true);
+
+    // Busca perfil da clínica pra cabeçalho; se falhar, gera sem
+    this.http.get<ClinicProfile>(`${environment.apiUrl}/clinic/profile`).subscribe({
+      next: (clinic) => {
+        exportAnalysisPdf({ exam: this.exam!, subject: this.subject!, clinic })
+          .then(() => this.exporting.set(false))
+          .catch(() => {
+            this.exporting.set(false);
+            this.snack.open('Erro ao gerar PDF.', '', { duration: 3000 });
+          });
+      },
+      error: () => {
+        exportAnalysisPdf({ exam: this.exam!, subject: this.subject! })
+          .then(() => this.exporting.set(false))
+          .catch(() => {
+            this.exporting.set(false);
+            this.snack.open('Erro ao gerar PDF.', '', { duration: 3000 });
+          });
+      }
     });
   }
 
