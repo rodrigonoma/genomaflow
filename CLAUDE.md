@@ -298,6 +298,7 @@ docker run --rm <image:tag> grep -rl "termo_do_novo_código" /usr/share/nginx/ht
 - **Nunca fazer afirmações categóricas sem verificar com ferramentas** — "nunca existiu", "não há stash", "não há branch" só podem ser ditas após `git log --all`, `git stash list` e leitura efetiva do histórico. Dizer sem verificar = mentira
 - **Verificar stash e histórico WIP antes de qualquer sessão de trabalho** — rodar `git stash list` e `git log --all --oneline | grep -i "wip\|stash"` no início de cada sessão para detectar código perdido
 - **Vibe coding é proibido** — nunca fazer múltiplas correções sequenciais pequenas sem diagnóstico completo primeiro. O fluxo obrigatório é: ler todos os arquivos relevantes → diagnosticar a causa raiz → propor solução → executar de uma vez
+- **Angular `computed()` só reage a signals lidos** — se um valor é consumido dentro de `computed()` ou `effect()`, ele **precisa** ser `signal()`. Propriedades string/boolean/object comuns NÃO invalidam o cache do computed. Para `[(ngModel)]` sobre signals, usar `[ngModel]="x()"` + `(ngModelChange)="x.set($event)"`. Bug real de 2026-04-23: busca rápida retornava sempre `[]` porque `query` era string enquanto `filtered` era computed — só saiu em produção
 
 ---
 
@@ -318,6 +319,7 @@ docker run --rm <image:tag> grep -rl "termo_do_novo_código" /usr/share/nginx/ht
 - Mergar branch para main sem aprovação explícita do usuário → viola o fluxo de desenvolvimento obrigatório do projeto
 - Afirmar que código "nunca existiu" ou "não há stash" sem verificar o histórico completo → mentira que causa perda de código
 - Fazer correções em cadeia sem diagnóstico completo (vibe coding) → regressões acumuladas e raiz do problema não resolvida
+- Propriedade comum (string/boolean/object) lida dentro de `computed()` Angular → computed nunca reavalia ao mudar o valor, UI mostra cache da primeira execução (bug 2026-04-23 na busca rápida)
 
 ---
 
