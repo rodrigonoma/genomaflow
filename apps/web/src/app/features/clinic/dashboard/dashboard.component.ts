@@ -3,12 +3,31 @@ import { HttpClient } from '@angular/common/http';
 import { DatePipe, KeyValuePipe } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatIconModule } from '@angular/material/icon';
 import { AlertBadgeComponent } from '../../../shared/components/alert-badge/alert-badge.component';
 import { environment } from '../../../../environments/environment';
 import { Exam } from '../../../shared/models/api.models';
 
 interface AlertItem { marker: string; value: string; severity: any; exam_id: string; }
 interface DayBar { key: string; label: string; count: number; }
+
+interface InsightAlert {
+  marker: string; value: string; severity: string; agent_type: string;
+  exam_id: string; exam_date: string; subject_id: string; subject_name: string;
+}
+interface InsightReviewPending {
+  exam_id: string; exam_date: string; review_status: string;
+  subject_id: string; subject_name: string; file_type?: string;
+}
+interface InsightMarker { marker: string; count: number; pct: number; }
+interface InsightPayload {
+  critical_alerts_recent: InsightAlert[];
+  review_pending: InsightReviewPending[];
+  top_markers_altered: InsightMarker[];
+  risk_distribution: { critical: number; high: number; medium: number; low: number; none: number };
+  patients_with_latest_exam: number;
+  total_patients: number;
+}
 
 const AGENT_LABELS: Record<string, string> = {
   metabolic: 'Metabólico', cardiovascular: 'Cardiovascular', hematology: 'Hematologia',
@@ -19,7 +38,7 @@ const AGENT_LABELS: Record<string, string> = {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [DatePipe, KeyValuePipe, RouterModule, MatProgressBarModule, AlertBadgeComponent],
+  imports: [DatePipe, KeyValuePipe, RouterModule, MatProgressBarModule, MatIconModule, AlertBadgeComponent],
   template: `
     <div class="dashboard-page">
       <div class="page-header">
@@ -125,18 +144,108 @@ const AGENT_LABELS: Record<string, string> = {
         </div>
       </div>
 
+      @if (insights) {
+        <!-- Insights: risk distribution + top markers -->
+        <div class="charts-row">
+          <div class="chart-card">
+            <h2 class="chart-title">Risco clínico da carteira</h2>
+            @if (insights.patients_with_latest_exam === 0) {
+              <p class="empty-chart" style="padding:1.5rem 0">Nenhum paciente analisado ainda.</p>
+            } @else {
+              <div class="donut-wrap">
+                <svg viewBox="0 0 120 120" width="120" height="120">
+                  <circle cx="60" cy="60" r="48" fill="none" stroke="#131b2e" stroke-width="20"/>
+                  @for (seg of riskDonutSegments; track seg.key) {
+                    <circle cx="60" cy="60" r="48" fill="none"
+                            [attr.stroke]="seg.color" stroke-width="20"
+                            [attr.stroke-dasharray]="seg.dash"
+                            [attr.stroke-dashoffset]="seg.offset"
+                            stroke-linecap="butt"
+                            transform="rotate(-90 60 60)"/>
+                  }
+                  <text x="60" y="56" text-anchor="middle"
+                        font-family="'JetBrains Mono',monospace" font-size="18" font-weight="700" fill="#c0c1ff">
+                    {{ insights.patients_with_latest_exam }}
+                  </text>
+                  <text x="60" y="70" text-anchor="middle"
+                        font-family="'JetBrains Mono',monospace" font-size="8" fill="#908fa0">PACIENTES</text>
+                </svg>
+                <div class="donut-legend">
+                  @for (seg of riskDonutSegments; track seg.key) {
+                    @if (seg.count > 0) {
+                      <div class="legend-item">
+                        <span class="legend-dot" [style.background]="seg.color"></span>
+                        <span class="legend-label">{{ seg.label }}</span>
+                        <span class="legend-val">{{ seg.count }}</span>
+                      </div>
+                    }
+                  }
+                </div>
+              </div>
+            }
+          </div>
+
+          <div class="chart-card chart-card--wide">
+            <h2 class="chart-title">Top 5 Marcadores Alterados na Carteira</h2>
+            @if (insights.top_markers_altered.length === 0) {
+              <p class="empty-chart" style="padding:1.5rem 0">Nenhum marcador alterado registrado.</p>
+            } @else {
+              @for (m of insights.top_markers_altered; track m.marker) {
+                <div class="agent-row">
+                  <div class="agent-info">
+                    <span class="agent-name">{{ m.marker }}</span>
+                    <span class="agent-count">{{ m.count }} ({{ m.pct }}%)</span>
+                  </div>
+                  <div class="agent-bar-track">
+                    <div class="agent-bar-fill" style="background:#ffcb6b" [style.width.%]="m.pct"></div>
+                  </div>
+                </div>
+              }
+              <p style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6e6d80;margin:0.75rem 0 0 0">
+                Baseado no último exame de cada paciente analisado ({{ insights.patients_with_latest_exam }} paciente{{ insights.patients_with_latest_exam === 1 ? '' : 's' }}).
+              </p>
+            }
+          </div>
+        </div>
+      }
+
       <!-- Bottom panels -->
       <div class="panels-grid">
         <div class="panel-card">
           <h2 class="panel-title">Alertas Críticos Recentes</h2>
-          @for (a of criticalAlerts; track a.marker) {
-            <div class="alert-row">
-              <app-alert-badge [severity]="a.severity" />
-              <span class="alert-text">{{ a.marker }}: {{ a.value }}</span>
-            </div>
+          @if (insights && insights.critical_alerts_recent.length > 0) {
+            @for (a of insights.critical_alerts_recent; track a.exam_id + a.marker) {
+              <a class="alert-row alert-row-link" [routerLink]="['/doctor/results', a.exam_id]">
+                <span class="alert-dot" [style.background]="severityColor(a.severity)"></span>
+                <div class="alert-info">
+                  <div class="alert-marker">{{ a.marker }} <span class="alert-value">· {{ a.value }}</span></div>
+                  <div class="alert-meta">{{ a.subject_name }} · {{ a.exam_date | date:'dd/MM/yyyy' }}</div>
+                </div>
+              </a>
+            }
+          } @else {
+            <p class="empty-panel">Nenhum alerta crítico nos últimos 30 dias.</p>
           }
-          @if (!criticalAlerts.length) {
-            <p class="empty-panel">Nenhum alerta crítico.</p>
+        </div>
+
+        <div class="panel-card">
+          <h2 class="panel-title">Exames Aguardando Revisão</h2>
+          @if (insights && insights.review_pending.length > 0) {
+            @for (r of insights.review_pending; track r.exam_id) {
+              <a class="alert-row alert-row-link" [routerLink]="['/doctor/results', r.exam_id]">
+                <mat-icon style="font-size:18px;width:18px;height:18px;color:#c0c1ff">inbox</mat-icon>
+                <div class="alert-info">
+                  <div class="alert-marker">{{ r.subject_name }}</div>
+                  <div class="alert-meta">
+                    {{ r.exam_date | date:'dd/MM/yyyy HH:mm' }}
+                    @if (r.review_status === 'viewed') { · Visto, não revisado }
+                    @else { · Pendente de visualização }
+                  </div>
+                </div>
+              </a>
+            }
+          } @else {
+            <p class="empty-panel">Tudo revisado. Nenhum exame pendente.</p>
           }
         </div>
 
@@ -249,7 +358,11 @@ const AGENT_LABELS: Record<string, string> = {
     }
 
     /* Bottom panels */
-    .panels-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
+    .panels-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+    }
 
     .panel-card {
       background: #131b2e; border: 1px solid rgba(70,69,84,0.15);
@@ -261,7 +374,35 @@ const AGENT_LABELS: Record<string, string> = {
       font-weight: 700; font-size: 1rem; color: #dae2fd; margin: 0 0 1rem 0;
     }
 
-    .alert-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .alert-row {
+      display: flex; align-items: center; gap: 0.625rem;
+      padding: 0.5rem 0.625rem; margin-bottom: 0.375rem;
+      border-radius: 4px;
+    }
+    .alert-row-link {
+      text-decoration: none; cursor: pointer;
+      transition: background 150ms ease;
+    }
+    .alert-row-link:hover { background: rgba(192,193,255,0.06); }
+    .alert-row:last-child { margin-bottom: 0; }
+
+    .alert-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+
+    .alert-info { flex: 1; min-width: 0; }
+    .alert-marker {
+      font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+      color: #dae2fd;
+    }
+    .alert-value {
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      color: #a09fb2; font-weight: 400;
+    }
+    .alert-meta {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      color: #7c7b8f; margin-top: 2px;
+    }
 
     .alert-text { font-family: 'Inter', sans-serif; font-size: 14px; color: #c7c4d7; }
 
@@ -301,10 +442,21 @@ export class DashboardComponent implements OnInit {
 
   donutSegments: { status: string; label: string; color: string; count: number; dash: string; offset: string }[] = [];
 
+  insights: InsightPayload | null = null;
+  riskDonutSegments: { key: string; label: string; color: string; count: number; dash: string; offset: string }[] = [];
+
   private readonly CIRC = 2 * Math.PI * 48; // circumference for r=48
 
   ngOnInit(): void {
     this.timeline = this.buildTimeline([]);
+
+    this.http.get<InsightPayload>(`${environment.apiUrl}/dashboard/insights`).subscribe({
+      next: p => {
+        this.insights = p;
+        this.riskDonutSegments = this.buildRiskDonut(p.risk_distribution);
+      },
+      error: () => {}
+    });
 
     this.http.get<any[]>(`${environment.apiUrl}/alerts?severity=critical`)
       .subscribe(alerts => {
@@ -393,5 +545,28 @@ export class DashboardComponent implements OnInit {
       offsetAcc += frac;
       return { ...s, dash, offset };
     });
+  }
+
+  private buildRiskDonut(dist: InsightPayload['risk_distribution']): typeof this.riskDonutSegments {
+    const segs = [
+      { key: 'critical', label: 'Crítico', color: '#ff6450', count: dist.critical },
+      { key: 'high',     label: 'Alto',    color: '#ffcb6b', count: dist.high },
+      { key: 'medium',   label: 'Médio',   color: '#c0c1ff', count: dist.medium },
+      { key: 'low',      label: 'Baixo',   color: '#4ad6a0', count: dist.low },
+      { key: 'none',     label: 'Sem alerta', color: '#464554', count: dist.none },
+    ];
+    const total = segs.reduce((s, x) => s + x.count, 0) || 1;
+    let offsetAcc = 0;
+    return segs.map(s => {
+      const frac = s.count / total;
+      const dash = `${frac * this.CIRC} ${this.CIRC}`;
+      const offset = `${-offsetAcc * this.CIRC}`;
+      offsetAcc += frac;
+      return { ...s, dash, offset };
+    });
+  }
+
+  severityColor(sev: string): string {
+    return { critical: '#ff6450', high: '#ffcb6b', medium: '#c0c1ff', low: '#4ad6a0', none: '#7c7b8f' }[sev?.toLowerCase()] ?? '#7c7b8f';
   }
 }
