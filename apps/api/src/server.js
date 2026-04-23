@@ -36,6 +36,7 @@ app.register((fastify, _opts, done) => {
   fastify.register(require('./routes/error-log'),   { prefix: '/error-log' });
   fastify.register(require('./routes/chat'),          { prefix: '/chat' });
   fastify.register(require('./routes/prescriptions'), { prefix: '/prescriptions' });
+  fastify.register(require('./routes/prescription-templates'), { prefix: '/prescription-templates' });
   fastify.register(require('./routes/clinic'),        { prefix: '/clinic' });
   fastify.register(require('./routes/master'),        { prefix: '/master' });
   fastify.register(require('./routes/terms'),         { prefix: '/terms' });
