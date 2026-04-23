@@ -305,3 +305,145 @@ CREATE POLICY tdl_update ON tenant_directory_listing FOR UPDATE
 DROP POLICY IF EXISTS tdl_delete ON tenant_directory_listing;
 CREATE POLICY tdl_delete ON tenant_directory_listing FOR DELETE
   USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+-- ── RLS: par-based tables ─────────────────────────────────────────────
+
+-- Helper: verifica se o tenant atual é membro de uma conversa.
+-- SECURITY DEFINER: a função executa como seu owner (postgres/superuser),
+-- contornando o RLS em tenant_conversations ao checar membership.
+-- Sem SECURITY DEFINER, a função falharia recursivamente ao tentar ler
+-- tenant_conversations com RLS ativo (a policy tc_select usa OR direto,
+-- não o helper, mas o helper precisa ler a tabela).
+CREATE OR REPLACE FUNCTION app_is_conversation_member(conv_id UUID) RETURNS boolean AS $$
+DECLARE
+  ctx_tenant UUID := NULLIF(current_setting('app.tenant_id', true), '')::uuid;
+BEGIN
+  IF ctx_tenant IS NULL THEN RETURN false; END IF;
+  RETURN EXISTS (
+    SELECT 1 FROM tenant_conversations
+    WHERE id = conv_id AND (tenant_a_id = ctx_tenant OR tenant_b_id = ctx_tenant)
+  );
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+ALTER TABLE tenant_invitations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_invitations FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS ti_select ON tenant_invitations;
+CREATE POLICY ti_select ON tenant_invitations FOR SELECT
+  USING (
+    from_tenant_id = current_setting('app.tenant_id', true)::uuid OR
+    to_tenant_id   = current_setting('app.tenant_id', true)::uuid
+  );
+DROP POLICY IF EXISTS ti_insert ON tenant_invitations;
+CREATE POLICY ti_insert ON tenant_invitations FOR INSERT
+  WITH CHECK (from_tenant_id = current_setting('app.tenant_id', true)::uuid);
+DROP POLICY IF EXISTS ti_update ON tenant_invitations;
+CREATE POLICY ti_update ON tenant_invitations FOR UPDATE
+  USING (
+    from_tenant_id = current_setting('app.tenant_id', true)::uuid OR
+    to_tenant_id   = current_setting('app.tenant_id', true)::uuid
+  );
+
+ALTER TABLE tenant_conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_conversations FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tc_select ON tenant_conversations;
+CREATE POLICY tc_select ON tenant_conversations FOR SELECT
+  USING (
+    tenant_a_id = current_setting('app.tenant_id', true)::uuid OR
+    tenant_b_id = current_setting('app.tenant_id', true)::uuid
+  );
+DROP POLICY IF EXISTS tc_insert ON tenant_conversations;
+CREATE POLICY tc_insert ON tenant_conversations FOR INSERT
+  WITH CHECK (
+    tenant_a_id = current_setting('app.tenant_id', true)::uuid OR
+    tenant_b_id = current_setting('app.tenant_id', true)::uuid
+  );
+DROP POLICY IF EXISTS tc_update ON tenant_conversations;
+CREATE POLICY tc_update ON tenant_conversations FOR UPDATE
+  USING (
+    tenant_a_id = current_setting('app.tenant_id', true)::uuid OR
+    tenant_b_id = current_setting('app.tenant_id', true)::uuid
+  );
+
+ALTER TABLE tenant_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_messages FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tm_select ON tenant_messages;
+CREATE POLICY tm_select ON tenant_messages FOR SELECT
+  USING (app_is_conversation_member(conversation_id));
+DROP POLICY IF EXISTS tm_insert ON tenant_messages;
+CREATE POLICY tm_insert ON tenant_messages FOR INSERT
+  WITH CHECK (
+    app_is_conversation_member(conversation_id) AND
+    sender_tenant_id = current_setting('app.tenant_id', true)::uuid
+  );
+DROP POLICY IF EXISTS tm_update ON tenant_messages;
+CREATE POLICY tm_update ON tenant_messages FOR UPDATE
+  USING (app_is_conversation_member(conversation_id));
+
+ALTER TABLE tenant_message_attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_message_attachments FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tma_select ON tenant_message_attachments;
+CREATE POLICY tma_select ON tenant_message_attachments FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM tenant_messages m
+    WHERE m.id = message_id AND app_is_conversation_member(m.conversation_id)
+  ));
+DROP POLICY IF EXISTS tma_insert ON tenant_message_attachments;
+CREATE POLICY tma_insert ON tenant_message_attachments FOR INSERT
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM tenant_messages m
+    WHERE m.id = message_id AND m.sender_tenant_id = current_setting('app.tenant_id', true)::uuid
+  ));
+
+ALTER TABLE tenant_message_pii_checks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_message_pii_checks FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tmpc_select ON tenant_message_pii_checks;
+CREATE POLICY tmpc_select ON tenant_message_pii_checks FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM tenant_message_attachments a
+    JOIN tenant_messages m ON m.id = a.message_id
+    WHERE a.id = attachment_id AND app_is_conversation_member(m.conversation_id)
+  ));
+DROP POLICY IF EXISTS tmpc_insert ON tenant_message_pii_checks;
+CREATE POLICY tmpc_insert ON tenant_message_pii_checks FOR INSERT
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM tenant_message_attachments a
+    JOIN tenant_messages m ON m.id = a.message_id
+    WHERE a.id = attachment_id AND m.sender_tenant_id = current_setting('app.tenant_id', true)::uuid
+  ));
+
+ALTER TABLE tenant_message_reactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_message_reactions FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tmr_select ON tenant_message_reactions;
+CREATE POLICY tmr_select ON tenant_message_reactions FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM tenant_messages m
+    WHERE m.id = message_id AND app_is_conversation_member(m.conversation_id)
+  ));
+DROP POLICY IF EXISTS tmr_insert ON tenant_message_reactions;
+CREATE POLICY tmr_insert ON tenant_message_reactions FOR INSERT
+  WITH CHECK (
+    reactor_tenant_id = current_setting('app.tenant_id', true)::uuid AND
+    EXISTS (
+      SELECT 1 FROM tenant_messages m
+      WHERE m.id = message_id AND app_is_conversation_member(m.conversation_id)
+    )
+  );
+DROP POLICY IF EXISTS tmr_delete ON tenant_message_reactions;
+CREATE POLICY tmr_delete ON tenant_message_reactions FOR DELETE
+  USING (reactor_tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+ALTER TABLE tenant_conversation_reads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_conversation_reads FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tcr_select ON tenant_conversation_reads;
+CREATE POLICY tcr_select ON tenant_conversation_reads FOR SELECT
+  USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+DROP POLICY IF EXISTS tcr_upsert ON tenant_conversation_reads;
+CREATE POLICY tcr_upsert ON tenant_conversation_reads FOR INSERT
+  WITH CHECK (
+    tenant_id = current_setting('app.tenant_id', true)::uuid AND
+    app_is_conversation_member(conversation_id)
+  );
+DROP POLICY IF EXISTS tcr_update ON tenant_conversation_reads;
+CREATE POLICY tcr_update ON tenant_conversation_reads FOR UPDATE
+  USING (tenant_id = current_setting('app.tenant_id', true)::uuid);

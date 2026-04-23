@@ -110,3 +110,122 @@ describe('RLS — tenant_directory_listing', () => {
     expect(updated).toBe(1);
   });
 });
+
+// ── Par-based RLS tests ───────────────────────────────────────────────
+
+async function createConversation(a, b) {
+  const { rows: [conv] } = await pool.query(
+    `INSERT INTO tenant_conversations (tenant_a_id, tenant_b_id, module)
+     VALUES ($1, $2, 'human') RETURNING id`,
+    [a.tenantId, b.tenantId]
+  );
+  return conv.id;
+}
+
+describe('RLS — tenant_conversations (par-based)', () => {
+  it('membro vê a conversa', async () => {
+    const { a, b } = await fixtures.createPair();
+    const convId = await createConversation(a, b);
+
+    const seen = await withTenant(appPool, a.tenantId, async (c) => {
+      const { rows } = await c.query(`SELECT id FROM tenant_conversations WHERE id = $1`, [convId]);
+      return rows.length;
+    });
+    expect(seen).toBe(1);
+  });
+
+  it('não-membro NÃO vê a conversa', async () => {
+    const { a, b } = await fixtures.createPair();
+    const c3 = await fixtures.createTenant({ name: 'NonMember-' + Date.now() });
+    const convId = await createConversation(a, b);
+
+    const seen = await withTenant(appPool, c3.tenantId, async (c) => {
+      const { rows } = await c.query(`SELECT id FROM tenant_conversations WHERE id = $1`, [convId]);
+      return rows.length;
+    });
+    expect(seen).toBe(0);
+  });
+});
+
+describe('RLS — tenant_messages (par-based via conversation_id)', () => {
+  it('membro vê mensagens da própria conversa', async () => {
+    const { a, b } = await fixtures.createPair();
+    const convId = await createConversation(a, b);
+    await pool.query(
+      `INSERT INTO tenant_messages (conversation_id, sender_tenant_id, sender_user_id, body)
+       VALUES ($1, $2, $3, 'olá')`,
+      [convId, a.tenantId, a.userId]
+    );
+
+    const seen = await withTenant(appPool, b.tenantId, async (c) => {
+      const { rows } = await c.query(`SELECT id FROM tenant_messages WHERE conversation_id = $1`, [convId]);
+      return rows.length;
+    });
+    expect(seen).toBe(1);
+  });
+
+  it('não-membro NÃO vê mensagens da conversa alheia', async () => {
+    const { a, b } = await fixtures.createPair();
+    const c3 = await fixtures.createTenant({ name: 'NonMemberMsg-' + Date.now() });
+    const convId = await createConversation(a, b);
+    await pool.query(
+      `INSERT INTO tenant_messages (conversation_id, sender_tenant_id, sender_user_id, body)
+       VALUES ($1, $2, $3, 'segredo')`,
+      [convId, a.tenantId, a.userId]
+    );
+
+    const seen = await withTenant(appPool, c3.tenantId, async (c) => {
+      const { rows } = await c.query(`SELECT id FROM tenant_messages WHERE conversation_id = $1`, [convId]);
+      return rows.length;
+    });
+    expect(seen).toBe(0);
+  });
+});
+
+describe('RLS — tenant_invitations', () => {
+  it('remetente vê seu convite enviado', async () => {
+    const { a, b } = await fixtures.createPair();
+    const { rows: [inv] } = await pool.query(
+      `INSERT INTO tenant_invitations (from_tenant_id, to_tenant_id, module, status, sent_by_user_id)
+       VALUES ($1, $2, 'human', 'pending', $3) RETURNING id`,
+      [a.tenantId, b.tenantId, a.userId]
+    );
+
+    const seen = await withTenant(appPool, a.tenantId, async (c) => {
+      const { rows } = await c.query(`SELECT id FROM tenant_invitations WHERE id = $1`, [inv.id]);
+      return rows.length;
+    });
+    expect(seen).toBe(1);
+  });
+
+  it('destinatário vê o convite recebido', async () => {
+    const { a, b } = await fixtures.createPair();
+    const { rows: [inv] } = await pool.query(
+      `INSERT INTO tenant_invitations (from_tenant_id, to_tenant_id, module, status, sent_by_user_id)
+       VALUES ($1, $2, 'human', 'pending', $3) RETURNING id`,
+      [a.tenantId, b.tenantId, a.userId]
+    );
+
+    const seen = await withTenant(appPool, b.tenantId, async (c) => {
+      const { rows } = await c.query(`SELECT id FROM tenant_invitations WHERE id = $1`, [inv.id]);
+      return rows.length;
+    });
+    expect(seen).toBe(1);
+  });
+
+  it('terceiro NÃO vê o convite alheio', async () => {
+    const { a, b } = await fixtures.createPair();
+    const c3 = await fixtures.createTenant({ name: 'NonMemberInv-' + Date.now() });
+    const { rows: [inv] } = await pool.query(
+      `INSERT INTO tenant_invitations (from_tenant_id, to_tenant_id, module, status, sent_by_user_id)
+       VALUES ($1, $2, 'human', 'pending', $3) RETURNING id`,
+      [a.tenantId, b.tenantId, a.userId]
+    );
+
+    const seen = await withTenant(appPool, c3.tenantId, async (c) => {
+      const { rows } = await c.query(`SELECT id FROM tenant_invitations WHERE id = $1`, [inv.id]);
+      return rows.length;
+    });
+    expect(seen).toBe(0);
+  });
+});
