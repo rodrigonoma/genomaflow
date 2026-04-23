@@ -10,8 +10,8 @@ module.exports = async function (fastify) {
         SELECT cr.alerts, cr.agent_type, cr.created_at,
                e.subject_id, p.name AS patient_name, cr.exam_id
         FROM clinical_results cr
-        JOIN exams e ON e.id = cr.exam_id
-        JOIN subjects p ON p.id = e.subject_id
+        JOIN exams e ON e.id = cr.exam_id AND e.tenant_id = $1
+        JOIN subjects p ON p.id = e.subject_id AND p.tenant_id = $1
         WHERE cr.tenant_id = $1
       `;
       const params = [tenant_id];
