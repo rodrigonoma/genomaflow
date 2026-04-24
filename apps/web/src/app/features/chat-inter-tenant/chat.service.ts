@@ -63,8 +63,11 @@ export class ChatService {
     if (opts.limit)  params = params.set('limit',  String(opts.limit));
     return this.http.get<Page<InterTenantMessage>>(`${this.base}/conversations/${conversationId}/messages`, { params });
   }
-  sendMessage(conversationId: string, body: string): Observable<InterTenantMessage> {
-    return this.http.post<InterTenantMessage>(`${this.base}/conversations/${conversationId}/messages`, { body });
+  sendMessage(
+    conversationId: string,
+    payload: { body?: string; ai_analysis_card?: { exam_id: string; agent_types: string[] } }
+  ): Observable<InterTenantMessage> {
+    return this.http.post<InterTenantMessage>(`${this.base}/conversations/${conversationId}/messages`, payload);
   }
   searchMessages(conversationId: string, q: string): Observable<Page<ChatSearchResult>> {
     return this.http.get<Page<ChatSearchResult>>(`${this.base}/conversations/${conversationId}/search`, { params: { q } });

@@ -3,16 +3,22 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subscription } from 'rxjs';
 import { ChatService } from './chat.service';
 import { WsService } from '../../core/ws/ws.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { InterTenantMessage, InterTenantConversation } from '../../shared/models/chat.models';
+import { AiAnalysisCardComponent } from './ai-analysis-card.component';
+import { AiAnalysisPickerComponent } from './ai-analysis-picker.component';
 
 @Component({
   selector: 'app-thread',
   standalone: true,
-  imports: [CommonModule, DatePipe, FormsModule, MatIconModule, MatButtonModule],
+  imports: [CommonModule, DatePipe, FormsModule, MatIconModule, MatButtonModule, MatTooltipModule,
+            MatDialogModule, MatSnackBarModule, AiAnalysisCardComponent],
   styles: [`
     :host { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
     .header {
@@ -36,14 +42,17 @@ import { InterTenantMessage, InterTenantConversation } from '../../shared/models
       display: flex; flex-direction: column; gap: 0.5rem;
     }
     .empty { text-align: center; color: #7c7b8f; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; margin-top: 2rem; }
+    .bubble-wrap { display: flex; flex-direction: column; max-width: 70%; align-self: flex-start; gap: 0.25rem; }
+    .bubble-wrap.own { align-self: flex-end; align-items: flex-end; }
     .bubble {
-      max-width: 70%; padding: 0.625rem 0.875rem;
+      padding: 0.625rem 0.875rem;
       border-radius: 8px; position: relative;
       font-size: 0.875rem; line-height: 1.4; color: #dae2fd;
       white-space: pre-wrap; word-wrap: break-word;
     }
-    .bubble.incoming { background: #171f33; align-self: flex-start; border-top-left-radius: 0; }
-    .bubble.outgoing { background: #494bd6; align-self: flex-end; border-top-right-radius: 0; color: #fff; }
+    .bubble.incoming { background: #171f33; border-top-left-radius: 0; }
+    .bubble.outgoing { background: #494bd6; border-top-right-radius: 0; color: #fff; }
+    .attach-btn { color: #c0c1ff; }
     .bubble-date {
       display: block; margin-top: 0.25rem;
       font-family: 'JetBrains Mono', monospace; font-size: 10px;
@@ -78,13 +87,23 @@ import { InterTenantMessage, InterTenantConversation } from '../../shared/models
         <div class="empty">Envie a primeira mensagem desta conversa.</div>
       }
       @for (m of messages(); track m.id) {
-        <div class="bubble" [class.incoming]="m.sender_tenant_id !== ownTenantId" [class.outgoing]="m.sender_tenant_id === ownTenantId">
-          {{ m.body }}
-          <span class="bubble-date">{{ m.created_at | date:'dd/MM HH:mm' }}</span>
+        <div class="bubble-wrap" [class.own]="m.sender_tenant_id === ownTenantId">
+          <div class="bubble" [class.incoming]="m.sender_tenant_id !== ownTenantId" [class.outgoing]="m.sender_tenant_id === ownTenantId">
+            @if (m.body) { {{ m.body }} }
+            <span class="bubble-date">{{ m.created_at | date:'dd/MM HH:mm' }}</span>
+          </div>
+          @for (att of m.attachments ?? []; track att.id) {
+            @if (att.kind === 'ai_analysis_card' && att.payload) {
+              <app-ai-analysis-card [payload]="att.payload" />
+            }
+          }
         </div>
       }
     </div>
     <div class="input-row">
+      <button mat-icon-button class="attach-btn" (click)="onAttachAiAnalysis()" matTooltip="Anexar análise IA">
+        <mat-icon>insights</mat-icon>
+      </button>
       <textarea [(ngModel)]="draft" placeholder="Mensagem…"
         (keydown.enter)="onEnter($any($event))"></textarea>
       <button mat-icon-button class="send-btn" [disabled]="!canSend()" (click)="onSend()" matTooltip="Enviar (Enter)">
@@ -100,6 +119,8 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
   private chat = inject(ChatService);
   private ws = inject(WsService);
   private auth = inject(AuthService);
+  private dialog = inject(MatDialog);
+  private snack = inject(MatSnackBar);
 
   messages = signal<InterTenantMessage[]>([]);
   conv = signal<InterTenantConversation | null>(null);
@@ -167,7 +188,7 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
     if (!this.canSend()) return;
     const body = this.draft.trim();
     this.sending = true;
-    this.chat.sendMessage(this.conversationId, body).subscribe({
+    this.chat.sendMessage(this.conversationId, { body }).subscribe({
       next: (msg) => {
         this.messages.update(arr => [...arr, msg]);
         this.draft = '';
@@ -175,6 +196,32 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
         this.shouldScroll = true;
       },
       error: () => { this.sending = false; }
+    });
+  }
+
+  onAttachAiAnalysis() {
+    const ref = this.dialog.open(AiAnalysisPickerComponent, {
+      width: '560px',
+      panelClass: 'dark-dialog',
+      autoFocus: false,
+    });
+    ref.afterClosed().subscribe((result: { exam_id: string; agent_types: string[] } | null | undefined) => {
+      if (!result) return;
+      this.sending = true;
+      const body = this.draft.trim() || undefined;
+      this.chat.sendMessage(this.conversationId, { body, ai_analysis_card: result }).subscribe({
+        next: (msg) => {
+          this.messages.update(arr => [...arr, msg]);
+          this.draft = '';
+          this.sending = false;
+          this.shouldScroll = true;
+          this.snack.open('Análise anexada.', '', { duration: 2500 });
+        },
+        error: (err) => {
+          this.sending = false;
+          this.snack.open(err.error?.error || 'Erro ao anexar.', 'Fechar', { duration: 5000 });
+        }
+      });
     });
   }
 }
