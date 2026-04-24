@@ -16,3 +16,4 @@
 - [WebSocket em produção](feedback_websocket_prod.md) — WS URL DEVE incluir API_PREFIX em prod (ALB só roteia /api/*); emitir via Redis pub/sub, nunca notifyTenant direto — chat tem exemplo real de bug de 2026-04-24
 - [Angular prod build — fileReplacements](feedback_angular_prod_build.md) — angular.json SEM fileReplacements faz environment.production=false em prod; sintoma inclui WS quebrado e flags de debug vazadas; auditar bundle minificado (incidente 2026-04-24)
 - [AuthService — hidratar profile no F5](feedback_auth_profile_hydration.md) — persistir profile em localStorage pra evitar flicker/sumiço do chip do tenant no F5 (incidente 2026-04-24)
+- [Material Modal Padding](feedback_material_modal_padding.md) — modal-body com overflow+padding-top:0 clipa floating label do mat-form-field outline; usar padding: 1.25rem 1.5rem (incidente 2026-04-24)
