@@ -23,9 +23,9 @@ interface ChatSettings {
   imports: [MatDialogModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, MatSlideToggleModule, MatSnackBarModule, FormsModule],
   styles: [`
     :host { display: block; }
-    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem 1.5rem 0; margin-bottom: 1.25rem; }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem 1.5rem 0; }
     h2 { font-family: 'Space Grotesk', sans-serif; font-size: 1.125rem; font-weight: 700; color: #dae2fd; margin: 0; }
-    .modal-body { padding: 0 1.5rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; max-height: 70vh; overflow-y: auto; }
+    .modal-body { padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; max-height: 70vh; overflow-y: auto; }
     .field { width: 100%; }
     .section-title { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #908fa0; margin: 0.5rem 0 -0.25rem; }
     .section-divider { border-top: 1px solid rgba(70,69,84,0.2); margin: 0.75rem 0 0.25rem; }
