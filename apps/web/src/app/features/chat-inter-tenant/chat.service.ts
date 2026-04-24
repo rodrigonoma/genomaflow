@@ -65,9 +65,17 @@ export class ChatService {
   }
   sendMessage(
     conversationId: string,
-    payload: { body?: string; ai_analysis_card?: { exam_id: string; agent_types: string[] } }
+    payload: {
+      body?: string;
+      ai_analysis_card?: { exam_id: string; agent_types: string[] };
+      pdf?: { filename: string; data_base64: string; mime_type: string };
+    }
   ): Observable<InterTenantMessage> {
     return this.http.post<InterTenantMessage>(`${this.base}/conversations/${conversationId}/messages`, payload);
+  }
+
+  getAttachmentSignedUrl(attachmentId: string): Observable<{ url: string; expires_in: number }> {
+    return this.http.get<{ url: string; expires_in: number }>(`${this.base}/attachments/${attachmentId}/url`);
   }
   searchMessages(conversationId: string, q: string): Observable<Page<ChatSearchResult>> {
     return this.http.get<Page<ChatSearchResult>>(`${this.base}/conversations/${conversationId}/search`, { params: { q } });

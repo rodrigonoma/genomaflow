@@ -13,12 +13,13 @@ import { AuthService } from '../../core/auth/auth.service';
 import { InterTenantMessage, InterTenantConversation } from '../../shared/models/chat.models';
 import { AiAnalysisCardComponent } from './ai-analysis-card.component';
 import { AiAnalysisPickerComponent } from './ai-analysis-picker.component';
+import { PdfAttachmentCardComponent } from './pdf-attachment-card.component';
 
 @Component({
   selector: 'app-thread',
   standalone: true,
   imports: [CommonModule, DatePipe, FormsModule, MatIconModule, MatButtonModule, MatTooltipModule,
-            MatDialogModule, MatSnackBarModule, AiAnalysisCardComponent],
+            MatDialogModule, MatSnackBarModule, AiAnalysisCardComponent, PdfAttachmentCardComponent],
   styles: [`
     :host { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
     .header {
@@ -94,14 +95,21 @@ import { AiAnalysisPickerComponent } from './ai-analysis-picker.component';
           </div>
           @for (att of m.attachments ?? []; track att.id) {
             @if (att.kind === 'ai_analysis_card' && att.payload) {
-              <app-ai-analysis-card [payload]="att.payload" />
+              <app-ai-analysis-card [payload]="$any(att.payload)" />
+            } @else if (att.kind === 'pdf') {
+              <app-pdf-attachment-card [attachment]="att" />
             }
           }
         </div>
       }
     </div>
     <div class="input-row">
-      <button mat-icon-button class="attach-btn" (click)="onAttachAiAnalysis()" matTooltip="Anexar análise IA">
+      <input #fileInput type="file" accept="application/pdf" style="display:none"
+             (change)="onPdfPicked($any($event.target))"/>
+      <button mat-icon-button class="attach-btn" (click)="fileInput.click()" matTooltip="Anexar PDF" [disabled]="sending">
+        <mat-icon>attach_file</mat-icon>
+      </button>
+      <button mat-icon-button class="attach-btn" (click)="onAttachAiAnalysis()" matTooltip="Anexar análise IA" [disabled]="sending">
         <mat-icon>insights</mat-icon>
       </button>
       <textarea [(ngModel)]="draft" placeholder="Mensagem…"
@@ -197,6 +205,61 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
       },
       error: () => { this.sending = false; }
     });
+  }
+
+  onPdfPicked(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      this.snack.open('Apenas PDF é suportado nesta fase.', 'Fechar', { duration: 4000 });
+      input.value = '';
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      this.snack.open('PDF excede 10MB.', 'Fechar', { duration: 4000 });
+      input.value = '';
+      return;
+    }
+
+    this.sending = true;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1] || result;
+      const body = this.draft.trim() || undefined;
+      this.chat.sendMessage(this.conversationId, {
+        body,
+        pdf: { filename: file.name, data_base64: base64, mime_type: 'application/pdf' }
+      }).subscribe({
+        next: (msg) => {
+          this.messages.update(arr => [...arr, msg]);
+          this.draft = '';
+          this.sending = false;
+          this.shouldScroll = true;
+          input.value = '';
+          this.snack.open('PDF anexado.', '', { duration: 2500 });
+        },
+        error: (err) => {
+          this.sending = false;
+          input.value = '';
+          const e = err.error || {};
+          if (e.detected_kinds?.length) {
+            this.snack.open(
+              `PDF bloqueado — detectados: ${e.detected_kinds.join(', ')}. Remova dados pessoais e tente novamente.`,
+              'Fechar',
+              { duration: 8000, panelClass: ['snack-error'] }
+            );
+          } else {
+            this.snack.open(e.error || 'Erro ao anexar PDF.', 'Fechar', { duration: 5000 });
+          }
+        }
+      });
+    };
+    reader.onerror = () => {
+      this.sending = false;
+      this.snack.open('Erro ao ler o arquivo.', 'Fechar', { duration: 4000 });
+    };
+    reader.readAsDataURL(file);
   }
 
   onAttachAiAnalysis() {
