@@ -58,6 +58,12 @@ export const routes: Routes = [
       import('./features/doctor/results/result-panel.component').then(m => m.ResultPanelComponent)
   },
   {
+    path: 'chat',
+    canActivate: [authGuard, termsGuard, professionalInfoGuard],
+    loadChildren: () =>
+      import('./features/chat-inter-tenant/chat.routes').then(m => m.CHAT_ROUTES)
+  },
+  {
     path: 'onboarding/terms',
     canActivate: [authGuard],
     loadComponent: () =>
