@@ -43,6 +43,33 @@ export interface InterTenantConversation {
   archived: boolean;
 }
 
+export interface AiAnalysisCardPayload {
+  exam_source_tenant_id: string;
+  exam_created_at: string;
+  subject: {
+    subject_type: 'human' | 'animal';
+    age_range: string | null;
+    sex: string;
+    species?: string | null;
+    breed?: string | null;
+    weight_kg?: number | null;
+  };
+  results: Array<{
+    agent_type: string;
+    interpretation: string;
+    risk_scores: Record<string, string>;
+    alerts: Array<{ marker: string; value: string; severity: 'low' | 'medium' | 'high' | 'critical' }>;
+    recommendations: Array<{ type: string; description: string; priority: string }>;
+  }>;
+}
+
+export interface MessageAttachment {
+  id: string;
+  kind: 'ai_analysis_card' | 'pdf' | 'image';
+  payload?: AiAnalysisCardPayload;
+  created_at: string;
+}
+
 export interface InterTenantMessage {
   id: string;
   conversation_id: string;
@@ -51,6 +78,7 @@ export interface InterTenantMessage {
   body: string;
   has_attachment: boolean;
   created_at: string;
+  attachments?: MessageAttachment[];
 }
 
 export interface ChatSearchResult {
