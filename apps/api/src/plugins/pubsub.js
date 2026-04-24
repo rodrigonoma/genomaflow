@@ -38,28 +38,38 @@ module.exports = fp(async function (fastify) {
     }
   });
 
-  subscriber.psubscribe('exam:done:*', 'exam:error:*', 'billing:alert:*', 'billing:exhausted:*', (err) => {
-    if (err) fastify.log.error('Redis psubscribe error:', err);
-  });
+  subscriber.psubscribe(
+    'exam:done:*', 'exam:error:*',
+    'billing:alert:*', 'billing:exhausted:*',
+    'chat:event:*',
+    (err) => {
+      if (err) fastify.log.error('Redis psubscribe error:', err);
+    }
+  );
 
   subscriber.on('pmessage', (_pattern, channel, message) => {
-    let tenantId, event;
+    let tenantId, payload;
     if (channel.startsWith('exam:done:')) {
       tenantId = channel.replace('exam:done:', '');
-      event = 'exam:done';
+      payload = { event: 'exam:done', ...JSON.parse(message) };
     } else if (channel.startsWith('exam:error:')) {
       tenantId = channel.replace('exam:error:', '');
-      event = 'exam:error';
+      payload = { event: 'exam:error', ...JSON.parse(message) };
     } else if (channel.startsWith('billing:alert:')) {
       tenantId = channel.replace('billing:alert:', '');
-      event = 'billing:alert';
+      payload = { event: 'billing:alert', ...JSON.parse(message) };
     } else if (channel.startsWith('billing:exhausted:')) {
       tenantId = channel.replace('billing:exhausted:', '');
-      event = 'billing:exhausted';
+      payload = { event: 'billing:exhausted', ...JSON.parse(message) };
+    } else if (channel.startsWith('chat:event:')) {
+      // Chat events: a mensagem JSON já traz 'event' e todos os campos.
+      // O channel suffix é o tenant destinatário.
+      tenantId = channel.replace('chat:event:', '');
+      payload = JSON.parse(message);
     } else {
       return;
     }
-    fastify.notifyTenant(tenantId, { event, ...JSON.parse(message) });
+    fastify.notifyTenant(tenantId, payload);
   });
 
   fastify.addHook('onClose', (_instance, done) => {

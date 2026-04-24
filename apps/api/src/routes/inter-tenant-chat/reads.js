@@ -39,12 +39,12 @@ module.exports = async function (fastify) {
 
       // Notifica o próprio tenant pra atualizar badge em outras abas (best-effort)
       try {
-        if (fastify.notifyTenant) {
-          fastify.notifyTenant(tenant_id, {
+        if (fastify.redis) {
+          await fastify.redis.publish(`chat:event:${tenant_id}`, JSON.stringify({
             event: 'chat:unread_change',
             conversation_id: conversationId,
             absolute: 0,
-          });
+          }));
         }
       } catch (_) {}
 
