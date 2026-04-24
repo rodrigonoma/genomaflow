@@ -79,13 +79,27 @@ jobs:
               --task-definition "$TASK_DEF_ARN" \
               --query 'taskDefinition.family' --output text)
 
-            # Build new task definition with updated image
+            # Build jq filter — base: drop metadata, set new image.
+            # For API: also upsert env vars que vieram de infra (SES + FRONTEND_URL).
+            # "Upsert" = remove qualquer entrada com o mesmo nome e reinserir com valor novo.
+            JQ_FILTER='del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) | .containerDefinitions[0].image = $img'
+            JQ_ARGS=(--arg img "$NEW_IMAGE")
+
+            if [ "$svc" = "genomaflow-api" ]; then
+              JQ_FILTER="$JQ_FILTER | .containerDefinitions[0].environment |= (
+                map(select(.name != \$ses_name and .name != \$fe_name)) +
+                [{name:\$ses_name,value:\$ses_val},{name:\$fe_name,value:\$fe_val}]
+              )"
+              JQ_ARGS+=(
+                --arg ses_name "SES_FROM_EMAIL" --arg ses_val "noreply@genomaflow.com.br"
+                --arg fe_name  "FRONTEND_URL"    --arg fe_val  "https://genomaflow.com.br"
+              )
+            fi
+
             NEW_TASK_DEF=$(aws ecs describe-task-definition \
               --task-definition "$TASK_DEF_ARN" \
               --query 'taskDefinition' --output json | \
-              jq --arg img "$NEW_IMAGE" \
-                'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
-                 .containerDefinitions[0].image = $img')
+              jq "${JQ_ARGS[@]}" "$JQ_FILTER")
 
             NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
               --cli-input-json "$NEW_TASK_DEF" \
