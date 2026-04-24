@@ -221,6 +221,21 @@ A UI deve sempre mostrar tenant_name + módulo em local visível (topbar). Confu
 - Conexões sem resposta (`isAlive = false`) são terminadas automaticamente com `socket.terminate()`
 - O `setInterval` do heartbeat deve ser limpo no hook `onClose` para evitar leak de memória
 
+### WebSocket URL: incluir API_PREFIX em produção (OBRIGATÓRIO)
+
+A ALB de produção tem **apenas uma rule**: `/api/*` → API target. **Todo path fora de `/api/*` vai pro nginx do Angular**, que não tem `location` para WebSocket. URLs WS sem o prefixo falham silenciosamente com 404.
+
+- **Frontend:** `WsService` e qualquer novo WebSocket **deve** prepender `environment.apiUrl` em produção:
+  ```ts
+  const basePath = environment.production ? environment.apiUrl : '';
+  const url = `${protocol}//${location.host}${basePath}/exams/subscribe?token=…`;
+  ```
+- **Dev:** `proxy.conf.json` intercepta `/exams/subscribe` com `ws: true` antes do request sair do dev server — então mantém path raw sem prefix. Ao adicionar novos endpoints WS em dev, atualizar o proxy também.
+- **Produção:** o ALB só conhece `/api/*`. Qualquer endpoint WS novo deve estar sob `/api/` no URL do cliente.
+- **Eventos via Redis pub/sub, nunca direto:** rotas da API devem publicar em canais Redis (`fastify.redis.publish('chat:event:' + tenantId, JSON.stringify(...))`), não chamar `fastify.notifyTenant()` direto. O plugin `pubsub.js` já faz psubscribe e re-broadcast para conexões WS locais. Isso mantém forward-compat com multi-instância ECS.
+- **Red flag:** se badge/notificação em tempo real demorar ~60s ou exigir F5, suspeitar de WS URL errado. Log do nginx do web + log do API servem pra triar.
+- **Incidente 2026-04-24**: WS do chat entre tenants nunca conectou em prod por esse motivo — URL era `/exams/subscribe` sem prefix. Fix: commit `5c979165` / merge `48a64b36`. Review queue badge passava por polling fallback (60s) e ninguém percebeu.
+
 ---
 
 ## Comportamentos Esperados
@@ -358,6 +373,8 @@ docker run --rm <image:tag> grep -rl "termo_do_novo_código" /usr/share/nginx/ht
 - `SET LOCAL app.tenant_id = '${tenant_id}'` com template literal → SQL Injection + potencial bypass de RLS via payload malicioso no tenant_id. Sempre `SELECT set_config('app.tenant_id', $1, true)` parametrizado
 - ACL master usando `role !== 'admin'` → todo admin de clínica tem role `'admin'`, portanto qualquer admin vê dados cross-tenant. Correto é `role !== 'master'` (bug 2026-04-23 em `feedback.js` e `error-log.js`)
 - UI sem indicador visível de tenant_name atual → usuário confunde contas e reporta falso vazamento; JWT antigo em localStorage após registro de novo tenant só piora a confusão
+- WebSocket conectando sem prefixo `/api` em prod → ALB só roteia `/api/*` pra API, resto vai pro nginx do Angular → 404 silencioso, nenhum evento real-time chega. Validar WS em prod (não só dev) quando adicionar feature real-time
+- Emitir evento WS via `fastify.notifyTenant()` direto na rota em vez de `fastify.redis.publish('canal:${tenant}')` → quebra em multi-instância ECS e foge do padrão estabelecido pelo `exam:done`
 
 ---
 

@@ -4,7 +4,7 @@ description: Erros graves cometidos em abril/2026 que nunca devem se repetir —
 type: feedback
 originSessionId: 70201c53-e120-4e84-a6d1-e96d8946598d
 ---
-Nunca assumir que containers ECS compartilham filesystem. Nunca salvar dado de identidade sem normalizar. Nunca deixar workflow de CI/CD fora do git. Nunca assumir que force-new-deployment troca a imagem.
+Nunca assumir que containers ECS compartilham filesystem. Nunca salvar dado de identidade sem normalizar. Nunca deixar workflow de CI/CD fora do git. Nunca assumir que force-new-deployment troca a imagem. **Nunca assumir que a ALB roteia tudo — ela só tem a rule `/api/*` → API; resto vai pro nginx do Angular. URLs de WebSocket DEVEM prepender `/api` em prod (`environment.apiUrl`), senão 404 silencioso e real-time nunca funciona. Validar WS em prod ou staging, não só em dev (onde proxy.conf.json mascara o bug).**
 
 **Why:** Erros evitáveis causaram horas de debug em produção em 2026-04-20 com zero valor entregue.
 
