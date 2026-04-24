@@ -3,9 +3,11 @@ import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/auth/auth.service';
 import { HelpContext } from '../../core/help-context/help-context.service';
 
+export interface HelpAction { label: string; url: string; }
+
 export interface AskCallbacks {
   onDelta(text: string): void;
-  onDone(sources: Array<{ source: string; title: string; score: number }>): void;
+  onDone(sources: Array<{ source: string; title: string; score: number }>, actions: HelpAction[]): void;
   onError(message: string): void;
 }
 
@@ -69,7 +71,7 @@ export class ProductHelpService {
     try {
       const parsed = JSON.parse(data);
       if (event === 'delta' && parsed.text) cb.onDelta(parsed.text);
-      else if (event === 'done') cb.onDone(parsed.sources || []);
+      else if (event === 'done') cb.onDone(parsed.sources || [], parsed.actions || []);
       else if (event === 'error') cb.onError(parsed.error || 'Erro');
     } catch { /* ignore malformed */ }
   }

@@ -1,14 +1,16 @@
 import { Component, EventEmitter, Output, inject, signal, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { HelpContextService } from '../../core/help-context/help-context.service';
-import { ProductHelpService } from './product-help.service';
+import { ProductHelpService, HelpAction } from './product-help.service';
 
 interface Msg {
   role: 'user' | 'assistant';
   content: string;
   sources?: Array<{ source: string; title: string; score: number }>;
+  actions?: HelpAction[];
   streaming?: boolean;
 }
 
@@ -52,6 +54,16 @@ interface Msg {
       @for (m of messages(); track $index) {
         <div class="msg" [class.user]="m.role === 'user'" [class.assistant]="m.role === 'assistant'">
           {{ m.content }}
+          @if (m.actions && m.actions.length > 0) {
+            <div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.375rem;">
+              @for (a of m.actions; track a.url) {
+                <a [href]="a.url" (click)="onActionClick($event, a)"
+                   style="background:rgba(192,193,255,0.1);color:#c0c1ff;padding:0.5rem 0.75rem;border-radius:5px;text-decoration:none;font-size:0.8125rem;font-family:'JetBrains Mono',monospace;text-align:center;">
+                  → {{ a.label }}
+                </a>
+              }
+            </div>
+          }
           @if (m.sources && m.sources.length > 0) {
             <div class="sources">
               <div class="sources-title">Fontes</div>
@@ -79,6 +91,7 @@ export class ProductHelpPanelComponent implements AfterViewChecked {
 
   private svc = inject(ProductHelpService);
   private ctx = inject(HelpContextService);
+  private router = inject(Router);
 
   messages = signal<Msg[]>([]);
   loading = signal(false);
@@ -116,10 +129,13 @@ export class ProductHelpPanelComponent implements AfterViewChecked {
         });
         this.shouldScroll = true;
       },
-      onDone: (sources) => {
+      onDone: (sources, actions) => {
         this.messages.update(ms => {
           const copy = [...ms];
-          copy[assistantIdx] = { ...copy[assistantIdx], sources, streaming: false };
+          const current = copy[assistantIdx];
+          // Remove o bloco ```actions ... ``` do conteúdo exibido — renderizamos como botões
+          const cleaned = current.content.replace(/```actions[\s\S]*?```/g, '').trim();
+          copy[assistantIdx] = { ...current, content: cleaned, sources, actions, streaming: false };
           return copy;
         });
         this.loading.set(false);
@@ -141,5 +157,11 @@ export class ProductHelpPanelComponent implements AfterViewChecked {
       el.scrollTop = el.scrollHeight;
       this.shouldScroll = false;
     }
+  }
+
+  onActionClick(ev: MouseEvent, a: HelpAction): void {
+    ev.preventDefault();
+    this.close.emit();
+    this.router.navigateByUrl(a.url).catch(() => {/* rota inválida — AI propôs algo inexistente */});
   }
 }
