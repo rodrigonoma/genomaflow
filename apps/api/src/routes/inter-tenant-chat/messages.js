@@ -3,6 +3,7 @@ const { withConversationAccess, ConversationAccessDeniedError } = require('../..
 const { anonymizeAiAnalysis } = require('./anonymize');
 const { extractPdfText, checkPii } = require('./pii');
 const { uploadFile, getSignedDownloadUrl } = require('../../storage/s3');
+const { isTenantSuspended } = require('./reports');
 
 const ADMIN_ONLY = async function (request, reply) {
   if (request.user.role !== 'admin') {
@@ -162,6 +163,13 @@ module.exports = async function (fastify) {
 
     if (!bodyTrim && !ai_analysis_card && !pdf && !image) {
       return reply.status(400).send({ error: 'body ou attachment obrigatório' });
+    }
+
+    // Suspensão por denúncias
+    if (await isTenantSuspended(fastify.pg, tenant_id)) {
+      return reply.status(403).send({
+        error: 'Sua clínica está temporariamente suspensa no chat devido a denúncias recentes. Contate o suporte.'
+      });
     }
     if (bodyTrim.length > 5000) {
       return reply.status(400).send({ error: 'body muito longo (max 5000 chars)' });

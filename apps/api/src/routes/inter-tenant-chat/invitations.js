@@ -1,4 +1,5 @@
 const { withTenant } = require('../../db/tenant');
+const { isTenantSuspended } = require('./reports');
 
 const ADMIN_ONLY = async function (request, reply) {
   if (request.user.role !== 'admin') {
@@ -53,6 +54,13 @@ module.exports = async function (fastify) {
     }
     if (message != null && (typeof message !== 'string' || message.length > 500)) {
       return reply.status(400).send({ error: 'message deve ser string com até 500 chars' });
+    }
+
+    // Suspensão por denúncias
+    if (await isTenantSuspended(fastify.pg, tenant_id)) {
+      return reply.status(403).send({
+        error: 'Sua clínica está temporariamente suspensa no chat devido a denúncias recentes.'
+      });
     }
 
     // 1. valida existência + módulo do destinatário

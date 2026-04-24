@@ -84,6 +84,12 @@ export class ChatService {
       `${this.base}/messages/${messageId}/reactions`, { emoji }
     );
   }
+
+  reportTenant(reported_tenant_id: string, reason: string, related_message_id?: string): Observable<{ id: string; status: string }> {
+    return this.http.post<{ id: string; status: string }>(`${this.base}/reports`, {
+      reported_tenant_id, reason, related_message_id
+    });
+  }
   searchMessages(conversationId: string, q: string): Observable<Page<ChatSearchResult>> {
     return this.http.get<Page<ChatSearchResult>>(`${this.base}/conversations/${conversationId}/search`, { params: { q } });
   }
