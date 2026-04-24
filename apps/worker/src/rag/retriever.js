@@ -17,7 +17,8 @@ async function retrieveGuidelines(client, queryText, k = 5, module = 'human', sp
   const { rows } = await client.query(
     `SELECT title, content, source
      FROM rag_documents
-     WHERE module IN ($1, 'both')
+     WHERE namespace = 'clinical_guideline'
+       AND module IN ($1, 'both')
        AND (species IS NULL OR species = $2)
      ORDER BY embedding <=> $3::vector
      LIMIT $4`,
