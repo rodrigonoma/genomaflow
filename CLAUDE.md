@@ -235,6 +235,38 @@ A ALB de produção tem **apenas uma rule**: `/api/*` → API target. **Todo pat
 - **Eventos via Redis pub/sub, nunca direto:** rotas da API devem publicar em canais Redis (`fastify.redis.publish('chat:event:' + tenantId, JSON.stringify(...))`), não chamar `fastify.notifyTenant()` direto. O plugin `pubsub.js` já faz psubscribe e re-broadcast para conexões WS locais. Isso mantém forward-compat com multi-instância ECS.
 - **Red flag:** se badge/notificação em tempo real demorar ~60s ou exigir F5, suspeitar de WS URL errado. Log do nginx do web + log do API servem pra triar.
 - **Incidente 2026-04-24**: WS do chat entre tenants nunca conectou em prod por esse motivo — URL era `/exams/subscribe` sem prefix. Fix: commit `5c979165` / merge `48a64b36`. Review queue badge passava por polling fallback (60s) e ninguém percebeu.
+- **Retrospectiva 2026-04-24 (parte 2):** o fix `5c979165` sozinho **não resolveu** — o bundle em prod continuou com a URL errada porque `angular.json` estava sem `fileReplacements` (ver seção "Angular: build de produção" abaixo). Sem isso, `environment.production === false` em runtime e o ternário da URL caía no ramo dev. Fix completo: commit `7559b82e` (fileReplacements no angular.json).
+
+### Angular: build de produção (OBRIGATÓRIO)
+
+- O `apps/web/angular.json` **DEVE** ter `fileReplacements` na configuração `production` do `architect.build`:
+  ```json
+  "production": {
+    "fileReplacements": [
+      { "replace": "src/environments/environment.ts",
+        "with": "src/environments/environment.prod.ts" }
+    ],
+    ...
+  }
+  ```
+- Sem isso, `ng build --configuration=production` usa `environment.ts` (que tem `production: false`). Tudo que depende de `environment.production` cai no ramo "dev" silenciosamente em prod:
+  - WS URL fica sem `/api/` prefix (ver seção anterior)
+  - Flags de debug como `isProd()` em `onboarding.component.ts` retornam `false` em prod → botões de "Simular pagamento" vazam pra produção
+- **Validação obrigatória:** após build de produção, conferir no bundle minificado que `production:!0` (true) e `apiUrl:"/api"` aparecem:
+  ```bash
+  grep -oE 'production:![01]|apiUrl:"[^"]*"' apps/web/dist/genomaflow-web/browser/chunk-*.js
+  ```
+- **Red flag:** "código está correto mas prod não reflete" → antes de refazer deploy, auditar bundle minificado pra confirmar `environment.production` está `true`.
+- **Ao adicionar nova flag em `environment.ts`**: obrigatório replicar em `environment.prod.ts` com o valor de produção. Os dois arquivos devem estar sempre sincronizados em shape (não em valor).
+- **Incidente 2026-04-24 (causa raiz definitiva):** fix anterior `5c979165` (WS URL) não funcionou em prod porque `fileReplacements` nunca foi adicionado. Fomos achar só auditando o bundle minificado. Commit do fix: `7559b82e`.
+
+### Angular: AuthService e hidratação de profile (OBRIGATÓRIO)
+
+- `currentProfile$` (tenant_name, módulo) é `null` na inicialização até `/auth/me` responder.
+- **Sem cache:** após F5, o chip do tenant no topbar fica invisível até o fetch completar (ou para sempre se falhar silenciosamente) — usuário vê "flicker" ou some permanente.
+- **Fix (OBRIGATÓRIO):** `AuthService` deve **persistir o profile em `localStorage`** sob a chave `profile` junto com o token. No construtor, hidratar `currentProfileSubject` a partir do cache antes de disparar `/auth/me`. `resetSession()` e catch de token inválido limpam o cache.
+- **Padrão:** qualquer state do usuário crítico pra UI no topbar (nome, módulo, tenant) deve ser cacheado. Fetch em background apenas atualiza.
+- **Incidente 2026-04-24**: reportado como "chip do tenant some ao dar F5". Fix: commit `86e833ce`.
 
 ---
 
@@ -375,6 +407,9 @@ docker run --rm <image:tag> grep -rl "termo_do_novo_código" /usr/share/nginx/ht
 - UI sem indicador visível de tenant_name atual → usuário confunde contas e reporta falso vazamento; JWT antigo em localStorage após registro de novo tenant só piora a confusão
 - WebSocket conectando sem prefixo `/api` em prod → ALB só roteia `/api/*` pra API, resto vai pro nginx do Angular → 404 silencioso, nenhum evento real-time chega. Validar WS em prod (não só dev) quando adicionar feature real-time
 - Emitir evento WS via `fastify.notifyTenant()` direto na rota em vez de `fastify.redis.publish('canal:${tenant}')` → quebra em multi-instância ECS e foge do padrão estabelecido pelo `exam:done`
+- `angular.json` sem `fileReplacements` em `production` → `environment.production` fica `false` em runtime de prod → WS URL sem `/api/` + botões de debug (`Simular pagamento`) vazam pra produção (incidente 2026-04-24)
+- Código correto no repo mas prod não reflete o comportamento esperado → antes de refazer deploy, auditar o bundle minificado em `apps/web/dist/.../chunk-*.js` pra confirmar o que foi compilado (ex: `grep -oE 'production:![01]'`)
+- HTTP call em construtor de service injetado no root + UI que depende de `BehaviorSubject` populado por esse HTTP → flicker/sumiço no F5 porque o subject começa `null` a cada bootstrap. Persistir o shape mínimo da UI em `localStorage` e hidratar no construtor antes de fetch
 
 ---
 

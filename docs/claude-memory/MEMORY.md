@@ -14,3 +14,5 @@
 - [Pipeline de Imagens Médicas](project_imaging_pipeline.md) — DICOM/JPG/PNG, Vision classifier, agentes por modalidade, bounding boxes, erros já corrigidos
 - [Histórico de stashes recuperados](project_stash_recovery_history.md) — Registro de stashes WIP, o que foi recuperado, o que não deve ser aplicado
 - [WebSocket em produção](feedback_websocket_prod.md) — WS URL DEVE incluir API_PREFIX em prod (ALB só roteia /api/*); emitir via Redis pub/sub, nunca notifyTenant direto — chat tem exemplo real de bug de 2026-04-24
+- [Angular prod build — fileReplacements](feedback_angular_prod_build.md) — angular.json SEM fileReplacements faz environment.production=false em prod; sintoma inclui WS quebrado e flags de debug vazadas; auditar bundle minificado (incidente 2026-04-24)
+- [AuthService — hidratar profile no F5](feedback_auth_profile_hydration.md) — persistir profile em localStorage pra evitar flicker/sumiço do chip do tenant no F5 (incidente 2026-04-24)

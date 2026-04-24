@@ -32,4 +32,9 @@ Chat V1 foi testado em dev e passou. Em prod, usuário reportou "nada atualiza s
 **Commits de referência:**
 - Bug: Phase 3 do chat, commit `3a0b1549` (dez/2026) — WS chamava notifyTenant direto
 - Fix parcial: `a3224d69` (abr/2026) — migração pra Redis pub/sub
-- Fix da causa raiz: `5c979165` (abr/2026) — prepend API_PREFIX em prod
+- Fix do código: `5c979165` (abr/2026) — prepend API_PREFIX em prod
+- Causa raiz do bug em prod: `7559b82e` (abr/2026) — fileReplacements no angular.json
+
+**Retrospectiva 2026-04-24:** o fix `5c979165` sozinho **não bastava**. O `ws.service.ts` tinha `environment.production ? '/api' : ''`, mas em prod `environment.production` era `false` porque o `angular.json` estava sem `fileReplacements`. Logo o ternário caía em `''` e a URL continuava sem prefixo. Ver `feedback_angular_prod_build.md` pra mais detalhes.
+
+Lição transversal: quando um fix "certo" não resolve em prod, auditar o bundle minificado antes de refazer deploy — `environment.production` pode estar mentindo.
