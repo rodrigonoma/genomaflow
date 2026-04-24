@@ -60,11 +60,11 @@ module.exports = async function (fastify) {
   }, async (request, reply) => {
     const { tenant_id, user_id } = request.user;
     const { id } = request.params;
-    const { body, ai_analysis_card, pdf } = request.body || {};
+    const { body, ai_analysis_card, pdf, image } = request.body || {};
 
     const bodyTrim = typeof body === 'string' ? body.trim() : '';
 
-    if (!bodyTrim && !ai_analysis_card && !pdf) {
+    if (!bodyTrim && !ai_analysis_card && !pdf && !image) {
       return reply.status(400).send({ error: 'body ou attachment obrigatório' });
     }
     if (bodyTrim.length > 5000) {
@@ -87,6 +87,21 @@ module.exports = async function (fastify) {
       if (!pdf.data_base64 || typeof pdf.data_base64 !== 'string') return reply.status(400).send({ error: 'pdf.data_base64 obrigatório' });
       if (pdf.mime_type && pdf.mime_type !== 'application/pdf') {
         return reply.status(400).send({ error: 'somente PDF suportado nesta fase' });
+      }
+    }
+
+    if (image) {
+      if (typeof image !== 'object') return reply.status(400).send({ error: 'image inválida' });
+      if (!image.filename || typeof image.filename !== 'string') return reply.status(400).send({ error: 'image.filename obrigatório' });
+      if (!image.data_base64 || typeof image.data_base64 !== 'string') return reply.status(400).send({ error: 'image.data_base64 obrigatório' });
+      if (!['image/png', 'image/jpeg'].includes(image.mime_type)) {
+        return reply.status(400).send({ error: 'image.mime_type deve ser image/png ou image/jpeg' });
+      }
+      if (image.user_confirmed_anonymized !== true) {
+        return reply.status(400).send({
+          error: 'Confirmação obrigatória: user_confirmed_anonymized deve ser true.',
+          hint: 'Usuário deve confirmar explicitamente que removeu dados pessoais da imagem.'
+        });
       }
     }
 
@@ -134,6 +149,38 @@ module.exports = async function (fastify) {
       };
     }
 
+    // Processa imagem (sem OCR nesta fase — user_confirmed_anonymized é obrigatório)
+    let imageStaged = null;
+    if (image) {
+      let buffer;
+      try {
+        buffer = Buffer.from(image.data_base64, 'base64');
+      } catch (_) {
+        return reply.status(400).send({ error: 'image.data_base64 inválido' });
+      }
+      if (buffer.length === 0) return reply.status(400).send({ error: 'imagem vazia' });
+      if (buffer.length > 10 * 1024 * 1024) return reply.status(400).send({ error: 'Imagem excede 10MB' });
+
+      const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+      const ext = image.mime_type === 'image/png' ? 'png' : 'jpg';
+      const safeFilename = image.filename.replace(/[^\w.-]/g, '_').slice(0, 100);
+      const s3key = `inter-tenant-chat/${id}/${Date.now()}-${hash.slice(0, 8)}-${safeFilename}`;
+      try {
+        await uploadFile(s3key, buffer, image.mime_type);
+      } catch (err) {
+        request.log?.error({ err }, 'S3 upload image failed');
+        return reply.status(503).send({ error: 'Falha no upload da imagem. Tente novamente.' });
+      }
+
+      imageStaged = {
+        s3_key: s3key,
+        filename: image.filename,
+        mime_type: image.mime_type,
+        size_bytes: buffer.length,
+        hash,
+      };
+    }
+
     try {
       const result = await withConversationAccess(fastify.pg, id, tenant_id, async (client, conv) => {
         // 1. prepara payload do attachment se houver
@@ -177,7 +224,7 @@ module.exports = async function (fastify) {
         }
 
         // 2. insere mensagem (body pode ser '' se só anexo)
-        const hasAttachment = !!attachmentPayload || !!pdfStaged;
+        const hasAttachment = !!attachmentPayload || !!pdfStaged || !!imageStaged;
         const { rows: msgRows } = await client.query(
           `INSERT INTO tenant_messages (conversation_id, sender_tenant_id, sender_user_id, body, has_attachment)
            VALUES ($1, $2, $3, $4, $5)
@@ -215,6 +262,28 @@ module.exports = async function (fastify) {
           );
         }
 
+        if (imageStaged) {
+          const { rows: imgRows } = await client.query(
+            `INSERT INTO tenant_message_attachments
+              (message_id, kind, s3_key, payload, original_size_bytes, redacted_hash)
+             VALUES ($1, 'image', $2, $3::jsonb, $4, $5)
+             RETURNING id, kind, s3_key, payload, original_size_bytes, created_at`,
+            [msg.id, imageStaged.s3_key,
+             JSON.stringify({ filename: imageStaged.filename, mime_type: imageStaged.mime_type }),
+             imageStaged.size_bytes, imageStaged.hash]
+          );
+          attachments.push(imgRows[0]);
+
+          // Audit: usuário confirmou manualmente (sem OCR/análise automática nesta fase)
+          // status='clean' com marker 'user_manual_confirm' em detected_kinds pra distinguir
+          // de PDFs que passaram pela análise automática.
+          await client.query(
+            `INSERT INTO tenant_message_pii_checks (attachment_id, detected_kinds, region_count, status, confirmed_by_user_id)
+             VALUES ($1, $2, 0, 'clean', $3)`,
+            [imgRows[0].id, ['user_manual_confirm'], user_id]
+          );
+        }
+
         await client.query(
           `UPDATE tenant_conversations SET last_message_at = NOW() WHERE id = $1`,
           [id]
@@ -232,6 +301,8 @@ module.exports = async function (fastify) {
             preview = result.msg.body.length > 120 ? result.msg.body.slice(0, 120) + '…' : result.msg.body;
           } else if (attachmentTypes.includes('pdf')) {
             preview = '[PDF anexado]';
+          } else if (attachmentTypes.includes('image')) {
+            preview = '[imagem anexada]';
           } else if (attachmentTypes.includes('ai_analysis_card')) {
             preview = '[análise IA anexada]';
           } else {

@@ -67,10 +67,15 @@ export interface PdfAttachmentPayload {
   filename: string;
 }
 
+export interface ImageAttachmentPayload {
+  filename: string;
+  mime_type: string;
+}
+
 export interface MessageAttachment {
   id: string;
   kind: 'ai_analysis_card' | 'pdf' | 'image';
-  payload?: AiAnalysisCardPayload | PdfAttachmentPayload;
+  payload?: AiAnalysisCardPayload | PdfAttachmentPayload | ImageAttachmentPayload;
   s3_key?: string;
   original_size_bytes?: number;
   created_at: string;
