@@ -17,6 +17,7 @@ import { PdfAttachmentCardComponent } from './pdf-attachment-card.component';
 import { ImageAttachmentCardComponent } from './image-attachment-card.component';
 import { ImageUploadConfirmComponent } from './image-upload-confirm.component';
 import { ReportDialogComponent } from './report-dialog.component';
+import { CounterpartContactDialogComponent } from './counterpart-contact-dialog.component';
 
 @Component({
   selector: 'app-thread',
@@ -38,7 +39,10 @@ import { ReportDialogComponent } from './report-dialog.component';
       font-size: 1rem; color: #dae2fd; flex: 1;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       min-width: 0;
+      cursor: pointer;
+      transition: color 150ms;
     }
+    .header-title:hover { color: #c0c1ff; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
     @media (max-width: 639px) {
       .back-btn { display: inline-flex; }
       .header { padding: 0.75rem 1rem; }
@@ -185,7 +189,9 @@ import { ReportDialogComponent } from './report-dialog.component';
         <button mat-icon-button class="back-btn" (click)="back.emit()" matTooltip="Voltar">
           <mat-icon>arrow_back</mat-icon>
         </button>
-        <span class="header-title">{{ conv()!.counterpart_name }}</span>
+        <span class="header-title"
+              matTooltip="Ver contato da clínica"
+              (click)="openContact()">{{ conv()!.counterpart_name }}</span>
         <span class="header-module">{{ conv()!.module === 'veterinary' ? 'VET' : 'HUMAN' }}</span>
         <button mat-icon-button style="color:#c0c1ff" (click)="toggleSearch()" matTooltip="Buscar">
           <mat-icon>{{ searchOpen() ? 'close' : 'search' }}</mat-icon>
@@ -488,6 +494,15 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
       panelClass: 'dark-dialog',
       autoFocus: false,
       data: { reported_tenant_id: c.counterpart_tenant_id, reported_tenant_name: c.counterpart_name }
+    });
+  }
+
+  openContact() {
+    const c = this.conv();
+    if (!c) return;
+    this.dialog.open(CounterpartContactDialogComponent, {
+      autoFocus: false,
+      data: { conversation_id: this.conversationId, counterpart_name: c.counterpart_name }
     });
   }
 

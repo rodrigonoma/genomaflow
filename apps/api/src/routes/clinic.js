@@ -6,24 +6,53 @@ module.exports = async function (fastify) {
   fastify.get('/profile', { preHandler: [fastify.authenticate] }, async (request) => {
     const { tenant_id } = request.user;
     const { rows } = await fastify.pg.query(
-      `SELECT id, name, module, cnpj, clinic_logo_url FROM tenants WHERE id = $1`,
+      `SELECT id, name, module, cnpj, clinic_logo_url, contact_email, phone, address
+       FROM tenants WHERE id = $1`,
       [tenant_id]
     );
     return rows[0] ?? {};
   });
 
-  // PUT /clinic/profile — atualizar nome e CNPJ
+  // PUT /clinic/profile — atualizar nome, CNPJ e contato
   fastify.put('/profile', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { tenant_id, role } = request.user;
     if (role !== 'admin') return reply.status(403).send({ error: 'Acesso restrito a administradores' });
 
-    const { name, cnpj } = request.body || {};
+    const { name, cnpj, contact_email, phone, address } = request.body || {};
     if (!name?.trim()) return reply.status(400).send({ error: 'Nome da clínica é obrigatório' });
 
+    if (contact_email != null && String(contact_email).trim() !== '') {
+      const email = String(contact_email).trim();
+      if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return reply.status(400).send({ error: 'E-mail de contato inválido' });
+      }
+    }
+    if (phone != null && String(phone).length > 40) {
+      return reply.status(400).send({ error: 'Telefone muito longo (máx 40 caracteres)' });
+    }
+    if (address != null && String(address).length > 500) {
+      return reply.status(400).send({ error: 'Endereço muito longo (máx 500 caracteres)' });
+    }
+
+    const normalize = (v) => {
+      if (v == null) return null;
+      const s = String(v).trim();
+      return s === '' ? null : s;
+    };
+
     const { rows } = await fastify.pg.query(
-      `UPDATE tenants SET name = $1, cnpj = $2 WHERE id = $3
-       RETURNING id, name, cnpj, clinic_logo_url, module`,
-      [name.trim(), cnpj?.trim() ?? null, tenant_id]
+      `UPDATE tenants
+       SET name = $1, cnpj = $2, contact_email = $3, phone = $4, address = $5
+       WHERE id = $6
+       RETURNING id, name, cnpj, clinic_logo_url, module, contact_email, phone, address`,
+      [
+        name.trim(),
+        normalize(cnpj),
+        normalize(contact_email),
+        normalize(phone),
+        normalize(address),
+        tenant_id
+      ]
     );
     return rows[0];
   });
