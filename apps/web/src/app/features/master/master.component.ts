@@ -470,6 +470,60 @@ interface Stats {
         </div>
       }
 
+      @if (activeTab() === 'help') {
+        <div class="section-title">Perguntas do Copilot (últimos 30 dias)</div>
+        @if (helpAnalytics(); as ha) {
+          <h3 style="font-size:0.8rem;color:#a09fb2;margin:1rem 0 0.5rem;text-transform:uppercase;letter-spacing:0.05em">Top rotas (possíveis problemas de UX)</h3>
+          @if (ha.top_routes.length === 0) {
+            <div class="text-muted mono" style="font-size:12px">Nenhuma pergunta ainda.</div>
+          } @else {
+            <table>
+              <thead>
+                <tr><th>Rota</th><th>Perguntas</th><th>Latência média</th><th>Não ajudou</th></tr>
+              </thead>
+              <tbody>
+                @for (r of ha.top_routes; track r.route) {
+                  <tr>
+                    <td class="mono" style="font-size:11px">{{ r.route }}</td>
+                    <td>{{ r.n }}</td>
+                    <td class="mono text-muted" style="font-size:11px">{{ r.avg_latency_ms }}ms</td>
+                    <td [style.color]="r.unhelpful_count > 0 ? '#ffb4ab' : '#908fa0'">{{ r.unhelpful_count }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+
+          <h3 style="font-size:0.8rem;color:#a09fb2;margin:1.5rem 0 0.5rem;text-transform:uppercase;letter-spacing:0.05em">Últimas 100 perguntas</h3>
+          @if (ha.recent.length === 0) {
+            <div class="text-muted mono" style="font-size:12px">Sem histórico ainda.</div>
+          } @else {
+            <table>
+              <thead>
+                <tr><th>Data</th><th>Tenant</th><th>Rota</th><th>Pergunta</th><th>Útil?</th></tr>
+              </thead>
+              <tbody>
+                @for (q of ha.recent; track q.id) {
+                  <tr>
+                    <td class="mono text-muted" style="font-size:11px;white-space:nowrap">{{ q.created_at | date:'dd/MM HH:mm' }}</td>
+                    <td style="font-size:12px">{{ q.tenant_name || '—' }}</td>
+                    <td class="mono text-muted" style="font-size:10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ q.route }}</td>
+                    <td class="msg-cell" [title]="q.question">{{ q.question }}</td>
+                    <td>
+                      @if (q.was_helpful === true) { <span style="color:#10b981">✓</span> }
+                      @else if (q.was_helpful === false) { <span style="color:#ffb4ab">✗</span> }
+                      @else { <span class="text-muted">—</span> }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        } @else if (helpAnalyticsLoading()) {
+          <div class="text-muted mono" style="font-size:12px">Carregando...</div>
+        }
+      }
+
     </div><!-- /content -->
   </div><!-- /layout -->
 </div>
@@ -485,6 +539,7 @@ export class MasterComponent implements OnInit {
     { id: 'errors',   label: 'Erros',      icon: 'error_outline' },
     { id: 'feedback', label: 'Feedback',   icon: 'forum' },
     { id: 'credits',  label: 'Créditos',   icon: 'toll' },
+    { id: 'help',     label: 'Ajuda',      icon: 'support_agent' },
   ];
 
   activeTab = signal<string>('tenants');
@@ -515,11 +570,25 @@ export class MasterComponent implements OnInit {
 
   creditForm = { tenant_id: '', amount: null as number | null, description: '' };
 
+  helpAnalytics = signal<{
+    top_routes: Array<{route: string; n: number; avg_latency_ms: number; unhelpful_count: number}>;
+    recent: Array<{id: string; route: string; component: string|null; user_role: string; question: string; answer_preview: string; was_helpful: boolean|null; created_at: string; tenant_name: string|null; user_email: string|null}>;
+  } | null>(null);
+  helpAnalyticsLoading = signal(false);
+
   private api(path: string) { return `${environment.apiUrl}/master${path}`; }
 
   constructor() {
     effect(() => { this.errPage(); this.loadErrors(); }, { allowSignalWrites: true });
     effect(() => { this.fbPage(); this.fbFilter(); this.loadFeedback(); }, { allowSignalWrites: true });
+    effect(() => {
+      if (this.activeTab() !== 'help') return;
+      this.helpAnalyticsLoading.set(true);
+      this.http.get<any>(this.api('/help-analytics?days=30')).subscribe({
+        next: (r) => { this.helpAnalytics.set(r); this.helpAnalyticsLoading.set(false); },
+        error: () => this.helpAnalyticsLoading.set(false),
+      });
+    }, { allowSignalWrites: true });
   }
 
   ngOnInit(): void {

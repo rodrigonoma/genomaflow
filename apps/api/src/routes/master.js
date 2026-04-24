@@ -202,4 +202,29 @@ module.exports = async function masterRoutes(fastify) {
       total_credits_issued: parseInt(credits.rows[0].total)
     };
   });
+
+  // ── Copilot help analytics ────────────────────────────────────────────────
+  fastify.get('/help-analytics', auth(), async (request, reply) => {
+    const days = Math.min(90, parseInt(request.query.days) || 30);
+    const { rows: topRoutes } = await fastify.pg.query(
+      `SELECT route, COUNT(*)::int AS n, AVG(latency_ms)::int AS avg_latency_ms,
+              COUNT(*) FILTER (WHERE was_helpful = false)::int AS unhelpful_count
+       FROM help_questions
+       WHERE created_at > NOW() - INTERVAL '1 day' * $1
+       GROUP BY route
+       ORDER BY n DESC
+       LIMIT 20`,
+      [days]
+    );
+    const { rows: recent } = await fastify.pg.query(
+      `SELECT hq.id, hq.route, hq.component, hq.user_role, hq.question, hq.answer_preview,
+              hq.was_helpful, hq.created_at, t.name AS tenant_name, u.email AS user_email
+       FROM help_questions hq
+       LEFT JOIN tenants t ON t.id = hq.tenant_id
+       LEFT JOIN users u ON u.id = hq.user_id
+       ORDER BY hq.created_at DESC
+       LIMIT 100`
+    );
+    return { top_routes: topRoutes, recent };
+  });
 };

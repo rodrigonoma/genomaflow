@@ -18,6 +18,7 @@ import { ReviewQueueService } from './features/doctor/review-queue/review-queue.
 import { WsService } from './core/ws/ws.service';
 import { ChatService } from './features/chat-inter-tenant/chat.service';
 import { ChatPanelComponent } from './features/chat/chat-panel.component';
+import { ProductHelpPanelComponent } from './features/product-help/product-help-panel.component';
 import { ClinicProfileModalComponent } from './features/clinic/profile/clinic-profile-modal.component';
 import { QuickSearchComponent } from './shared/components/quick-search/quick-search.component';
 
@@ -26,7 +27,7 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
   standalone: true,
   imports: [RouterOutlet, RouterLink, RouterLinkActive, AsyncPipe,
             MatIconModule, MatMenuModule, MatButtonModule, MatTooltipModule,
-            MatSnackBarModule, MatDialogModule, ChatPanelComponent, ClinicProfileModalComponent,
+            MatSnackBarModule, MatDialogModule, ChatPanelComponent, ProductHelpPanelComponent, ClinicProfileModalComponent,
             QuickSearchComponent],
   styles: [`
     :host { display: block; }
@@ -311,6 +312,12 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
         }
         <div class="topbar-spacer"></div>
         <button mat-icon-button
+                matTooltip="Ajuda do produto"
+                style="color:#908fa0;margin-right:0.25rem"
+                (click)="helpOpen = !helpOpen">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+        <button mat-icon-button
                 matTooltip="Assistente clínico"
                 style="color:#908fa0;margin-right:0.5rem"
                 (click)="chatOpen = !chatOpen">
@@ -344,8 +351,11 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
       @if (chatOpen) {
         <app-chat-panel (closed)="chatOpen = false" />
       }
+      @if (helpOpen) {
+        <app-product-help-panel (close)="helpOpen = false" />
+      }
 
-      <main class="main-content" [style.margin-right]="chatOpen ? '420px' : '0'">
+      <main class="main-content" [style.margin-right]="chatOpen || helpOpen ? '420px' : '0'">
         <router-outlet />
       </main>
     } @else {
@@ -364,6 +374,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private router = inject(Router);
   reviewCount$: Observable<number> = this.reviewService.pendingCount$;
   chatOpen = false;
+  helpOpen = false;
   drawerOpen = signal(false);
   chatUnreadTotal = signal(0);
 
