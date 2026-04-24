@@ -127,6 +127,9 @@ export interface ClinicProfile {
   module: 'human' | 'veterinary';
   cnpj: string | null;
   clinic_logo_url: string | null;
+  contact_email: string | null;
+  phone: string | null;
+  address: string | null;
 }
 
 export interface ImagingFinding {

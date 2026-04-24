@@ -1,14 +1,19 @@
 import { Component, EventEmitter, Input, Output, OnInit, OnDestroy, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDialog } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 import { ChatService } from './chat.service';
 import { WsService } from '../../core/ws/ws.service';
 import { InterTenantConversation } from '../../shared/models/chat.models';
+import { CounterpartContactDialogComponent } from './counterpart-contact-dialog.component';
 
 @Component({
   selector: 'app-conversation-list',
   standalone: true,
-  imports: [CommonModule, DatePipe],
+  imports: [CommonModule, DatePipe, MatIconModule, MatButtonModule, MatTooltipModule],
   styles: [`
     :host { display: flex; flex-direction: column; overflow-y: auto; flex: 1; }
     .empty {
@@ -47,6 +52,11 @@ import { InterTenantConversation } from '../../shared/models/chat.models';
       font-family: 'JetBrains Mono', monospace; font-size: 10px;
       padding: 1px 7px; border-radius: 10px; min-width: 18px; text-align: center;
     }
+    .info-btn {
+      width: 24px; height: 24px; line-height: 24px;
+      color: #7c7dff; flex-shrink: 0;
+    }
+    .info-btn mat-icon { font-size: 16px; width: 16px; height: 16px; }
   `],
   template: `
     @if (conversations().length === 0) {
@@ -56,6 +66,11 @@ import { InterTenantConversation } from '../../shared/models/chat.models';
       <div class="item" [class.selected]="c.id === selectedId" (click)="select.emit(c.id)">
         <div class="row-top">
           <span class="name">{{ c.counterpart_name }}</span>
+          <button mat-icon-button class="info-btn"
+                  matTooltip="Ver contato da clínica"
+                  (click)="openContact($event, c)">
+            <mat-icon>info_outline</mat-icon>
+          </button>
           <span class="date">{{ c.last_message_at || c.created_at | date:'dd/MM HH:mm' }}</span>
         </div>
         <div class="row-bottom">
@@ -74,6 +89,7 @@ export class ConversationListComponent implements OnInit, OnDestroy {
 
   private chat = inject(ChatService);
   private ws = inject(WsService);
+  private dialog = inject(MatDialog);
   private subs = new Subscription();
   conversations = signal<InterTenantConversation[]>([]);
 
@@ -85,6 +101,14 @@ export class ConversationListComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() { this.subs.unsubscribe(); }
+
+  openContact(ev: MouseEvent, c: InterTenantConversation): void {
+    ev.stopPropagation();
+    this.dialog.open(CounterpartContactDialogComponent, {
+      data: { conversation_id: c.id, counterpart_name: c.counterpart_name },
+      autoFocus: false,
+    });
+  }
 
   private refresh() {
     this.chat.listConversations().subscribe({ next: (res) => this.conversations.set(res.results) });

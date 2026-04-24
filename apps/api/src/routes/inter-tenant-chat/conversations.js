@@ -79,6 +79,36 @@ module.exports = async function (fastify) {
     } catch (err) { return mapAccessDenied(err, reply); }
   });
 
+  // GET /conversations/:id/counterpart-contact
+  // Retorna os dados de contato da clínica com quem você está conversando.
+  // Acesso: só quem é membro da conversa (withConversationAccess garante).
+  fastify.get('/:id/counterpart-contact', { preHandler: [fastify.authenticate, ADMIN_ONLY] }, async (request, reply) => {
+    const { tenant_id } = request.user;
+    const { id } = request.params;
+
+    try {
+      const contact = await withConversationAccess(fastify.pg, id, tenant_id, async (client, conv) => {
+        const counterpartId = conv.tenant_a_id === tenant_id ? conv.tenant_b_id : conv.tenant_a_id;
+        // tenants não tem RLS — consulta direta com filtro explícito no id
+        const { rows } = await client.query(
+          `SELECT id, name, contact_email, phone, address, module
+           FROM tenants WHERE id = $1`,
+          [counterpartId]
+        );
+        return rows[0];
+      });
+      if (!contact) return reply.status(404).send({ error: 'Clínica não encontrada' });
+      return {
+        tenant_id: contact.id,
+        name: contact.name,
+        module: contact.module,
+        contact_email: contact.contact_email,
+        phone: contact.phone,
+        address: contact.address
+      };
+    } catch (err) { return mapAccessDenied(err, reply); }
+  });
+
   // POST /conversations/:id/archive
   fastify.post('/:id/archive', { preHandler: [fastify.authenticate, ADMIN_ONLY] }, async (request, reply) => {
     const { tenant_id } = request.user;
