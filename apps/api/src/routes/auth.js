@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const { randomUUID } = require('crypto');
 const { withTenant } = require('../db/tenant');
+const { sendEmailVerification } = require('../mailer/verification');
 const { VALID_DOCTOR_SPECIALTIES, VALID_MODULES } = require('../constants');
 
 const SESSION_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 dias
@@ -15,7 +16,8 @@ module.exports = async function (fastify) {
     const email = rawEmail?.toLowerCase().trim();
 
     const { rows } = await fastify.pg.query(
-      `SELECT u.id, u.tenant_id, u.password_hash, u.role, u.active AS user_active, t.module, t.active AS tenant_active
+      `SELECT u.id, u.tenant_id, u.password_hash, u.role, u.active AS user_active,
+              u.email_verified_at, t.module, t.active AS tenant_active
        FROM users u JOIN tenants t ON t.id = u.tenant_id
        WHERE LOWER(u.email) = $1`,
       [email]
@@ -39,6 +41,15 @@ module.exports = async function (fastify) {
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
       return reply.status(401).send({ error: 'Invalid credentials' });
+    }
+
+    // E-mail não verificado bloqueia o login. Frontend mostra botão "reenviar".
+    if (!user.email_verified_at) {
+      return reply.status(403).send({
+        error: 'EMAIL_NOT_VERIFIED',
+        message: 'Verifique seu e-mail antes de entrar. Reenvie o link se não recebeu.',
+        email,
+      });
     }
 
     // jti único por sessão — sobrescreve qualquer sessão anterior do mesmo usuário.
@@ -112,7 +123,21 @@ module.exports = async function (fastify) {
     });
     const user_id = userRows[0].id;
 
-    return reply.status(201).send({ tenant_id, user_id, email });
+    // Dispara o email de verificação. Se falhar, logamos mas devolvemos sucesso —
+    // o usuário pode clicar "reenviar" depois. Deixar o registro travar por falha
+    // de SES é pior UX.
+    try {
+      await sendEmailVerification(fastify.pg, user_id, email);
+    } catch (err) {
+      request.log.error({ err, user_id }, 'falha ao enviar email de verificação no register');
+    }
+
+    return reply.status(201).send({
+      tenant_id,
+      user_id,
+      email,
+      email_verification_required: true,
+    });
   });
 
   fastify.get('/me', { preHandler: [fastify.authenticate] }, async (request, reply) => {
