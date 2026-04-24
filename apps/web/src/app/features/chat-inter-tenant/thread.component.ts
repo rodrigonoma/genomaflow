@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, OnChanges, OnDestroy, SimpleChanges, ViewChild, ElementRef, inject, signal, AfterViewChecked } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnChanges, OnDestroy, SimpleChanges, ViewChild, ElementRef, inject, signal, AfterViewChecked } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -27,14 +27,26 @@ import { ReportDialogComponent } from './report-dialog.component';
   styles: [`
     :host { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
     .header {
-      display: flex; align-items: center; gap: 0.75rem;
+      display: flex; align-items: center; gap: 0.5rem;
       padding: 0.875rem 1.5rem;
       border-bottom: 1px solid rgba(70,69,84,0.15);
       background: #0b1326;
     }
+    .back-btn { color: #c0c1ff; display: none; }
     .header-title {
       font-family: 'Space Grotesk', sans-serif; font-weight: 700;
       font-size: 1rem; color: #dae2fd; flex: 1;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      min-width: 0;
+    }
+    @media (max-width: 639px) {
+      .back-btn { display: inline-flex; }
+      .header { padding: 0.75rem 1rem; }
+      .messages { padding: 0.75rem 1rem; }
+      .bubble-wrap { max-width: 85%; }
+      .bubble-wrap .react-btn { display: none; }
+      .input-row { padding: 0.625rem 0.75rem; gap: 0.25rem; }
+      .search-row { padding: 0.5rem 1rem; }
     }
     .header-module {
       font-family: 'JetBrains Mono', monospace; font-size: 10px;
@@ -170,6 +182,9 @@ import { ReportDialogComponent } from './report-dialog.component';
   template: `
     @if (conv()) {
       <div class="header">
+        <button mat-icon-button class="back-btn" (click)="back.emit()" matTooltip="Voltar">
+          <mat-icon>arrow_back</mat-icon>
+        </button>
         <span class="header-title">{{ conv()!.counterpart_name }}</span>
         <span class="header-module">{{ conv()!.module === 'veterinary' ? 'VET' : 'HUMAN' }}</span>
         <button mat-icon-button style="color:#c0c1ff" (click)="toggleSearch()" matTooltip="Buscar">
@@ -268,6 +283,7 @@ import { ReportDialogComponent } from './report-dialog.component';
 })
 export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewChecked {
   @Input() conversationId!: string;
+  @Output() back = new EventEmitter<void>();
   @ViewChild('messagesBox') messagesBox!: ElementRef<HTMLDivElement>;
 
   private chat = inject(ChatService);
