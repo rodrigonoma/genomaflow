@@ -119,19 +119,19 @@ module.exports = async function (fastify) {
         return rows[0];
       });
 
-      // Notifica destinatário via WS (best-effort)
+      // Notifica destinatário via Redis pub/sub → WS (best-effort)
       try {
         const { rows: [sender] } = await fastify.pg.query(
           `SELECT name FROM tenants WHERE id = $1`, [tenant_id]
         );
-        if (fastify.notifyTenant) {
-          fastify.notifyTenant(to_tenant_id, {
+        if (fastify.redis) {
+          await fastify.redis.publish(`chat:event:${to_tenant_id}`, JSON.stringify({
             event: 'chat:invitation_received',
             invitation_id: inv.id,
             from_tenant_id: tenant_id,
             from_tenant_name: sender?.name || '',
             message: inv.message,
-          });
+          }));
         }
       } catch (_) { /* notify é best-effort */ }
 
@@ -187,13 +187,13 @@ module.exports = async function (fastify) {
         const { rows: [accepter] } = await fastify.pg.query(
           `SELECT name FROM tenants WHERE id = $1`, [tenant_id]
         );
-        if (fastify.notifyTenant) {
-          fastify.notifyTenant(result.from_tenant_id, {
+        if (fastify.redis) {
+          await fastify.redis.publish(`chat:event:${result.from_tenant_id}`, JSON.stringify({
             event: 'chat:invitation_accepted',
             invitation_id: result.body.invitation_id,
             conversation_id: result.body.conversation_id,
             counterpart_tenant_name: accepter?.name || '',
-          });
+          }));
         }
       } catch (_) {}
     }

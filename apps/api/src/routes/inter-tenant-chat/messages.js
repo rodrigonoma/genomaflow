@@ -129,17 +129,17 @@ module.exports = async function (fastify) {
         return { action, count: cRows[0].n, counterpart };
       });
 
-      // Notifica counterpart via WS (best-effort)
+      // Notifica counterpart via Redis pub/sub → WS (best-effort)
       try {
-        if (fastify.notifyTenant) {
-          fastify.notifyTenant(result.counterpart, {
+        if (fastify.redis) {
+          await fastify.redis.publish(`chat:event:${result.counterpart}`, JSON.stringify({
             event: 'chat:reaction_changed',
             conversation_id,
             message_id: messageId,
             emoji,
             count: result.count,
             action: result.action,
-          });
+          }));
         }
       } catch (_) {}
 
@@ -396,9 +396,9 @@ module.exports = async function (fastify) {
         return { msg, attachments, counterpart };
       });
 
-      // Notifica counterpart via WS (best-effort)
+      // Notifica counterpart via Redis pub/sub → WS (best-effort)
       try {
-        if (fastify.notifyTenant) {
+        if (fastify.redis) {
           const attachmentTypes = (result.attachments || []).map(a => a.kind);
           let preview;
           if (result.msg.body) {
@@ -412,19 +412,19 @@ module.exports = async function (fastify) {
           } else {
             preview = '';
           }
-          fastify.notifyTenant(result.counterpart, {
+          await fastify.redis.publish(`chat:event:${result.counterpart}`, JSON.stringify({
             event: 'chat:message_received',
             conversation_id: id,
             message_id: result.msg.id,
             sender_tenant_id: tenant_id,
             body_preview: preview,
             created_at: result.msg.created_at,
-          });
-          fastify.notifyTenant(result.counterpart, {
+          }));
+          await fastify.redis.publish(`chat:event:${result.counterpart}`, JSON.stringify({
             event: 'chat:unread_change',
             conversation_id: id,
             delta: 1,
-          });
+          }));
         }
       } catch (_) {}
 
