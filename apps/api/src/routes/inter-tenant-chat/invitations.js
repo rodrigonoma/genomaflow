@@ -110,6 +110,23 @@ module.exports = async function (fastify) {
         );
         return rows[0];
       });
+
+      // Notifica destinatário via WS (best-effort)
+      try {
+        const { rows: [sender] } = await fastify.pg.query(
+          `SELECT name FROM tenants WHERE id = $1`, [tenant_id]
+        );
+        if (fastify.notifyTenant) {
+          fastify.notifyTenant(to_tenant_id, {
+            event: 'chat:invitation_received',
+            invitation_id: inv.id,
+            from_tenant_id: tenant_id,
+            from_tenant_name: sender?.name || '',
+            message: inv.message,
+          });
+        }
+      } catch (_) { /* notify é best-effort */ }
+
       return reply.status(201).send(inv);
     } catch (err) {
       if (err.code === '23505') {
@@ -145,12 +162,34 @@ module.exports = async function (fastify) {
          RETURNING id`,
         [a, b, inv.module, inv.id]
       );
-      return { code: 201, body: { invitation_id: inv.id, conversation_id: convRows[0].id } };
+      return {
+        code: 201,
+        body: { invitation_id: inv.id, conversation_id: convRows[0].id },
+        from_tenant_id: inv.from_tenant_id,
+      };
     });
 
     if (result.code === 404) {
       return reply.status(404).send({ error: 'Convite não encontrado, não é seu, ou já não está pending.' });
     }
+
+    // Notifica o sender via WS (best-effort)
+    if (result.code === 201) {
+      try {
+        const { rows: [accepter] } = await fastify.pg.query(
+          `SELECT name FROM tenants WHERE id = $1`, [tenant_id]
+        );
+        if (fastify.notifyTenant) {
+          fastify.notifyTenant(result.from_tenant_id, {
+            event: 'chat:invitation_accepted',
+            invitation_id: result.body.invitation_id,
+            conversation_id: result.body.conversation_id,
+            counterpart_tenant_name: accepter?.name || '',
+          });
+        }
+      } catch (_) {}
+    }
+
     return reply.status(result.code).send(result.body);
   });
 

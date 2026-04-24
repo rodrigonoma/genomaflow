@@ -36,6 +36,18 @@ module.exports = async function (fastify) {
           [conversationId, tenant_id, lastMessageId]
         );
       });
+
+      // Notifica o próprio tenant pra atualizar badge em outras abas (best-effort)
+      try {
+        if (fastify.notifyTenant) {
+          fastify.notifyTenant(tenant_id, {
+            event: 'chat:unread_change',
+            conversation_id: conversationId,
+            absolute: 0,
+          });
+        }
+      } catch (_) {}
+
       return reply.status(204).send();
     } catch (err) { return mapAccessDenied(err, reply); }
   });
