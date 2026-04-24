@@ -7,7 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subject, debounceTime } from 'rxjs';
 import { ChatService } from './chat.service';
-import { DirectoryEntry } from '../../shared/models/chat.models';
+import { DirectoryEntry, ChatSettings } from '../../shared/models/chat.models';
 
 @Component({
   selector: 'app-directory-modal',
@@ -63,12 +63,71 @@ import { DirectoryEntry } from '../../shared/models/chat.models';
     }
     .msg-area textarea:focus { border-color: #c0c1ff; }
     .actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem; }
+
+    /* Banner visibilidade */
+    .visibility-banner {
+      background: rgba(255,203,107,0.06);
+      border-left: 3px solid #ffcb6b;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      display: flex; gap: 0.75rem; align-items: flex-start;
+      border-radius: 0 4px 4px 0;
+    }
+    .visibility-banner mat-icon {
+      color: #ffcb6b; font-size: 20px; width: 20px; height: 20px; flex-shrink: 0;
+    }
+    .visibility-banner-body { flex: 1; font-size: 0.8125rem; color: #dae2fd; line-height: 1.5; }
+    .visibility-banner-body strong { color: #ffcb6b; }
+    .visibility-banner-action {
+      margin-top: 0.5rem;
+      display: flex; gap: 0.5rem;
+    }
+    .visibility-banner-ok {
+      background: rgba(74,214,160,0.06);
+      border-left-color: #4ad6a0;
+    }
+    .visibility-banner-ok mat-icon { color: #4ad6a0; }
+    .visibility-banner-ok strong { color: #4ad6a0; }
   `],
   template: `
     <div class="wrap">
       <h2>Nova conversa</h2>
 
       @if (!selected()) {
+        @if (settings() && !settings()!.visible_in_directory) {
+          <div class="visibility-banner">
+            <mat-icon>visibility_off</mat-icon>
+            <div class="visibility-banner-body">
+              <strong>Sua clínica está invisível no diretório.</strong>
+              <div>Outras clínicas não conseguem te encontrar na busca.
+                Ative a visibilidade pra permitir que te achem e enviem convites.</div>
+              <div class="visibility-banner-action">
+                <button mat-flat-button
+                        style="background:#ffcb6b;color:#0b1326;font-weight:700"
+                        [disabled]="togglingVisibility()"
+                        (click)="toggleVisibility()">
+                  {{ togglingVisibility() ? 'Ativando…' : 'Tornar visível agora' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        } @else if (settings() && settings()!.visible_in_directory) {
+          <div class="visibility-banner visibility-banner-ok">
+            <mat-icon>visibility</mat-icon>
+            <div class="visibility-banner-body">
+              <strong>Sua clínica está visível no diretório.</strong>
+              Outras clínicas do seu módulo podem te encontrar.
+              <div class="visibility-banner-action">
+                <button mat-button style="color:#7c7b8f"
+                        [disabled]="togglingVisibility()"
+                        (click)="toggleVisibility()">
+                  Ocultar do diretório
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+
         <div class="search-row">
           <input [(ngModel)]="q" placeholder="Buscar clínica por nome…" (input)="onQueryChange()"/>
           <select [(ngModel)]="uf" (change)="refresh()">
@@ -132,12 +191,44 @@ export class DirectoryModalComponent {
   selected = signal<DirectoryEntry | null>(null);
   inviteMessage = '';
   sending = false;
+  settings = signal<ChatSettings | null>(null);
+  togglingVisibility = signal(false);
 
   private query$ = new Subject<void>();
 
   constructor() {
     this.query$.pipe(debounceTime(300)).subscribe(() => this.refresh());
+    this.loadSettings();
     this.refresh();
+  }
+
+  private loadSettings() {
+    this.chat.getSettings().subscribe({
+      next: (s) => this.settings.set(s),
+      error: () => {}
+    });
+  }
+
+  toggleVisibility() {
+    const current = this.settings();
+    if (!current) return;
+    this.togglingVisibility.set(true);
+    const next = !current.visible_in_directory;
+    this.chat.updateSettings({ visible_in_directory: next }).subscribe({
+      next: (s) => {
+        this.settings.set(s);
+        this.togglingVisibility.set(false);
+        this.snack.open(
+          next ? 'Sua clínica agora é visível no diretório.' : 'Visibilidade desativada.',
+          '', { duration: 3000 }
+        );
+        this.refresh();
+      },
+      error: (err) => {
+        this.togglingVisibility.set(false);
+        this.snack.open(err.error?.error || 'Erro ao atualizar configuração.', 'Fechar', { duration: 5000 });
+      }
+    });
   }
 
   onQueryChange() { this.query$.next(); }
