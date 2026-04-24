@@ -38,7 +38,8 @@ jobs:
       - name: Build & push Worker
         run: |
           IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/worker
-          docker build --build-arg CACHEBUST=${{ env.IMAGE_TAG }} -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest apps/worker
+          # Build context = repo root pra docs/ + CLAUDE.md chegarem no image (usados pelo reindex do Copilot)
+          docker build -f apps/worker/Dockerfile --build-arg CACHEBUST=${{ env.IMAGE_TAG }} -t $IMAGE:${{ env.IMAGE_TAG }} -t $IMAGE:latest .
           docker push $IMAGE:${{ env.IMAGE_TAG }}
           docker push $IMAGE:latest
 
@@ -161,6 +162,71 @@ jobs:
             exit 1
           fi
           echo "✅ Migration concluída"
+
+      - name: Reindex Copilot product-help docs (if docs/ changed)
+        run: |
+          CLUSTER="genomaflow"
+
+          # Detectar mudanças em docs/ ou CLAUDE.md neste push
+          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -E "^(docs/|CLAUDE\.md)" | head -5 || true)
+          if [ -z "$CHANGED" ]; then
+            echo "Sem mudanças em docs/ — skip reindex"
+            exit 0
+          fi
+          echo "Docs mudaram:"
+          echo "$CHANGED"
+
+          # Task def do reindex (criado via CDK, família genomaflow-prod-reindex-help)
+          TASK_DEF=$(aws ecs list-task-definitions \
+            --family-prefix genomaflow-prod-reindex-help \
+            --sort DESC \
+            --query "taskDefinitionArns[0]" \
+            --output text)
+
+          if [ "$TASK_DEF" = "None" ] || [ -z "$TASK_DEF" ]; then
+            echo "⚠️ Task def genomaflow-prod-reindex-help ainda não existe no ECS."
+            echo "   Rodar manualmente: cd infra && npx cdk deploy genomaflow-ecs"
+            echo "   Pulando reindex nesse deploy (docs ficam defasados até o cdk deploy)."
+            exit 0
+          fi
+
+          SUBNET=$(aws cloudformation describe-stacks \
+            --stack-name genomaflow-vpc \
+            --query 'Stacks[0].Outputs[?OutputKey==`PublicSubnet1`].OutputValue' \
+            --output text)
+          SG=$(aws cloudformation describe-stacks \
+            --stack-name genomaflow-vpc \
+            --query 'Stacks[0].Outputs[?OutputKey==`SgEcsId`].OutputValue' \
+            --output text)
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$CLUSTER" \
+            --task-definition "$TASK_DEF" \
+            --launch-type FARGATE \
+            --network-configuration \
+              "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SG],assignPublicIp=ENABLED}" \
+            --query "tasks[0].taskArn" \
+            --output text)
+          echo "Reindex task: $TASK_ARN"
+
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$CLUSTER" --tasks "$TASK_ARN" \
+            --query "tasks[0].containers[0].exitCode" \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "⚠️ Reindex falhou (exit $EXIT_CODE) — deploy segue, mas Copilot terá docs defasados"
+            TASK_ID=$(echo "$TASK_ARN" | awk -F'/' '{print $NF}')
+            aws logs get-log-events \
+              --log-group-name /genomaflow/prod \
+              --log-stream-name "reindex/reindex/$TASK_ID" \
+              --query 'events[*].message' --output text || true
+            # Não falhar o deploy por causa de reindex — Copilot continua funcional com docs anteriores
+            exit 0
+          fi
+          echo "✅ Reindex concluído"
 
       - name: Wait for services stable
         run: |
