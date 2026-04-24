@@ -12,4 +12,5 @@ module.exports = async function (fastify) {
   fastify.register(require('./conversations'), { prefix: '/conversations' });
   fastify.register(require('./messages'),      { prefix: '' });
   fastify.register(require('./reads'),         { prefix: '' });
+  fastify.register(require('./reports'),       { prefix: '/reports' });
 };

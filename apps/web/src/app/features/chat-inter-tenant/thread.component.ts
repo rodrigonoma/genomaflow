@@ -16,6 +16,7 @@ import { AiAnalysisPickerComponent } from './ai-analysis-picker.component';
 import { PdfAttachmentCardComponent } from './pdf-attachment-card.component';
 import { ImageAttachmentCardComponent } from './image-attachment-card.component';
 import { ImageUploadConfirmComponent } from './image-upload-confirm.component';
+import { ReportDialogComponent } from './report-dialog.component';
 
 @Component({
   selector: 'app-thread',
@@ -173,6 +174,9 @@ import { ImageUploadConfirmComponent } from './image-upload-confirm.component';
         <span class="header-module">{{ conv()!.module === 'veterinary' ? 'VET' : 'HUMAN' }}</span>
         <button mat-icon-button style="color:#c0c1ff" (click)="toggleSearch()" matTooltip="Buscar">
           <mat-icon>{{ searchOpen() ? 'close' : 'search' }}</mat-icon>
+        </button>
+        <button mat-icon-button style="color:#ffb4ab" (click)="onReport()" matTooltip="Reportar clínica">
+          <mat-icon>flag</mat-icon>
         </button>
       </div>
     }
@@ -458,6 +462,17 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
       }
     }, 50);
     this.searchOpen.set(false);
+  }
+
+  onReport() {
+    const c = this.conv();
+    if (!c) return;
+    this.dialog.open(ReportDialogComponent, {
+      width: '520px',
+      panelClass: 'dark-dialog',
+      autoFocus: false,
+      data: { reported_tenant_id: c.counterpart_tenant_id, reported_tenant_name: c.counterpart_name }
+    });
   }
 
   toggleSearch() {
