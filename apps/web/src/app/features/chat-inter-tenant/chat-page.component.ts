@@ -76,7 +76,7 @@ import { InvitesPanelComponent } from './invites-panel.component';
     </aside>
     <main class="main">
       @if (selectedConversationId()) {
-        <app-thread [conversationId]="selectedConversationId()!" />
+        <app-thread [conversationId]="selectedConversationId()!" (back)="selectedConversationId.set(null)" />
       } @else {
         <div class="empty">Selecione uma conversa ou inicie uma nova.</div>
       }

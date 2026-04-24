@@ -239,6 +239,13 @@ A UI deve sempre mostrar tenant_name + módulo em local visível (topbar). Confu
 - Bloqueio bilateral (`tenant_blocks`): convite de qualquer direção retorna 429 quando existe bloqueio — mensagem genérica para não revelar quem bloqueou
 - WS events emitidos pelo chat entre tenants: `chat:invitation_received` (pra destinatário ao POST /invitations), `chat:invitation_accepted` (pra sender ao POST /accept), `chat:message_received` (pra counterpart ao POST /messages), `chat:unread_change` (pra counterpart no POST /messages e pra self no POST /read). Best-effort (try/catch) — falha de notify não derruba a request
 - Frontend: rota `/chat` com guard de auth/terms/professional, sidebar agrega `unread_total` de todas as conversas e atualiza em tempo real via WS
+- Anexo análise IA (Phase 4): POST /messages aceita `ai_analysis_card: {exam_id, agent_types[]}` — snapshot anonimizado (sem name/cpf/phone/microchip/birth_date, com age_range em bucket de 10 anos) via helper `anonymizeAiAnalysis`
+- Anexo PDF (Phase 5A): POST /messages aceita `pdf: {filename, data_base64, mime_type}` max 10MB — pipeline PII (regex + Claude Haiku fail-open) hard-block 400 com `detected_kinds[]` se detectar. PDF limpo sobe ao S3 em `inter-tenant-chat/{conv}/`. Signed URL via GET /attachments/:id/url (TTL 1h)
+- Anexo imagem (Phase 5B): POST /messages aceita `image: {filename, data_base64, mime_type, user_confirmed_anonymized: true}` — `user_confirmed_anonymized` deve ser literal `true` (strict equality). Sem OCR nesta fase — responsabilidade de anonimização do usuário, registrada em `tenant_message_pii_checks` com marker `user_manual_confirm`
+- Reações (Phase 6): whitelist `['👍','❤️','🤔','✅','🚨','📌']`. POST /messages/:id/reactions toggle. Outros emojis retornam 400
+- Search full-text (Phase 6): GET /conversations/:id/search?q= usa ts_headline português com `<mark>` nos highlights
+- Denúncias (Phase 7): POST /reports (reason mín 10, max 2000 chars). UNIQUE constraint: 1 denúncia pending por par reporter/reported
+- Suspensão automática (Phase 7): tenant com 3+ denúncias pending de reporters distintos nos últimos 30 dias é suspenso — POST /messages e POST /invitations retornam 403 com mensagem de suspensão. Master pode dismiss/action via POST /reports/:id/resolve
 
 ## Dados de Usuário — Normalização (OBRIGATÓRIO)
 
