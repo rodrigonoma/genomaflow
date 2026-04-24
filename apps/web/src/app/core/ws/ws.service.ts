@@ -1,5 +1,6 @@
 import { Injectable, NgZone } from '@angular/core';
 import { Subject } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
 @Injectable({ providedIn: 'root' })
 export class WsService {
@@ -35,7 +36,11 @@ export class WsService {
     if (!this.token || this.destroyed) return;
 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${protocol}//${location.host}/exams/subscribe?token=${this.token}`;
+    // Em prod, ALB só roteia /api/* pra API (o resto vai pro nginx do Angular).
+    // Em dev, proxy.conf.json mapeia /exams/subscribe direto com ws:true.
+    // Então em prod incluímos o API_PREFIX (/api); em dev mantemos path raw.
+    const basePath = environment.production ? environment.apiUrl : '';
+    const url = `${protocol}//${location.host}${basePath}/exams/subscribe?token=${this.token}`;
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {
