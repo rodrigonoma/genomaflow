@@ -1,7 +1,9 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../core/auth/auth.service';
+import { environment } from '../../../environments/environment';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
@@ -123,13 +125,23 @@ import { MatIconModule } from '@angular/material/icon';
           <div class="error-msg">{{ error }}</div>
         }
 
+        @if (needsVerification) {
+          <div style="background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;padding:0.75rem;border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.5;margin-bottom:1rem;">
+            Seu e-mail ainda não foi verificado. Verifique sua caixa de entrada ou
+            <a href="javascript:void(0)" (click)="resendVerification()" style="color:#fbbf24;text-decoration:underline;cursor:pointer;">
+              {{ resending ? 'reenviando...' : (resent ? 'reenviado ✓' : 'reenviar link') }}
+            </a>.
+          </div>
+        }
+
         <button class="submit-btn" type="submit" [disabled]="loading">
           {{ loading ? 'AUTENTICANDO...' : 'ENTRAR' }}
         </button>
       </form>
       <div class="footer-note">
+        <a routerLink="/forgot-password" style="color:#c0c1ff;text-decoration:none">Esqueci a senha</a>
+        &nbsp;&middot;&nbsp;
         Não tem conta? <a routerLink="/register" style="color:#c0c1ff;text-decoration:none">Registrar</a>
-        &nbsp;&middot;&nbsp; Plataforma segura
       </div>
     </div>
   `
@@ -139,6 +151,7 @@ export class LoginComponent implements OnInit {
   private fb     = inject(FormBuilder);
   private route  = inject(ActivatedRoute);
   private router = inject(Router);
+  private http   = inject(HttpClient);
 
   form = this.fb.group({
     email: ['', [Validators.required, Validators.email]],
@@ -150,6 +163,10 @@ export class LoginComponent implements OnInit {
   showPass = false;
   showActivatedBanner = false;
 
+  needsVerification = false;
+  resending = false;
+  resent = false;
+
   ngOnInit(): void {
     this.showActivatedBanner = this.route.snapshot.queryParams['activated'] === 'true';
   }
@@ -157,14 +174,32 @@ export class LoginComponent implements OnInit {
   submit(): void {
     if (this.form.invalid) return;
     this.error = '';
+    this.needsVerification = false;
+    this.resent = false;
     this.loading = true;
     const { email, password } = this.form.value;
     this.auth.login(email!, password!).subscribe({
       next: () => { this.loading = false; },
       error: (err) => {
         this.loading = false;
-        this.error = err.error?.error ?? 'E-mail ou senha inválidos.';
+        if (err.status === 403 && err.error?.error === 'EMAIL_NOT_VERIFIED') {
+          this.needsVerification = true;
+          this.error = '';
+        } else {
+          this.error = err.error?.error ?? 'E-mail ou senha inválidos.';
+        }
       }
     });
+  }
+
+  resendVerification(): void {
+    const email = this.form.value.email;
+    if (!email || this.resending) return;
+    this.resending = true;
+    this.http.post(`${environment.apiUrl}/auth/email-verification/send-by-email`, { email })
+      .subscribe({
+        next: () => { this.resending = false; this.resent = true; },
+        error: () => { this.resending = false; this.resent = true; } // mesmo em erro mostramos sucesso pra não vazar info
+      });
   }
 }
