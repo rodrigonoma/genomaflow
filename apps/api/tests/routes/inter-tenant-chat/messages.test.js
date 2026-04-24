@@ -147,6 +147,92 @@ describe('POST /messages — anexo ai_analysis_card', () => {
   });
 });
 
+describe('POST /messages/:id/reactions', () => {
+  async function createMessageIn(conversationId, senderTenantId, senderUserId, body = 'oi') {
+    const { rows: [msg] } = await fixtures.getPool().query(
+      `INSERT INTO tenant_messages (conversation_id, sender_tenant_id, sender_user_id, body)
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [conversationId, senderTenantId, senderUserId, body]
+    );
+    return msg.id;
+  }
+
+  it('201 toggle adiciona reação', async () => {
+    const { a, b, conversationId } = await fixtures.createConversedPair(app);
+    const msgId = await createMessageIn(conversationId, a.tenantId, a.userId);
+    const res = await supertest(app.server)
+      .post(`/inter-tenant-chat/messages/${msgId}/reactions`)
+      .set('Authorization', `Bearer ${b.token}`)
+      .send({ emoji: '👍' });
+    expect(res.status).toBe(200);
+    expect(res.body.action).toBe('added');
+    expect(res.body.emoji).toBe('👍');
+    expect(res.body.count).toBe(1);
+  });
+
+  it('toggle 2x remove reação', async () => {
+    const { a, b, conversationId } = await fixtures.createConversedPair(app);
+    const msgId = await createMessageIn(conversationId, a.tenantId, a.userId);
+    await supertest(app.server)
+      .post(`/inter-tenant-chat/messages/${msgId}/reactions`)
+      .set('Authorization', `Bearer ${b.token}`)
+      .send({ emoji: '👍' });
+    const res = await supertest(app.server)
+      .post(`/inter-tenant-chat/messages/${msgId}/reactions`)
+      .set('Authorization', `Bearer ${b.token}`)
+      .send({ emoji: '👍' });
+    expect(res.body.action).toBe('removed');
+    expect(res.body.count).toBe(0);
+  });
+
+  it('400 emoji fora da whitelist', async () => {
+    const { a, b, conversationId } = await fixtures.createConversedPair(app);
+    const msgId = await createMessageIn(conversationId, a.tenantId, a.userId);
+    const res = await supertest(app.server)
+      .post(`/inter-tenant-chat/messages/${msgId}/reactions`)
+      .set('Authorization', `Bearer ${b.token}`)
+      .send({ emoji: '🦄' });
+    expect(res.status).toBe(400);
+  });
+
+  it('403 para não-membro', async () => {
+    const { a, conversationId } = await fixtures.createConversedPair(app);
+    const msgId = await createMessageIn(conversationId, a.tenantId, a.userId);
+    const c = await fixtures.createTenantWithAdmin(app);
+    const res = await supertest(app.server)
+      .post(`/inter-tenant-chat/messages/${msgId}/reactions`)
+      .set('Authorization', `Bearer ${c.token}`)
+      .send({ emoji: '👍' });
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /messages retorna reactions agregadas com reacted_by_me', async () => {
+    const { a, b, conversationId } = await fixtures.createConversedPair(app);
+    const msgId = await createMessageIn(conversationId, a.tenantId, a.userId);
+    // b reage
+    await supertest(app.server)
+      .post(`/inter-tenant-chat/messages/${msgId}/reactions`)
+      .set('Authorization', `Bearer ${b.token}`)
+      .send({ emoji: '👍' });
+    // b lista mensagens e vê própria reação marcada
+    const res = await supertest(app.server)
+      .get(`/inter-tenant-chat/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${b.token}`);
+    const msg = res.body.results.find(m => m.id === msgId);
+    expect(msg.reactions).toHaveLength(1);
+    expect(msg.reactions[0].emoji).toBe('👍');
+    expect(msg.reactions[0].count).toBe(1);
+    expect(msg.reactions[0].reacted_by_me).toBe(true);
+
+    // a vê mesma reação mas reacted_by_me=false
+    const resA = await supertest(app.server)
+      .get(`/inter-tenant-chat/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${a.token}`);
+    const msgA = resA.body.results.find(m => m.id === msgId);
+    expect(msgA.reactions[0].reacted_by_me).toBe(false);
+  });
+});
+
 describe('POST /messages — anexo image', () => {
   it('400 se mime_type inválido', async () => {
     const { a, conversationId } = await fixtures.createConversedPair(app);

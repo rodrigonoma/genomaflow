@@ -10,7 +10,7 @@ import { Subscription } from 'rxjs';
 import { ChatService } from './chat.service';
 import { WsService } from '../../core/ws/ws.service';
 import { AuthService } from '../../core/auth/auth.service';
-import { InterTenantMessage, InterTenantConversation } from '../../shared/models/chat.models';
+import { InterTenantMessage, InterTenantConversation, ChatSearchResult, CHAT_ALLOWED_EMOJIS } from '../../shared/models/chat.models';
 import { AiAnalysisCardComponent } from './ai-analysis-card.component';
 import { AiAnalysisPickerComponent } from './ai-analysis-picker.component';
 import { PdfAttachmentCardComponent } from './pdf-attachment-card.component';
@@ -46,8 +46,95 @@ import { ImageUploadConfirmComponent } from './image-upload-confirm.component';
       display: flex; flex-direction: column; gap: 0.5rem;
     }
     .empty { text-align: center; color: #7c7b8f; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; margin-top: 2rem; }
-    .bubble-wrap { display: flex; flex-direction: column; max-width: 70%; align-self: flex-start; gap: 0.25rem; }
+    .bubble-wrap { display: flex; flex-direction: column; max-width: 70%; align-self: flex-start; gap: 0.25rem; position: relative; }
     .bubble-wrap.own { align-self: flex-end; align-items: flex-end; }
+    .bubble-wrap:hover .react-btn { opacity: 1; }
+    .react-btn {
+      position: absolute; top: 0; right: -32px;
+      width: 28px; height: 28px; border-radius: 14px;
+      background: #171f33; border: 1px solid rgba(70,69,84,0.3);
+      cursor: pointer; opacity: 0; transition: opacity 150ms;
+      display: flex; align-items: center; justify-content: center;
+      color: #c0c1ff;
+    }
+    .bubble-wrap.own .react-btn { right: auto; left: -32px; }
+    .react-btn mat-icon { font-size: 16px; width: 16px; height: 16px; }
+    .emoji-picker {
+      position: absolute; top: 30px; z-index: 10;
+      background: #171f33; border: 1px solid rgba(70,69,84,0.3);
+      border-radius: 6px; padding: 0.375rem;
+      display: flex; gap: 0.25rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .bubble-wrap:not(.own) .emoji-picker { left: -32px; }
+    .bubble-wrap.own .emoji-picker { right: -32px; }
+    .emoji-btn {
+      width: 28px; height: 28px; border-radius: 4px;
+      background: transparent; border: none; cursor: pointer;
+      font-size: 16px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .emoji-btn:hover { background: rgba(192,193,255,0.1); }
+    .reactions {
+      display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.125rem;
+    }
+    .reaction-chip {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      padding: 2px 7px; border-radius: 10px;
+      font-size: 11px;
+      background: rgba(70,69,84,0.25); border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .reaction-chip.mine {
+      background: rgba(192,193,255,0.15);
+      border-color: #c0c1ff;
+    }
+    .reaction-chip:hover { background: rgba(70,69,84,0.4); }
+    .reaction-chip .count {
+      font-family: 'JetBrains Mono', monospace; font-weight: 600;
+      color: #dae2fd;
+    }
+    /* Search bar */
+    .search-row {
+      padding: 0.5rem 1.5rem; background: #111929;
+      border-bottom: 1px solid rgba(70,69,84,0.15);
+      display: flex; gap: 0.5rem; align-items: center;
+    }
+    .search-row input {
+      flex: 1; background: #171f33; color: #dae2fd;
+      border: 1px solid rgba(70,69,84,0.25); border-radius: 4px;
+      padding: 0.375rem 0.75rem; font-size: 0.8125rem; outline: none;
+      font-family: inherit;
+    }
+    .search-row input:focus { border-color: #c0c1ff; }
+    .search-results {
+      max-height: 240px; overflow-y: auto;
+      background: #0b1326; border-bottom: 1px solid rgba(70,69,84,0.15);
+    }
+    .search-result {
+      padding: 0.625rem 1.5rem; cursor: pointer;
+      border-bottom: 1px solid rgba(70,69,84,0.08);
+      font-size: 0.8125rem; color: #dae2fd;
+    }
+    .search-result:hover { background: #131b2e; }
+    .search-result .snippet mark {
+      background: rgba(255,203,107,0.2); color: #ffcb6b;
+      font-weight: 600;
+    }
+    .search-result .when {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      color: #7c7b8f; margin-top: 0.25rem;
+    }
+    .new-msg-chip {
+      position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%);
+      background: #494bd6; color: #fff;
+      padding: 0.375rem 0.875rem; border-radius: 16px;
+      font-size: 0.8125rem; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      display: flex; align-items: center; gap: 0.375rem;
+      z-index: 5;
+    }
+    .new-msg-chip:hover { background: #5a5cf0; }
     .bubble {
       padding: 0.625rem 0.875rem;
       border-radius: 8px; position: relative;
@@ -84,14 +171,34 @@ import { ImageUploadConfirmComponent } from './image-upload-confirm.component';
       <div class="header">
         <span class="header-title">{{ conv()!.counterpart_name }}</span>
         <span class="header-module">{{ conv()!.module === 'veterinary' ? 'VET' : 'HUMAN' }}</span>
+        <button mat-icon-button style="color:#c0c1ff" (click)="toggleSearch()" matTooltip="Buscar">
+          <mat-icon>{{ searchOpen() ? 'close' : 'search' }}</mat-icon>
+        </button>
       </div>
     }
-    <div class="messages" #messagesBox>
+    @if (searchOpen()) {
+      <div class="search-row">
+        <mat-icon style="color:#7c7b8f;font-size:18px;width:18px;height:18px">search</mat-icon>
+        <input #searchInput [(ngModel)]="searchQuery" placeholder="Buscar na conversa…"
+               (input)="onSearchInput()" (keydown.escape)="toggleSearch()"/>
+      </div>
+      @if (searchResults().length > 0) {
+        <div class="search-results">
+          @for (r of searchResults(); track r.id) {
+            <div class="search-result" (click)="scrollToMessage(r.id)">
+              <div class="snippet" [innerHTML]="r.snippet"></div>
+              <div class="when">{{ r.created_at | date:'dd/MM/yyyy HH:mm' }}</div>
+            </div>
+          }
+        </div>
+      }
+    }
+    <div class="messages" #messagesBox (scroll)="onMessagesScroll()">
       @if (messages().length === 0) {
         <div class="empty">Envie a primeira mensagem desta conversa.</div>
       }
       @for (m of messages(); track m.id) {
-        <div class="bubble-wrap" [class.own]="m.sender_tenant_id === ownTenantId">
+        <div class="bubble-wrap" [class.own]="m.sender_tenant_id === ownTenantId" [attr.data-msg-id]="m.id">
           <div class="bubble" [class.incoming]="m.sender_tenant_id !== ownTenantId" [class.outgoing]="m.sender_tenant_id === ownTenantId">
             @if (m.body) { {{ m.body }} }
             <span class="bubble-date">{{ m.created_at | date:'dd/MM HH:mm' }}</span>
@@ -105,6 +212,31 @@ import { ImageUploadConfirmComponent } from './image-upload-confirm.component';
               <app-image-attachment-card [attachment]="att" />
             }
           }
+          @if (m.reactions?.length) {
+            <div class="reactions">
+              @for (r of m.reactions; track r.emoji) {
+                <span class="reaction-chip" [class.mine]="r.reacted_by_me" (click)="onReactClick(m, r.emoji)">
+                  <span>{{ r.emoji }}</span><span class="count">{{ r.count }}</span>
+                </span>
+              }
+            </div>
+          }
+          <button class="react-btn" (click)="togglePicker(m.id)" aria-label="Reagir">
+            <mat-icon>add_reaction</mat-icon>
+          </button>
+          @if (pickerOpenFor() === m.id) {
+            <div class="emoji-picker">
+              @for (e of ALLOWED_EMOJIS; track e) {
+                <button class="emoji-btn" (click)="onReactClick(m, e)">{{ e }}</button>
+              }
+            </div>
+          }
+        </div>
+      }
+      @if (newMessagesCount() > 0) {
+        <div class="new-msg-chip" (click)="scrollToBottom()">
+          <mat-icon style="font-size:16px;width:16px;height:16px">arrow_downward</mat-icon>
+          {{ newMessagesCount() }} nova{{ newMessagesCount() > 1 ? 's' : '' }}
         </div>
       }
     </div>
@@ -146,6 +278,18 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
   sending = false;
   private subs = new Subscription();
   private shouldScroll = false;
+  private searchDebounce: any = null;
+
+  searchOpen = signal(false);
+  searchQuery = '';
+  searchResults = signal<ChatSearchResult[]>([]);
+
+  pickerOpenFor = signal<string | null>(null);
+  readonly ALLOWED_EMOJIS = CHAT_ALLOWED_EMOJIS;
+
+  newMessagesCount = signal(0);
+  private userNearBottom = true;
+
   get ownTenantId() { return this.auth.currentUser?.tenant_id; }
 
   canSend(): boolean { return !!this.draft.trim() && !this.sending; }
@@ -161,8 +305,18 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
     this.loadMessages();
     this.subs.add(this.ws.chatMessageReceived$.subscribe((msg) => {
       if (msg.conversation_id === this.conversationId) {
-        this.loadMessages();
-        this.markRead();
+        if (this.userNearBottom) {
+          this.loadMessages();
+          this.markRead();
+        } else {
+          this.newMessagesCount.update(n => n + 1);
+        }
+      }
+    }));
+    this.subs.add(this.ws.chatReactionChanged$.subscribe((r) => {
+      if (r.conversation_id === this.conversationId) {
+        // refresh mensagens pra pegar reactions atualizadas
+        this.loadMessages(/*preserveScroll*/ true);
       }
     }));
   }
@@ -187,12 +341,11 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
     this.chat.getConversation(this.conversationId).subscribe({ next: (c) => this.conv.set(c) });
   }
 
-  private loadMessages() {
+  private loadMessages(preserveScroll = false) {
     this.chat.listMessages(this.conversationId, { limit: 100 }).subscribe({
       next: (res) => {
-        // API retorna DESC (mais recente primeiro) — queremos ordem cronológica pra scroll bottom
         this.messages.set([...res.results].reverse());
-        this.shouldScroll = true;
+        if (!preserveScroll) this.shouldScroll = true;
         this.markRead();
       }
     });
@@ -270,6 +423,76 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
       this.snack.open('Erro ao ler o arquivo.', 'Fechar', { duration: 4000 });
     };
     reader.readAsDataURL(file);
+  }
+
+  onMessagesScroll() {
+    if (!this.messagesBox) return;
+    const el = this.messagesBox.nativeElement;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    this.userNearBottom = distanceToBottom < 80;
+    if (this.userNearBottom && this.newMessagesCount() > 0) {
+      this.newMessagesCount.set(0);
+    }
+  }
+
+  scrollToBottom() {
+    if (!this.messagesBox) return;
+    this.messagesBox.nativeElement.scrollTop = this.messagesBox.nativeElement.scrollHeight;
+    this.newMessagesCount.set(0);
+    this.loadMessages();
+    this.markRead();
+  }
+
+  scrollToMessage(messageId: string) {
+    setTimeout(() => {
+      if (!this.messagesBox) return;
+      const el = this.messagesBox.nativeElement.querySelector(`[data-msg-id="${messageId}"]`) as HTMLElement | null;
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.transition = 'background 600ms';
+        el.style.background = 'rgba(192,193,255,0.1)';
+        setTimeout(() => { el.style.background = ''; }, 1200);
+      } else {
+        // mensagem não está carregada — poderia implementar "jump to context"
+        this.snack.open('Mensagem antiga. Role pra cima pra carregar mais.', '', { duration: 3000 });
+      }
+    }, 50);
+    this.searchOpen.set(false);
+  }
+
+  toggleSearch() {
+    this.searchOpen.update(v => !v);
+    if (!this.searchOpen()) {
+      this.searchQuery = '';
+      this.searchResults.set([]);
+    }
+  }
+
+  onSearchInput() {
+    if (this.searchDebounce) clearTimeout(this.searchDebounce);
+    const q = this.searchQuery.trim();
+    if (q.length < 2) {
+      this.searchResults.set([]);
+      return;
+    }
+    this.searchDebounce = setTimeout(() => {
+      this.chat.searchMessages(this.conversationId, q).subscribe({
+        next: (res) => this.searchResults.set(res.results),
+        error: () => this.searchResults.set([])
+      });
+    }, 300);
+  }
+
+  togglePicker(messageId: string) {
+    this.pickerOpenFor.update(cur => cur === messageId ? null : messageId);
+  }
+
+  onReactClick(msg: InterTenantMessage, emoji: string) {
+    this.pickerOpenFor.set(null);
+    this.chat.toggleReaction(msg.id, emoji).subscribe({
+      next: () => this.loadMessages(/*preserveScroll*/ true),
+      error: (err) => this.snack.open(err.error?.error || 'Erro ao reagir.', 'Fechar', { duration: 4000 })
+    });
   }
 
   onImagePicked(input: HTMLInputElement) {

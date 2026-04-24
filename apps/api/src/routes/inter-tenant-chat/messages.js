@@ -32,21 +32,117 @@ module.exports = async function (fastify) {
                   m.has_attachment, m.created_at,
                   COALESCE(
                     (SELECT jsonb_agg(jsonb_build_object(
-                      'id', a.id, 'kind', a.kind, 'payload', a.payload, 'created_at', a.created_at
+                      'id', a.id, 'kind', a.kind, 'payload', a.payload,
+                      'original_size_bytes', a.original_size_bytes, 'created_at', a.created_at
                     ))
                      FROM tenant_message_attachments a WHERE a.message_id = m.id),
                     '[]'::jsonb
-                  ) AS attachments
+                  ) AS attachments,
+                  COALESCE(
+                    (SELECT jsonb_agg(jsonb_build_object(
+                      'emoji', r.emoji, 'count', r.n,
+                      'reacted_by_me', EXISTS(
+                        SELECT 1 FROM tenant_message_reactions r2
+                        WHERE r2.message_id = m.id AND r2.emoji = r.emoji AND r2.reactor_tenant_id = $4
+                      )
+                    ))
+                     FROM (
+                       SELECT emoji, count(*)::int AS n
+                       FROM tenant_message_reactions
+                       WHERE message_id = m.id
+                       GROUP BY emoji
+                     ) r),
+                    '[]'::jsonb
+                  ) AS reactions
            FROM tenant_messages m
            WHERE m.conversation_id = $1 AND m.deleted_at IS NULL
              AND ($2::timestamptz IS NULL OR m.created_at < $2)
            ORDER BY m.created_at DESC
            LIMIT $3`,
-          [id, before, limit]
+          [id, before, limit, tenant_id]
         );
         return r;
       });
       return { results: rows };
+    } catch (err) { return mapAccessDenied(err, reply); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Reactions
+  // ══════════════════════════════════════════════════════════════════════
+  const ALLOWED_EMOJIS = ['👍', '❤️', '🤔', '✅', '🚨', '📌'];
+
+  // POST /messages/:messageId/reactions — toggle
+  fastify.post('/messages/:messageId/reactions', { preHandler: [fastify.authenticate, ADMIN_ONLY] }, async (request, reply) => {
+    const { tenant_id, user_id } = request.user;
+    const { messageId } = request.params;
+    const { emoji } = request.body || {};
+
+    if (!emoji || typeof emoji !== 'string' || !ALLOWED_EMOJIS.includes(emoji)) {
+      return reply.status(400).send({
+        error: 'Emoji inválido. Permitidos: ' + ALLOWED_EMOJIS.join(' '),
+        allowed: ALLOWED_EMOJIS,
+      });
+    }
+
+    // Descobre a conversa via message pra reutilizar withConversationAccess
+    const { rows: msgRows } = await fastify.pg.query(
+      `SELECT m.id, m.conversation_id, c.tenant_a_id, c.tenant_b_id
+       FROM tenant_messages m
+       JOIN tenant_conversations c ON c.id = m.conversation_id
+       WHERE m.id = $1 AND m.deleted_at IS NULL`,
+      [messageId]
+    );
+    if (msgRows.length === 0) return reply.status(404).send({ error: 'Mensagem não encontrada.' });
+    const { conversation_id, tenant_a_id, tenant_b_id } = msgRows[0];
+    if (tenant_a_id !== tenant_id && tenant_b_id !== tenant_id) {
+      return reply.status(403).send({ error: 'Sem acesso a esta conversa.' });
+    }
+
+    try {
+      const result = await withConversationAccess(fastify.pg, conversation_id, tenant_id, async (client, conv) => {
+        // toggle: se existe, remove; se não, insere
+        const { rowCount: deletedCount } = await client.query(
+          `DELETE FROM tenant_message_reactions
+           WHERE message_id = $1 AND reactor_user_id = $2 AND emoji = $3`,
+          [messageId, user_id, emoji]
+        );
+        let action;
+        if (deletedCount > 0) {
+          action = 'removed';
+        } else {
+          await client.query(
+            `INSERT INTO tenant_message_reactions (message_id, reactor_tenant_id, reactor_user_id, emoji)
+             VALUES ($1, $2, $3, $4)`,
+            [messageId, tenant_id, user_id, emoji]
+          );
+          action = 'added';
+        }
+        // recount
+        const { rows: cRows } = await client.query(
+          `SELECT count(*)::int AS n FROM tenant_message_reactions
+           WHERE message_id = $1 AND emoji = $2`,
+          [messageId, emoji]
+        );
+        const counterpart = conv.tenant_a_id === tenant_id ? conv.tenant_b_id : conv.tenant_a_id;
+        return { action, count: cRows[0].n, counterpart };
+      });
+
+      // Notifica counterpart via WS (best-effort)
+      try {
+        if (fastify.notifyTenant) {
+          fastify.notifyTenant(result.counterpart, {
+            event: 'chat:reaction_changed',
+            conversation_id,
+            message_id: messageId,
+            emoji,
+            count: result.count,
+            action: result.action,
+          });
+        }
+      } catch (_) {}
+
+      return { action: result.action, emoji, count: result.count };
     } catch (err) { return mapAccessDenied(err, reply); }
   });
 
