@@ -13,3 +13,4 @@
 - [Compatibilidade multi-módulo](feedback_multi_module.md) — Todo ajuste/bug/feature deve funcionar para human e veterinary; dúvida → questionar; nunca causar regressão
 - [Pipeline de Imagens Médicas](project_imaging_pipeline.md) — DICOM/JPG/PNG, Vision classifier, agentes por modalidade, bounding boxes, erros já corrigidos
 - [Histórico de stashes recuperados](project_stash_recovery_history.md) — Registro de stashes WIP, o que foi recuperado, o que não deve ser aplicado
+- [WebSocket em produção](feedback_websocket_prod.md) — WS URL DEVE incluir API_PREFIX em prod (ALB só roteia /api/*); emitir via Redis pub/sub, nunca notifyTenant direto — chat tem exemplo real de bug de 2026-04-24
