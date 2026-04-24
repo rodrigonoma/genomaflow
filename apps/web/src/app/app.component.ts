@@ -16,6 +16,7 @@ import { Observable, Subscription, filter } from 'rxjs';
 import { AuthService } from './core/auth/auth.service';
 import { ReviewQueueService } from './features/doctor/review-queue/review-queue.service';
 import { WsService } from './core/ws/ws.service';
+import { ChatService } from './features/chat-inter-tenant/chat.service';
 import { ChatPanelComponent } from './features/chat/chat-panel.component';
 import { ClinicProfileModalComponent } from './features/clinic/profile/clinic-profile-modal.component';
 import { QuickSearchComponent } from './shared/components/quick-search/quick-search.component';
@@ -268,6 +269,13 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
               }
             }
           </a>
+          <a class="nav-item" routerLink="/chat" routerLinkActive="active">
+            <mat-icon>forum</mat-icon>
+            <span>Chat entre clínicas</span>
+            @if (chatUnreadTotal() > 0) {
+              <span class="nav-badge">{{ chatUnreadTotal() > 99 ? '99+' : chatUnreadTotal() }}</span>
+            }
+          </a>
           <div class="nav-section-label" style="margin-top: 2rem">Suporte</div>
           <button class="nav-item" (click)="openFeedback('bug')">
             <mat-icon>bug_report</mat-icon> Reportar erro
@@ -349,6 +357,7 @@ export class AppComponent implements OnInit, OnDestroy {
   auth = inject(AuthService);
   reviewService = inject(ReviewQueueService);
   ws = inject(WsService);
+  chatService = inject(ChatService);
   snack = inject(MatSnackBar);
   dialog = inject(MatDialog);
   viewport = inject(ViewportService);
@@ -356,6 +365,7 @@ export class AppComponent implements OnInit, OnDestroy {
   reviewCount$: Observable<number> = this.reviewService.pendingCount$;
   chatOpen = false;
   drawerOpen = signal(false);
+  chatUnreadTotal = signal(0);
 
   private subs = new Subscription();
 
@@ -396,6 +406,22 @@ export class AppComponent implements OnInit, OnDestroy {
         );
       })
     );
+    // Chat unread badge no sidebar — agrega total via REST + mantém via WS
+    this.refreshChatUnread();
+    this.subs.add(this.ws.chatMessageReceived$.subscribe(() => this.refreshChatUnread()));
+    this.subs.add(this.ws.chatUnreadChange$.subscribe(() => this.refreshChatUnread()));
+    this.subs.add(this.ws.chatInvitationReceived$.subscribe(() => this.refreshChatUnread()));
+  }
+
+  private refreshChatUnread(): void {
+    if (!this.auth.currentUser || this.auth.currentUser.role !== 'admin') return;
+    this.chatService.listConversations().subscribe({
+      next: (res) => {
+        const total = res.results.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+        this.chatUnreadTotal.set(total);
+      },
+      error: () => {}
+    });
   }
 
   ngOnDestroy() { this.subs.unsubscribe(); }

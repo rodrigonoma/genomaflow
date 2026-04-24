@@ -16,6 +16,12 @@ export class WsService {
   billingExhausted$ = new Subject<void>();
   reconnect$        = new Subject<void>();
 
+  // Inter-tenant chat events
+  chatInvitationReceived$ = new Subject<{ invitation_id: string; from_tenant_id: string; from_tenant_name: string; message: string | null }>();
+  chatInvitationAccepted$ = new Subject<{ invitation_id: string; conversation_id: string; counterpart_tenant_name: string }>();
+  chatMessageReceived$    = new Subject<{ conversation_id: string; message_id: string; sender_tenant_id: string; body_preview: string; created_at: string }>();
+  chatUnreadChange$       = new Subject<{ conversation_id: string; delta?: number; absolute?: number }>();
+
   connect(token: string): void {
     this.disconnect();
     this.token = token;
@@ -47,6 +53,14 @@ export class WsService {
             this.billingAlert$.next({ balance: msg['balance'] as number });
           } else if (kind === 'billing:exhausted') {
             this.billingExhausted$.next();
+          } else if (kind === 'chat:invitation_received') {
+            this.chatInvitationReceived$.next(msg as any);
+          } else if (kind === 'chat:invitation_accepted') {
+            this.chatInvitationAccepted$.next(msg as any);
+          } else if (kind === 'chat:message_received') {
+            this.chatMessageReceived$.next(msg as any);
+          } else if (kind === 'chat:unread_change') {
+            this.chatUnreadChange$.next(msg as any);
           } else {
             this.examUpdates$.next(msg as { exam_id: string });
           }

@@ -59,7 +59,7 @@ module.exports = async function (fastify) {
     }
 
     try {
-      const msg = await withConversationAccess(fastify.pg, id, tenant_id, async (client) => {
+      const result = await withConversationAccess(fastify.pg, id, tenant_id, async (client, conv) => {
         const { rows } = await client.query(
           `INSERT INTO tenant_messages (conversation_id, sender_tenant_id, sender_user_id, body)
            VALUES ($1, $2, $3, $4)
@@ -70,9 +70,32 @@ module.exports = async function (fastify) {
           `UPDATE tenant_conversations SET last_message_at = NOW() WHERE id = $1`,
           [id]
         );
-        return rows[0];
+        const counterpart = conv.tenant_a_id === tenant_id ? conv.tenant_b_id : conv.tenant_a_id;
+        return { msg: rows[0], counterpart };
       });
-      return reply.status(201).send(msg);
+
+      // Notifica o counterpart via WS (best-effort)
+      try {
+        if (fastify.notifyTenant) {
+          const preview = result.msg.body.length > 120
+            ? result.msg.body.slice(0, 120) + '…' : result.msg.body;
+          fastify.notifyTenant(result.counterpart, {
+            event: 'chat:message_received',
+            conversation_id: id,
+            message_id: result.msg.id,
+            sender_tenant_id: tenant_id,
+            body_preview: preview,
+            created_at: result.msg.created_at,
+          });
+          fastify.notifyTenant(result.counterpart, {
+            event: 'chat:unread_change',
+            conversation_id: id,
+            delta: 1,
+          });
+        }
+      } catch (_) {}
+
+      return reply.status(201).send(result.msg);
     } catch (err) { return mapAccessDenied(err, reply); }
   });
 
