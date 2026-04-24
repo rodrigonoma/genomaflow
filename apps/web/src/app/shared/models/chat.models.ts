@@ -81,6 +81,12 @@ export interface MessageAttachment {
   created_at: string;
 }
 
+export interface MessageReaction {
+  emoji: string;
+  count: number;
+  reacted_by_me: boolean;
+}
+
 export interface InterTenantMessage {
   id: string;
   conversation_id: string;
@@ -90,7 +96,10 @@ export interface InterTenantMessage {
   has_attachment: boolean;
   created_at: string;
   attachments?: MessageAttachment[];
+  reactions?: MessageReaction[];
 }
+
+export const CHAT_ALLOWED_EMOJIS = ['👍', '❤️', '🤔', '✅', '🚨', '📌'];
 
 export interface ChatSearchResult {
   id: string;

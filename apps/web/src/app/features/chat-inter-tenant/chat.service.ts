@@ -78,6 +78,12 @@ export class ChatService {
   getAttachmentSignedUrl(attachmentId: string): Observable<{ url: string; expires_in: number }> {
     return this.http.get<{ url: string; expires_in: number }>(`${this.base}/attachments/${attachmentId}/url`);
   }
+
+  toggleReaction(messageId: string, emoji: string): Observable<{ action: 'added' | 'removed'; emoji: string; count: number }> {
+    return this.http.post<{ action: 'added' | 'removed'; emoji: string; count: number }>(
+      `${this.base}/messages/${messageId}/reactions`, { emoji }
+    );
+  }
   searchMessages(conversationId: string, q: string): Observable<Page<ChatSearchResult>> {
     return this.http.get<Page<ChatSearchResult>>(`${this.base}/conversations/${conversationId}/search`, { params: { q } });
   }
