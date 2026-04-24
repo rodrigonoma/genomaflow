@@ -14,12 +14,15 @@ import { InterTenantMessage, InterTenantConversation } from '../../shared/models
 import { AiAnalysisCardComponent } from './ai-analysis-card.component';
 import { AiAnalysisPickerComponent } from './ai-analysis-picker.component';
 import { PdfAttachmentCardComponent } from './pdf-attachment-card.component';
+import { ImageAttachmentCardComponent } from './image-attachment-card.component';
+import { ImageUploadConfirmComponent } from './image-upload-confirm.component';
 
 @Component({
   selector: 'app-thread',
   standalone: true,
   imports: [CommonModule, DatePipe, FormsModule, MatIconModule, MatButtonModule, MatTooltipModule,
-            MatDialogModule, MatSnackBarModule, AiAnalysisCardComponent, PdfAttachmentCardComponent],
+            MatDialogModule, MatSnackBarModule, AiAnalysisCardComponent,
+            PdfAttachmentCardComponent, ImageAttachmentCardComponent],
   styles: [`
     :host { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
     .header {
@@ -98,16 +101,23 @@ import { PdfAttachmentCardComponent } from './pdf-attachment-card.component';
               <app-ai-analysis-card [payload]="$any(att.payload)" />
             } @else if (att.kind === 'pdf') {
               <app-pdf-attachment-card [attachment]="att" />
+            } @else if (att.kind === 'image') {
+              <app-image-attachment-card [attachment]="att" />
             }
           }
         </div>
       }
     </div>
     <div class="input-row">
-      <input #fileInput type="file" accept="application/pdf" style="display:none"
+      <input #pdfInput type="file" accept="application/pdf" style="display:none"
              (change)="onPdfPicked($any($event.target))"/>
-      <button mat-icon-button class="attach-btn" (click)="fileInput.click()" matTooltip="Anexar PDF" [disabled]="sending">
+      <input #imgInput type="file" accept="image/png,image/jpeg" style="display:none"
+             (change)="onImagePicked($any($event.target))"/>
+      <button mat-icon-button class="attach-btn" (click)="pdfInput.click()" matTooltip="Anexar PDF" [disabled]="sending">
         <mat-icon>attach_file</mat-icon>
+      </button>
+      <button mat-icon-button class="attach-btn" (click)="imgInput.click()" matTooltip="Anexar imagem" [disabled]="sending">
+        <mat-icon>image</mat-icon>
       </button>
       <button mat-icon-button class="attach-btn" (click)="onAttachAiAnalysis()" matTooltip="Anexar análise IA" [disabled]="sending">
         <mat-icon>insights</mat-icon>
@@ -259,6 +269,67 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
       this.sending = false;
       this.snack.open('Erro ao ler o arquivo.', 'Fechar', { duration: 4000 });
     };
+    reader.readAsDataURL(file);
+  }
+
+  onImagePicked(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      this.snack.open('Apenas PNG ou JPG.', 'Fechar', { duration: 4000 });
+      input.value = '';
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      this.snack.open('Imagem excede 10MB.', 'Fechar', { duration: 4000 });
+      input.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(',')[1] || dataUrl;
+      const confirmRef = this.dialog.open(ImageUploadConfirmComponent, {
+        width: '560px',
+        panelClass: 'dark-dialog',
+        autoFocus: false,
+        data: {
+          filename: file.name,
+          mime_type: file.type,
+          data_url: dataUrl,
+          size_bytes: file.size,
+        }
+      });
+      confirmRef.afterClosed().subscribe((confirmed: boolean | undefined) => {
+        input.value = '';
+        if (!confirmed) return;
+        this.sending = true;
+        const body = this.draft.trim() || undefined;
+        this.chat.sendMessage(this.conversationId, {
+          body,
+          image: {
+            filename: file.name,
+            data_base64: base64,
+            mime_type: file.type as 'image/png' | 'image/jpeg',
+            user_confirmed_anonymized: true,
+          }
+        }).subscribe({
+          next: (msg) => {
+            this.messages.update(arr => [...arr, msg]);
+            this.draft = '';
+            this.sending = false;
+            this.shouldScroll = true;
+            this.snack.open('Imagem anexada.', '', { duration: 2500 });
+          },
+          error: (err) => {
+            this.sending = false;
+            this.snack.open(err.error?.error || 'Erro ao anexar imagem.', 'Fechar', { duration: 5000 });
+          }
+        });
+      });
+    };
+    reader.onerror = () => this.snack.open('Erro ao ler imagem.', 'Fechar', { duration: 4000 });
     reader.readAsDataURL(file);
   }
 

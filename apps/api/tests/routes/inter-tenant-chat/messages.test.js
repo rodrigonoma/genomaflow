@@ -147,6 +147,63 @@ describe('POST /messages — anexo ai_analysis_card', () => {
   });
 });
 
+describe('POST /messages — anexo image', () => {
+  it('400 se mime_type inválido', async () => {
+    const { a, conversationId } = await fixtures.createConversedPair(app);
+    const res = await supertest(app.server)
+      .post(`/inter-tenant-chat/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${a.token}`)
+      .send({
+        body: 'x',
+        image: {
+          filename: 'a.gif',
+          data_base64: 'R0lGODlhAQABAAAAACw=',
+          mime_type: 'image/gif',
+          user_confirmed_anonymized: true,
+        },
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it('400 sem user_confirmed_anonymized=true', async () => {
+    const { a, conversationId } = await fixtures.createConversedPair(app);
+    // tiny 1x1 PNG
+    const tinyPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+    const res = await supertest(app.server)
+      .post(`/inter-tenant-chat/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${a.token}`)
+      .send({
+        body: 'x',
+        image: {
+          filename: 'a.png',
+          data_base64: tinyPng.toString('base64'),
+          mime_type: 'image/png',
+          // user_confirmed_anonymized: missing
+        },
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/user_confirmed_anonymized|confirma/i);
+  });
+
+  it('400 se user_confirmed_anonymized for truthy mas não === true', async () => {
+    const { a, conversationId } = await fixtures.createConversedPair(app);
+    const tinyPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+    const res = await supertest(app.server)
+      .post(`/inter-tenant-chat/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${a.token}`)
+      .send({
+        body: 'x',
+        image: {
+          filename: 'a.png',
+          data_base64: tinyPng.toString('base64'),
+          mime_type: 'image/png',
+          user_confirmed_anonymized: 'sim',  // truthy mas não === true
+        },
+      });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('GET /inter-tenant-chat/conversations/:id/messages', () => {
   it('lista mensagens mais recentes primeiro', async () => {
     const { a, b, conversationId } = await fixtures.createConversedPair(app);

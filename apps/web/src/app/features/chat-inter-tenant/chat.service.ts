@@ -69,6 +69,7 @@ export class ChatService {
       body?: string;
       ai_analysis_card?: { exam_id: string; agent_types: string[] };
       pdf?: { filename: string; data_base64: string; mime_type: string };
+      image?: { filename: string; data_base64: string; mime_type: string; user_confirmed_anonymized: true };
     }
   ): Observable<InterTenantMessage> {
     return this.http.post<InterTenantMessage>(`${this.base}/conversations/${conversationId}/messages`, payload);
