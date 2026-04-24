@@ -1,5 +1,8 @@
+const crypto = require('crypto');
 const { withConversationAccess, ConversationAccessDeniedError } = require('../../db/conversation');
 const { anonymizeAiAnalysis } = require('./anonymize');
+const { extractPdfText, checkPii } = require('./pii');
+const { uploadFile, getSignedDownloadUrl } = require('../../storage/s3');
 
 const ADMIN_ONLY = async function (request, reply) {
   if (request.user.role !== 'admin') {
@@ -57,12 +60,11 @@ module.exports = async function (fastify) {
   }, async (request, reply) => {
     const { tenant_id, user_id } = request.user;
     const { id } = request.params;
-    const { body, ai_analysis_card } = request.body || {};
+    const { body, ai_analysis_card, pdf } = request.body || {};
 
     const bodyTrim = typeof body === 'string' ? body.trim() : '';
 
-    // precisa de body OU anexo
-    if (!bodyTrim && !ai_analysis_card) {
+    if (!bodyTrim && !ai_analysis_card && !pdf) {
       return reply.status(400).send({ error: 'body ou attachment obrigatório' });
     }
     if (bodyTrim.length > 5000) {
@@ -77,6 +79,59 @@ module.exports = async function (fastify) {
       if (!Array.isArray(agent_types) || agent_types.length === 0) {
         return reply.status(400).send({ error: 'ai_analysis_card.agent_types deve ser array não-vazio' });
       }
+    }
+
+    if (pdf) {
+      if (typeof pdf !== 'object') return reply.status(400).send({ error: 'pdf inválido' });
+      if (!pdf.filename || typeof pdf.filename !== 'string') return reply.status(400).send({ error: 'pdf.filename obrigatório' });
+      if (!pdf.data_base64 || typeof pdf.data_base64 !== 'string') return reply.status(400).send({ error: 'pdf.data_base64 obrigatório' });
+      if (pdf.mime_type && pdf.mime_type !== 'application/pdf') {
+        return reply.status(400).send({ error: 'somente PDF suportado nesta fase' });
+      }
+    }
+
+    // Processa o PDF ANTES da transação — PII check + upload S3 são operações
+    // caras e não devem acontecer dentro da tx. Se falhar, nada muda no banco.
+    let pdfStaged = null;
+    if (pdf) {
+      let buffer;
+      try {
+        buffer = Buffer.from(pdf.data_base64, 'base64');
+      } catch (_) {
+        return reply.status(400).send({ error: 'pdf.data_base64 inválido' });
+      }
+      if (buffer.length === 0) return reply.status(400).send({ error: 'pdf vazio' });
+      if (buffer.length > 10 * 1024 * 1024) return reply.status(400).send({ error: 'PDF excede 10MB' });
+
+      const text = await extractPdfText(buffer);
+      const piiResult = await checkPii(text);
+
+      if (piiResult.has_pii) {
+        return reply.status(400).send({
+          error: 'PDF contém dados pessoais — remova antes de anexar.',
+          detected_kinds: piiResult.detected_kinds,
+          region_count: piiResult.region_count,
+        });
+      }
+
+      // Upload S3 (fora da tx)
+      const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+      const safeFilename = pdf.filename.replace(/[^\w.-]/g, '_').slice(0, 100);
+      const s3key = `inter-tenant-chat/${id}/${Date.now()}-${hash.slice(0, 8)}-${safeFilename}`;
+      try {
+        await uploadFile(s3key, buffer, 'application/pdf');
+      } catch (err) {
+        request.log?.error({ err }, 'S3 upload failed');
+        return reply.status(503).send({ error: 'Falha no upload do PDF. Tente novamente.' });
+      }
+
+      pdfStaged = {
+        s3_key: s3key,
+        filename: pdf.filename,
+        size_bytes: buffer.length,
+        hash,
+        pii_result: piiResult,
+      };
     }
 
     try {
@@ -122,15 +177,16 @@ module.exports = async function (fastify) {
         }
 
         // 2. insere mensagem (body pode ser '' se só anexo)
+        const hasAttachment = !!attachmentPayload || !!pdfStaged;
         const { rows: msgRows } = await client.query(
           `INSERT INTO tenant_messages (conversation_id, sender_tenant_id, sender_user_id, body, has_attachment)
            VALUES ($1, $2, $3, $4, $5)
            RETURNING id, conversation_id, sender_tenant_id, sender_user_id, body, has_attachment, created_at`,
-          [id, tenant_id, user_id, bodyTrim, !!attachmentPayload]
+          [id, tenant_id, user_id, bodyTrim, hasAttachment]
         );
         const msg = msgRows[0];
 
-        let attachment = null;
+        const attachments = [];
         if (attachmentPayload) {
           const { rows: attRows } = await client.query(
             `INSERT INTO tenant_message_attachments (message_id, kind, payload)
@@ -138,7 +194,25 @@ module.exports = async function (fastify) {
              RETURNING id, kind, payload, created_at`,
             [msg.id, JSON.stringify(attachmentPayload)]
           );
-          attachment = attRows[0];
+          attachments.push(attRows[0]);
+        }
+        if (pdfStaged) {
+          const { rows: pdfRows } = await client.query(
+            `INSERT INTO tenant_message_attachments
+              (message_id, kind, s3_key, payload, original_size_bytes, redacted_hash)
+             VALUES ($1, 'pdf', $2, $3::jsonb, $4, $5)
+             RETURNING id, kind, s3_key, payload, original_size_bytes, created_at`,
+            [msg.id, pdfStaged.s3_key, JSON.stringify({ filename: pdfStaged.filename }),
+             pdfStaged.size_bytes, pdfStaged.hash]
+          );
+          attachments.push(pdfRows[0]);
+
+          // Audit PII check (status=clean porque chegamos aqui)
+          await client.query(
+            `INSERT INTO tenant_message_pii_checks (attachment_id, detected_kinds, region_count, status, confirmed_by_user_id)
+             VALUES ($1, $2, $3, 'clean', $4)`,
+            [pdfRows[0].id, pdfStaged.pii_result.detected_kinds, pdfStaged.pii_result.region_count, user_id]
+          );
         }
 
         await client.query(
@@ -146,15 +220,23 @@ module.exports = async function (fastify) {
           [id]
         );
         const counterpart = conv.tenant_a_id === tenant_id ? conv.tenant_b_id : conv.tenant_a_id;
-        return { msg, attachment, counterpart };
+        return { msg, attachments, counterpart };
       });
 
       // Notifica counterpart via WS (best-effort)
       try {
         if (fastify.notifyTenant) {
-          const preview = result.msg.body
-            ? (result.msg.body.length > 120 ? result.msg.body.slice(0, 120) + '…' : result.msg.body)
-            : (result.attachment ? '[análise IA anexada]' : '');
+          const attachmentTypes = (result.attachments || []).map(a => a.kind);
+          let preview;
+          if (result.msg.body) {
+            preview = result.msg.body.length > 120 ? result.msg.body.slice(0, 120) + '…' : result.msg.body;
+          } else if (attachmentTypes.includes('pdf')) {
+            preview = '[PDF anexado]';
+          } else if (attachmentTypes.includes('ai_analysis_card')) {
+            preview = '[análise IA anexada]';
+          } else {
+            preview = '';
+          }
           fastify.notifyTenant(result.counterpart, {
             event: 'chat:message_received',
             conversation_id: id,
@@ -173,7 +255,7 @@ module.exports = async function (fastify) {
 
       return reply.status(201).send({
         ...result.msg,
-        attachments: result.attachment ? [result.attachment] : [],
+        attachments: result.attachments || [],
       });
     } catch (err) {
       if (err instanceof ConversationAccessDeniedError) return mapAccessDenied(err, reply);
@@ -181,6 +263,30 @@ module.exports = async function (fastify) {
       if (err.code === 'SUBJECT_NOT_FOUND') return reply.status(404).send({ error: 'Paciente do exame não encontrado.' });
       if (err.code === 'NO_RESULTS') return reply.status(400).send({ error: 'Nenhum resultado de análise IA para os agent_types selecionados.' });
       throw err;
+    }
+  });
+
+  // GET /attachments/:id/url — signed download URL (1h TTL)
+  fastify.get('/attachments/:id/url', { preHandler: [fastify.authenticate, ADMIN_ONLY] }, async (request, reply) => {
+    const { tenant_id } = request.user;
+    const { id } = request.params;
+    const { rows } = await fastify.pg.query(
+      `SELECT a.s3_key, a.kind
+       FROM tenant_message_attachments a
+       JOIN tenant_messages m ON m.id = a.message_id
+       JOIN tenant_conversations c ON c.id = m.conversation_id
+       WHERE a.id = $1
+         AND a.s3_key IS NOT NULL
+         AND (c.tenant_a_id = $2 OR c.tenant_b_id = $2)`,
+      [id, tenant_id]
+    );
+    if (rows.length === 0) return reply.status(404).send({ error: 'Anexo não encontrado.' });
+    try {
+      const url = await getSignedDownloadUrl(rows[0].s3_key, 3600);
+      return { url, expires_in: 3600 };
+    } catch (err) {
+      request.log?.error({ err }, 'signed url failed');
+      return reply.status(503).send({ error: 'Falha ao gerar URL de download.' });
     }
   });
 

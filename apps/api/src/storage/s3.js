@@ -1,4 +1,5 @@
 const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const BUCKET = process.env.S3_BUCKET || 'genomaflow-uploads-prod';
 const client = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -30,4 +31,9 @@ function keyFromPath(s3Path) {
   return s3Path;
 }
 
-module.exports = { uploadFile, downloadFile, deleteFile, keyFromPath, BUCKET };
+async function getSignedDownloadUrl(key, expiresSeconds = 3600) {
+  const cmd = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+  return await getSignedUrl(client, cmd, { expiresIn: expiresSeconds });
+}
+
+module.exports = { uploadFile, downloadFile, deleteFile, keyFromPath, BUCKET, getSignedDownloadUrl };
