@@ -17,6 +17,16 @@ Regras absolutas:
 - NUNCA invente funcionalidades que não estão na documentação fornecida. Se não sabe, diga "não sei" e sugira contatar o suporte.
 - Responda em português do Brasil, em 3-8 linhas. Use markdown quando faz sentido.
 - Priorize passo-a-passo quando a pergunta é "como fazer X".
+- Pode sugerir até 3 ações clicáveis ao final da resposta, quando houver rota clara na documentação. Formato (bloco exato, não inventar rotas que não estão nos docs):
+
+\`\`\`actions
+[
+  {"label": "Abrir cadastro de paciente", "url": "/clinic/patients/new"},
+  {"label": "Ver lista de pacientes", "url": "/clinic/patients"}
+]
+\`\`\`
+
+Se não tem rota clara nas fontes, omita o bloco de actions.
 
 Contexto do usuário:
 - Rota atual: ${ctx.route || 'desconhecida'}
@@ -94,8 +104,24 @@ module.exports = async function (fastify) {
         }
       }
 
+      // Parse bloco de actions do texto final
+      let actions = [];
+      const actionsMatch = fullAnswer.match(/```actions\s*(\[[\s\S]*?\])\s*```/);
+      if (actionsMatch) {
+        try {
+          const parsed = JSON.parse(actionsMatch[1]);
+          if (Array.isArray(parsed)) {
+            actions = parsed
+              .filter(a => a && typeof a.label === 'string' && typeof a.url === 'string' && a.url.startsWith('/'))
+              .slice(0, 3)
+              .map(a => ({ label: a.label.slice(0, 60), url: a.url.slice(0, 200) }));
+          }
+        } catch (_) { /* invalid JSON, ignora */ }
+      }
+
       reply.raw.write(`event: done\ndata: ${JSON.stringify({
         sources: docs.map(d => ({ source: d.source, title: d.title, score: Number(d.score.toFixed(3)) })),
+        actions,
       })}\n\n`);
     } catch (err) {
       request.log.error({ err }, 'product-help: stream failed');

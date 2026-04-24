@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, OnDestroy, signal } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy, signal, effect } from '@angular/core';
 import { ViewportService } from './core/viewport/viewport.service';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
 import { AsyncPipe, NgIf } from '@angular/common';
@@ -19,6 +19,7 @@ import { WsService } from './core/ws/ws.service';
 import { ChatService } from './features/chat-inter-tenant/chat.service';
 import { ChatPanelComponent } from './features/chat/chat-panel.component';
 import { ProductHelpPanelComponent } from './features/product-help/product-help-panel.component';
+import { HesitationDetectorService } from './core/help-context/hesitation-detector.service';
 import { ClinicProfileModalComponent } from './features/clinic/profile/clinic-profile-modal.component';
 import { QuickSearchComponent } from './shared/components/quick-search/quick-search.component';
 
@@ -383,11 +384,22 @@ export class AppComponent implements OnInit, OnDestroy {
   toggleDrawer(): void { this.drawerOpen.update(v => !v); }
   closeDrawer(): void { this.drawerOpen.set(false); }
 
+  private hesitation = inject(HesitationDetectorService);
+
   constructor() {
     // Fecha o drawer ao navegar para qualquer rota (UX mobile padrão)
     this.router.events.pipe(filter(e => e instanceof NavigationEnd)).subscribe(() => {
       if (this.drawerOpen()) this.drawerOpen.set(false);
     });
+
+    // Copilot proativo: detecta hesitação (A→B→A→B em 15s) e oferece ajuda
+    effect(() => {
+      const hint = this.hesitation.hintTrigger();
+      if (!hint || this.helpOpen) return;
+      const ref = this.snack.open('Precisa de ajuda nessa tela?', 'ABRIR COPILOT', { duration: 8000 });
+      ref.onAction().subscribe(() => { this.helpOpen = true; });
+      ref.afterDismissed().subscribe(() => this.hesitation.clearHint());
+    }, { allowSignalWrites: true });
   }
 
   ngOnInit() {

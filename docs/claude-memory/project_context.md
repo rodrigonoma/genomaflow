@@ -99,6 +99,19 @@ authGuard → termsGuard → professionalInfoGuard → rota
 
 ---
 
+## Copilot de ajuda de produto (entregue 2026-04-24)
+
+Ajuda contextual in-app via AI (Haiku 4.5) com RAG sobre `docs/superpowers/plans`, `docs/superpowers/specs`, `docs/claude-memory`, e `CLAUDE.md`.
+
+- **Schema:** `rag_documents.namespace` (`clinical_guideline` vs `product_help`) + tabela `help_questions` (analytics).
+- **Backend:** `POST /api/product-help/ask` com SSE streaming. Rate-limit 30/h/user. Sem dado clínico no contexto (só rota + componente + role + módulo). System prompt bloqueia perguntas clínicas e redireciona pro chatbot médico existente.
+- **Frontend:** botão `help_outline` no topbar (ao lado do `smart_toy` clínico — UIs e namespaces completamente separados); `ProductHelpPanelComponent` é side panel com streaming visível + botões de ação clicáveis + exibição de fontes.
+- **Master panel** ganhou aba "Ajuda" com top rotas (revela UX ruim) + últimas 100 perguntas.
+- **Hesitation detector** (`HesitationDetectorService`) detecta padrão A→B→A→B em <15s e oferece snackbar "ABRIR COPILOT" proativamente.
+- **Reindex** via `apps/worker/src/rag/reindex-product-help.js` (manual por enquanto; CI com skip-if-missing task def, criar infra depois).
+
+**Não confundir:** chatbot clínico (`smart_toy`) usa `chat_embeddings` + diretrizes médicas, cobra créditos. Copilot de ajuda usa `rag_documents` com namespace novo, gratuito.
+
 ## ICP e Filosofia
 
 **ICP:** Clínicas de médio porte no Brasil. Médico é dono do negócio e usuário direto.
