@@ -31,9 +31,13 @@ export class AuthService {
         const payload = this.decode(token);
         this.currentUserSubject.next(payload);
         this.ws.connect(token);
+        // Hidrata o profile do cache imediatamente — evita flicker do chip no F5.
+        const cached = this.readCachedProfile();
+        if (cached) this.currentProfileSubject.next(cached);
         if (payload.role !== 'master') this.fetchProfile();
       } catch {
         localStorage.removeItem('token');
+        localStorage.removeItem('profile');
       }
     }
   }
@@ -69,6 +73,7 @@ export class AuthService {
    */
   resetSession(): void {
     localStorage.removeItem('token');
+    localStorage.removeItem('profile');
     try { this.ws.disconnect(); } catch {}
     this.currentUserSubject.next(null);
     this.currentProfileSubject.next(null);
@@ -92,9 +97,19 @@ export class AuthService {
    */
   private fetchProfile(): void {
     this.http.get<UserProfile>(`${environment.apiUrl}/auth/me`).subscribe({
-      next: (profile) => this.currentProfileSubject.next(profile),
+      next: (profile) => {
+        this.currentProfileSubject.next(profile);
+        try { localStorage.setItem('profile', JSON.stringify(profile)); } catch {}
+      },
       error: () => { /* silencioso */ }
     });
+  }
+
+  private readCachedProfile(): UserProfile | null {
+    try {
+      const raw = localStorage.getItem('profile');
+      return raw ? JSON.parse(raw) as UserProfile : null;
+    } catch { return null; }
   }
 
   private decode(token: string): JwtPayload {
