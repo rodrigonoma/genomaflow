@@ -5,7 +5,34 @@ on:
     branches: [main]
 
 jobs:
+  test:
+    name: Unit tests (gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Roda só testes unitários (sem DB) — falha bloqueia deploy.
+      # Testes que precisam de Postgres/Redis vivos rodam localmente / em
+      # ambiente dedicado; aqui o objetivo é rede de segurança barata e
+      # rápida pra regressões puras de lógica.
+      - name: API — install + unit tests
+        working-directory: apps/api
+        run: |
+          npm ci --no-audit --no-fund
+          npm run test:unit
+
+      - name: Worker — install + unit tests
+        working-directory: apps/worker
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     environment: production
 

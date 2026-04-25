@@ -27,23 +27,23 @@ const ctx = {
 
 describe('runMetabolicAgent', () => {
   it('returns interpretation string', async () => {
-    const result = await runMetabolicAgent(ctx);
+    const { result } = await runMetabolicAgent(ctx);
     expect(typeof result.interpretation).toBe('string');
     expect(result.interpretation.length).toBeGreaterThan(0);
   });
 
   it('returns risk_scores object', async () => {
-    const result = await runMetabolicAgent(ctx);
+    const { result } = await runMetabolicAgent(ctx);
     expect(typeof result.risk_scores).toBe('object');
   });
 
   it('returns alerts array', async () => {
-    const result = await runMetabolicAgent(ctx);
+    const { result } = await runMetabolicAgent(ctx);
     expect(Array.isArray(result.alerts)).toBe(true);
   });
 
   it('always sets the mandatory disclaimer', async () => {
-    const result = await runMetabolicAgent(ctx);
+    const { result } = await runMetabolicAgent(ctx);
     expect(result.disclaimer).toContain('não substitui avaliação médica');
   });
 });

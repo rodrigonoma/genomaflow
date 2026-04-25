@@ -259,4 +259,9 @@ async function redactPiiInTextLayerPdf(pdfBuffer) {
   };
 }
 
-module.exports = { redactPiiInTextLayerPdf, MIN_CHARS_PER_PAGE_FOR_TEXT_LAYER };
+module.exports = {
+  redactPiiInTextLayerPdf,
+  MIN_CHARS_PER_PAGE_FOR_TEXT_LAYER,
+  // Exportados pra teste — funções puras sem side effects
+  _internals: { classifyByRegexInItems, PII_PATTERNS },
+};
