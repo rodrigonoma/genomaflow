@@ -31,6 +31,12 @@ jobs:
           npm ci --no-audit --no-fund
           npm test
 
+      - name: Web — install + unit tests
+        working-directory: apps/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+
   deploy:
     needs: test
     runs-on: ubuntu-latest
