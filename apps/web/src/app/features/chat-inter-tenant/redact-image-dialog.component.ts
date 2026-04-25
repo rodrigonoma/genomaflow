@@ -48,14 +48,16 @@ type Phase = 'loading' | 'ready' | 'error';
   standalone: true,
   imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule, MatCheckboxModule, FormsModule],
   styles: [`
-    :host { display:block; color:#dae2fd; }
-    .header { display:flex; align-items:center; justify-content:space-between; padding:1.25rem 1.5rem 0.5rem; }
+    /* Modal compact que sempre cabe na viewport: header + subtitle fixos topo,
+       body com scroll interno, footer fixo no rodapé. */
+    :host { display:flex; flex-direction:column; max-height:90vh; color:#dae2fd; }
+    .header { display:flex; align-items:center; justify-content:space-between; padding:1.25rem 1.5rem 0.5rem; flex-shrink:0; }
     .header h2 { font-family:'Space Grotesk',sans-serif; font-size:1.0625rem; font-weight:700; margin:0; color:#c0c1ff; }
-    .subtitle { padding:0 1.5rem 0.75rem; font-family:'JetBrains Mono',monospace; font-size:10px; color:#908fa0; letter-spacing:0.08em; text-transform:uppercase; }
-    .body { padding:0 1.5rem 1rem; display:flex; flex-direction:column; gap:0.875rem; }
+    .subtitle { padding:0 1.5rem 0.75rem; font-family:'JetBrains Mono',monospace; font-size:10px; color:#908fa0; letter-spacing:0.08em; text-transform:uppercase; flex-shrink:0; }
+    .body { padding:0 1.5rem 1rem; display:flex; flex-direction:column; gap:0.875rem; overflow-y:auto; flex:1; min-height:0; }
     .canvas-wrap {
       position:relative; background:#000; border:1px solid rgba(70,69,84,0.3); border-radius:6px;
-      overflow:auto; max-height:60vh; user-select:none;
+      overflow:auto; max-height:50vh; user-select:none;
     }
     canvas { display:block; cursor:crosshair; max-width:100%; }
     .instructions {
@@ -73,12 +75,17 @@ type Phase = 'loading' | 'ready' | 'error';
       padding:0.625rem 0.75rem; border-radius:5px; line-height:1.45;
     }
     .confirm-row { display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0; }
+    /* Material no fundo escuro: força label/texto do checkbox legível */
+    .confirm-row ::ng-deep .mdc-form-field,
+    .confirm-row ::ng-deep .mdc-form-field > label,
+    .confirm-row ::ng-deep .mdc-label { color:#dae2fd !important; font-size:0.8125rem; }
     .loading {
       text-align:center; padding:3rem 1rem; color:#908fa0; font-family:'JetBrains Mono',monospace; font-size:0.8125rem;
     }
     .footer {
       display:flex; justify-content:space-between; align-items:center;
       padding:0.875rem 1.5rem; border-top:1px solid rgba(70,69,84,0.2);
+      flex-shrink:0; background:#0b1326;
     }
     .footer-left { font-size:0.75rem; color:#7c7b8f; font-family:'JetBrains Mono',monospace; }
     .footer-buttons { display:flex; gap:0.625rem; }
