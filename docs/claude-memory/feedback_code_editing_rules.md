@@ -1,6 +1,6 @@
 ---
 name: Regras de edição de código — lições de abril/2026
-description: Write proibido, stash proibido, sem vibe coding, sem afirmações sem verificar, signals reativos no Angular, uma concern por branch, smoke test antes de aprovar
+description: Write proibido, stash proibido, sem vibe coding, sem afirmações sem verificar, signals reativos no Angular, uma concern por branch, smoke test antes de aprovar, protocolo de higienização (verificar stash + branches fora da main)
 type: feedback
 ---
 **Write é proibido em arquivos existentes.** Usar sempre Edit cirúrgico.
@@ -86,3 +86,26 @@ type: feedback
 4. UI deve mostrar tenant_name + módulo em local sempre visível (topbar). Incidente mostrou que confusão visual do usuário gera falsos reports de vazamento.
 5. Ao navegar para `/onboarding`, limpar sessão ativa (JWT antigo não pode persistir quando se cria novo tenant).
 6. Em PR que toca tabela com RLS, revisor deve verificar: filtro explícito de tenant_id + parametrização + teste com dois tenants.
+
+---
+
+**Higienização (quando usuário pedir): protocolo obrigatório.**
+
+Quando o usuário pedir para "higienizar", "fazer limpeza" ou similar no contexto do repo, **executar nesta ordem antes de qualquer ação**:
+
+1. **`git stash list`** — verificar se há stashes presos. Stashes são proibidos no projeto (ver regra acima), mas se houver:
+   - Inspecionar com `git stash show -p stash@{N}` para entender o conteúdo
+   - **Resolver da maneira correta**: aplicar (`git stash pop`) na branch certa, criar commit `WIP:` apropriado e push, **nunca** descartar (`git stash drop`) sem confirmação explícita do usuário
+   - Se o stash parecer código já obsoleto comparado à main, perguntar antes de descartar
+2. **`git log --all --oneline | grep -iE "wip|stash"`** — verificar commits WIP esquecidos em branches que nunca foram mergeadas
+3. **`git branch --no-merged main`** (local) e **`git branch -r --no-merged main`** (remoto) — verificar branches que nunca chegaram em main:
+   - Para cada uma: olhar último commit (`git log -1 <branch>`), entender se é trabalho ainda relevante ou abandonado
+   - Trabalho abandonado mas não-trivial → criar issue/spec antes de deletar
+   - Trabalho ainda em andamento → apenas notificar e deixar como está
+   - Trabalho já reaplicado em outro lugar → confirmar com usuário antes de deletar
+4. **Branches já mergeadas em main** — manter por padrão (servem de bookmark do PR). Só deletar se usuário pedir explicitamente
+
+**Why:** Em 2026-04-21, código válido (`412fe26d`, `b559156a`) ficou enterrado em stashes que ninguém verificava. A regra "stash proibido" cobre o futuro mas não pega lixo histórico — higienização é o momento de varrer. Branches abandonadas fora da main também escondem trabalho perdido.
+
+**How to apply:** Apresentar relatório do estado encontrado + propor ações específicas por item. Esperar OK do usuário antes de qualquer `stash drop` ou `branch -D`. Documentar no chat o que foi feito (próxima sessão herda o contexto).
+
