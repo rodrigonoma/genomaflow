@@ -167,8 +167,8 @@ jobs:
         run: |
           CLUSTER="genomaflow"
 
-          # Detectar mudanças em docs/ ou CLAUDE.md neste push
-          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -E "^(docs/|CLAUDE\.md)" | head -5 || true)
+          # Detectar mudanças em docs/, CLAUDE.md, ou no próprio indexer neste push
+          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -E "^(docs/|CLAUDE\.md|apps/worker/src/rag/)" | head -5 || true)
           if [ -z "$CHANGED" ]; then
             echo "Sem mudanças em docs/ — skip reindex"
             exit 0
