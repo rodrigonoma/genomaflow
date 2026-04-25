@@ -7,7 +7,7 @@
     "migrate": "node src/db/migrate.js",
     "seed:rag": "node src/db/seed-rag.js",
     "test": "jest --runInBand",
-    "test:unit": "jest --runInBand tests/imaging tests/services tests/routes/inter-tenant-chat/anonymize.test.js tests/routes/inter-tenant-chat/pii.test.js"
+    "test:unit": "jest --runInBand tests/imaging tests/services tests/security tests/routes/inter-tenant-chat/anonymize.test.js tests/routes/inter-tenant-chat/pii.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
