@@ -99,4 +99,75 @@ describe('anonymizeAiAnalysis', () => {
     expect(out.results[0].alerts[0].severity).toBe('high');
     expect(out.results[0].recommendations[0].type).toBe('medication');
   });
+
+  // Allowlist de chaves do subject anonimizado — guarda contra regressão se alguém
+  // adicionar novo campo PII no subject (ex: email, phone2, address) e esquecer
+  // de excluir aqui. Whitelist explícita = vazamento exige modificação consciente.
+  it('subject anonimizado human só tem chaves seguras', () => {
+    const exam = { tenant_id: 't1', created_at: '2026-01-01' };
+    const subject = {
+      id: 's1', name: 'X', cpf_hash: 'h', phone: '99', email: 'a@b.c',
+      address: 'Rua', subject_type: 'human', birth_date: null, sex: 'F',
+    };
+    const out = anonymizeAiAnalysis({ exam, subject, results: [] });
+    expect(Object.keys(out.subject).sort()).toEqual(['age_range', 'sex', 'subject_type'].sort());
+  });
+
+  it('subject anonimizado vet só tem chaves seguras', () => {
+    const exam = { tenant_id: 't1', created_at: '2026-01-01' };
+    const subject = {
+      id: 's1', name: 'Rex', microchip: 'X', owner_cpf_hash: 'h',
+      owner_name: 'Joana', owner_email: 'j@x.com',
+      subject_type: 'animal', species: 'dog', breed: 'sp', weight: 10,
+      birth_date: null, sex: 'M',
+    };
+    const out = anonymizeAiAnalysis({ exam, subject, results: [] });
+    expect(Object.keys(out.subject).sort()).toEqual(
+      ['age_range', 'breed', 'sex', 'species', 'subject_type', 'weight_kg'].sort()
+    );
+  });
+
+  it('output do top-level só expõe chaves anonimizadas (não vaza exam.id, subject.id)', () => {
+    const exam = { id: 'EXAM_ID_LEAKY', tenant_id: 't1', created_at: '2026-01-01' };
+    const subject = { id: 'SUBJ_ID_LEAKY', subject_type: 'human', sex: 'F', birth_date: null };
+    const out = anonymizeAiAnalysis({ exam, subject, results: [] });
+    // exam.id NÃO deve estar em nenhum lugar do output (subject_id é o que pode reidentificar)
+    const json = JSON.stringify(out);
+    expect(json).not.toContain('EXAM_ID_LEAKY');
+    expect(json).not.toContain('SUBJ_ID_LEAKY');
+  });
+
+  it('results=null/undefined não joga — tratado como vazio', () => {
+    const exam = { tenant_id: 't1', created_at: '2026-01-01' };
+    const subject = { subject_type: 'human', sex: 'F', birth_date: null };
+    expect(() => anonymizeAiAnalysis({ exam, subject, results: null })).not.toThrow();
+    expect(() => anonymizeAiAnalysis({ exam, subject, results: undefined })).not.toThrow();
+    const out = anonymizeAiAnalysis({ exam, subject, results: null });
+    expect(out.results).toEqual([]);
+  });
+
+  it('vet sem species/breed/weight retorna null nos campos correspondentes', () => {
+    const exam = { tenant_id: 't1', created_at: '2026-01-01' };
+    const subject = { subject_type: 'animal', sex: 'F', birth_date: null };
+    const out = anonymizeAiAnalysis({ exam, subject, results: [] });
+    expect(out.subject.species).toBeNull();
+    expect(out.subject.breed).toBeNull();
+    expect(out.subject.weight_kg).toBeNull();
+  });
+});
+
+describe('ageRange — boundary cases', () => {
+  it('exatamente 0 anos (recém-nascido) → 0-10', () => {
+    const d = new Date();
+    expect(ageRange(d.toISOString())).toBe('0-10');
+  });
+
+  it('birth_date no futuro → null (defesa contra dado inválido)', () => {
+    const d = new Date(); d.setFullYear(d.getFullYear() + 5);
+    expect(ageRange(d.toISOString())).toBeNull();
+  });
+
+  it('birth_date inválido (string lixo) → null', () => {
+    expect(ageRange('not-a-date')).toBeNull();
+  });
 });
