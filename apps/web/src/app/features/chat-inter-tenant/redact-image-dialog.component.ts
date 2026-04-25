@@ -1,4 +1,4 @@
-import { Component, ElementRef, ViewChild, inject, signal, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, ElementRef, ViewChild, inject, signal, AfterViewInit, AfterViewChecked, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { MatDialogRef, MatDialogModule, MAT_DIALOG_DATA } from '@angular/material/dialog';
@@ -148,7 +148,7 @@ type Phase = 'loading' | 'ready' | 'error';
     </div>
   `,
 })
-export class RedactImageDialogComponent implements AfterViewInit, OnDestroy {
+export class RedactImageDialogComponent implements AfterViewInit, AfterViewChecked, OnDestroy {
   @ViewChild('canvas') canvasRef?: ElementRef<HTMLCanvasElement>;
 
   private http = inject(HttpClient);
@@ -159,6 +159,7 @@ export class RedactImageDialogComponent implements AfterViewInit, OnDestroy {
   errorMsg = signal('');
   engine   = signal('');
   confirmed = false;
+  private hasDrawn = false;
 
   // Regiões no sistema de coordenadas da imagem original (não do canvas)
   private autoRegions: Region[] = [];       // do backend
@@ -180,6 +181,15 @@ export class RedactImageDialogComponent implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     this.callBackend();
+  }
+
+  ngAfterViewChecked(): void {
+    // Rede de segurança: se phase virou 'ready' mas o canvas nasceu depois e
+    // o setTimeout do loadImage rodou antes do ViewChild atualizar, redesenha aqui.
+    if (this.phase() === 'ready' && this.imgEl && this.canvasRef && !this.hasDrawn) {
+      this.redraw();
+      this.hasDrawn = true;
+    }
   }
 
   ngOnDestroy(): void {}
@@ -234,9 +244,10 @@ export class RedactImageDialogComponent implements AfterViewInit, OnDestroy {
       this.imgEl = img;
       this.imgWidth = img.naturalWidth || this.imgWidth;
       this.imgHeight = img.naturalHeight || this.imgHeight;
+      this.hasDrawn = false;        // força re-draw via ngAfterViewChecked
       this.phase.set('ready');
-      // Espera Angular renderizar o canvas
-      setTimeout(() => this.redraw(), 0);
+      // requestAnimationFrame garante que o paint da template (canvas no DOM) já rodou
+      requestAnimationFrame(() => this.redraw());
     };
     img.onerror = () => {
       this.errorMsg.set('Não foi possível carregar a imagem.');
@@ -248,8 +259,12 @@ export class RedactImageDialogComponent implements AfterViewInit, OnDestroy {
   private redraw() {
     if (!this.canvasRef || !this.imgEl) return;
     const c = this.canvasRef.nativeElement;
-    c.width = this.imgWidth;
-    c.height = this.imgHeight;
+    // Defesa: se imgWidth/imgHeight não chegaram (Sharp fail), usa naturalWidth/Height da img como fallback
+    const w = this.imgWidth || this.imgEl.naturalWidth || 0;
+    const h = this.imgHeight || this.imgEl.naturalHeight || 0;
+    if (w === 0 || h === 0) return;
+    c.width = w;
+    c.height = h;
     const ctx = c.getContext('2d');
     if (!ctx) return;
 
