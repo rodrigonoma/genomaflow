@@ -1,6 +1,6 @@
 ---
 name: GenomaFlow Project Context
-description: Frontend + backend em produção — stack, arquitetura, estado atual (atualizado 2026-04-25)
+description: Frontend + backend em produção — stack, arquitetura, estado atual (atualizado 2026-04-25 — pós CI test gate)
 type: project
 ---
 
@@ -146,6 +146,20 @@ Comunicação 1:1 admin↔admin entre tenants do mesmo módulo (human↔human, v
   - **Imagens** (canvas editor): exporta JPEG q=0.85 (não PNG) → reduz upload típico 3MB→300KB
   - V1.5 (rasterização via pdf-to-png-converter + Tesseract por página) **removida** — era 100x mais lenta e gerava payloads >10MB
 - **Documentação user-facing:** `docs/user-help/chat-*.md` — overview, anexar PDF, anexar imagem, anexar análise IA, reações/busca/denúncias, convites/diretório. Indexada no Copilot de Ajuda
+
+## Test gate no CI (entregue 2026-04-25)
+
+`.github/workflows/deploy.yml` ganhou job `test` que precede `deploy` (`needs: test`). Falha em qualquer teste bloqueia o build/push de imagens e o update de ECS.
+
+- **API**: `npm run test:unit` (subset declarado em `apps/api/package.json` — sem DB). 176 testes verdes, 3 skipped (integração ESM em pdfjs-dist). Cobertura: PII patterns (PDF V2 + image V1), classifyByRegex/classifyByRegexInItems, drawRedaction (Sharp), ACL master-only (master.js + feedback.js + error-log.js — regression guard pro bug de 2026-04-23 com `role !== 'admin'`), anonymizeAiAnalysis com allowlist de chaves do output, messages.js validation (strict equality em `user_confirmed_scanned` / `user_confirmed_anonymized`), billing admin-gate + VALID_CREDIT_PACKAGES, prescriptions agent_type whitelist (só therapeutic + nutrition emitem receita) + items shape, constants.js whitelists.
+- **Worker**: `npm test` completo. 30 verdes, 1 skipped (`processExam` — dynamic import ESM em dep transitiva). `jest.setup.js` seta env vars dummy (OPENAI_API_KEY, ANTHROPIC_API_KEY, DATABASE_URL, REDIS_URL) pra módulos com SDK instanciado em top-level carregarem em teste.
+- **Web**: `npm test` (Jest + jsdom, `jest-preset-angular`). 10 verdes, 3 skipped em 2 suites (`LoginComponent` + `PatientListComponent` — refatoração pra `inject()` + ReactiveFormsModule). 4 specs verdes: jwt.interceptor, auth.service, ws.service, alert-badge.
+
+**Padrão de mock Fastify isolado** (sem DB): build `Fastify({logger:false})`, `decorate('authenticate', stubFn)` que lê role de header, `decorate('pg', { query: jest.fn(...) })`. Stub joga erro se chamado em request rejeitada — sinal de regressão silenciosa do gate. Modelos vivos: `tests/security/master-acl.test.js`, `tests/routes/billing-validation.test.js`.
+
+**Test debt registrado**: 4 suites com `describe.skip` + comentário TODO claro pra reabilitar quando alguém tocar no componente. Não silencioso, não esquecido.
+
+**Áreas SEM cobertura unitária (precisam DB ou são UI complexa)**: auth/login, exams, patients, users, alerts, integrations, dashboard, prescription PDF generation, master credit grant, e a grande maioria das telas Angular além dos 4 services básicos.
 
 ## Infra em git (versionada 2026-04-24)
 

@@ -367,6 +367,67 @@ docker run --rm <image:tag> grep -rl "termo_do_novo_código" /usr/share/nginx/ht
 
 ---
 
+## Testes e CI gate (OBRIGATÓRIO)
+
+### CI gate
+
+- `.github/workflows/deploy.yml` tem job `test` que **precede o deploy** (`needs: test`). Falha de teste bloqueia build/push/update de ECS
+- Steps do gate:
+  - `apps/api` → `npm run test:unit` (subset declarado em `package.json` — sem DB)
+  - `apps/worker` → `npm test` (suite completa)
+  - `apps/web` → `npm test` (Jest + jsdom)
+- **Nunca remover esse gate** — único filtro automatizado entre commit e produção
+
+### `test:unit` vs `test` na API
+
+- `test` = suite completa (DB-dependent, dev local com Postgres rodando)
+- `test:unit` = lista explícita de paths sem dependência de DB (CI gate)
+- Ao adicionar arquivo de teste novo: se NÃO precisa de DB → appendar em `test:unit`. Se precisa → vai pro `test` mas não bloqueia CI
+
+### Padrão de teste de validação Fastify isolado
+
+Pra testar route handler sem precisar de Postgres real:
+
+```js
+const app = Fastify({ logger: false });
+app.decorate('authenticate', async (request) => {
+  request.user = { role: request.headers['x-test-role'], tenant_id: '...', user_id: '...' };
+});
+app.decorate('pg', { query: jest.fn(async () => ({ rows: [{}] })) });
+await app.register(require('../../src/routes/x'));
+await app.inject({ method: 'POST', url: '/x', payload: {...} });
+```
+
+- Stub `pg.query` deve **jogar erro** se chamado em request rejeitada — detecta regressão silenciosa do gate
+- Modelos vivos: `tests/security/master-acl.test.js`, `tests/routes/billing-validation.test.js`, `tests/routes/inter-tenant-chat/messages-validation.test.js`
+
+### Áreas que **devem** ter teste no PR de feature
+
+- Rotas com auth/role gate → teste de ACL (ex: `master-acl.test.js`)
+- Flag de segurança nova (LGPD, consent, suspended) → teste de strict equality (`=== true`, não truthy)
+- Pattern PII / regra de validação → matriz match/noMatch
+- Função de anonimização / sanitização → allowlist de chaves do output (catch field-add esquecido)
+- Whitelist de valor (gateway, agent_type, package size) → todos válidos aceitos + alguns inválidos rejeitados
+
+### Skip honesto, nunca silencioso
+
+Quando teste legado quebra por refatoração e reescrever está fora de escopo:
+```js
+// TODO(test-debt): <causa>. Reabilitar quando <condição>.
+describe.skip(...)
+```
+Nunca deletar testes quebrados — visibilidade da dívida importa. Listar atual em `docs/claude-memory/feedback_testing_standards.md`.
+
+### Mocks de SDKs externos
+
+- `@anthropic-ai/sdk`: alguns módulos importam direto (`require('@anthropic-ai/sdk')`), outros via `.default`. Cobrir os dois shapes via `jest.mock`. Modelos: `pdf-text-redactor.test.js` (direto), agentes do worker (`.default`)
+- `openai`: similar — `jest.setup.js` no worker seta env vars dummy pra módulos que instanciam o cliente em top-level conseguirem carregar
+- Sempre mockar antes do `require` do módulo sob teste
+
+### ESM no Jest é teto baixo
+
+Módulos com `await import('...mjs')` (pdfjs-dist, deps em pipeline DICOM) precisam `NODE_OPTIONS=--experimental-vm-modules`. Por ora: skip com TODO. Habilitar global apenas se ficar bloqueador real
+
 ## Regras de Edição de Código (OBRIGATÓRIO)
 
 - **`Write` é proibido em arquivos existentes** — usar sempre `Edit` cirúrgico. `Write` apaga conteúdo que não foi lido, causando regressões silenciosas
@@ -413,6 +474,10 @@ docker run --rm <image:tag> grep -rl "termo_do_novo_código" /usr/share/nginx/ht
 - Rasterizar PDF digital (com text layer) pra rodar OCR e redigir PII → ~100x mais lento que extrair texto + posições via `pdfjs-dist` e desenhar retângulos com `pd-lib`. Resultado vira imagem (perde text layer, infla tamanho). Sempre tentar text-layer primeiro; rasterização só vale a pena pra PDFs escaneados — e mesmo nesses, hoje a estratégia é modal LGPD com checkbox de responsabilidade do usuário em vez de OCR (incidente 2026-04-25 com V1.5 do anexo PDF)
 - Canvas exportando como `image/png` em fluxo de upload de exame anonimizado → 5–10x mais bytes que `image/jpeg` quality 0.85 sem ganho visível pra texto preto sobre fundo claro. JPEG q=0.85 é o default; PNG só pra screenshots de UI ou imagens com transparência crítica
 - Indexar `docs/superpowers/{plans,specs}/` no RAG do Copilot de Ajuda → vazamento de detalhes de implementação interna (rotas, tabelas, código) pro usuário final. Indexador em `apps/worker/src/rag/indexer-product-help.js` lista explicitamente apenas `docs/claude-memory/`, `docs/user-help/` e `CLAUDE.md` — qualquer mudança nessa lista exige revisão de segurança (incidente 2026-04-24)
+- Remover step `test` do `.github/workflows/deploy.yml` (ou seu `needs: test` no `deploy`) → CI deixa de bloquear regressões e qualquer falha de teste vai pra produção silenciosamente. Único filtro automatizado entre commit e prod
+- Adicionar arquivo de teste novo no path do `test:unit` (api) que precisa de Postgres → CI gate quebra na primeira execução. Testes DB-dependent ficam no `test` completo (rodam só localmente com docker compose ativo)
+- Deletar (ou silenciar com `xdescribe`) teste que quebrou por refatoração em vez de `describe.skip` + comentário `TODO(test-debt):` → dívida some do radar. Sempre marcar com TODO claro explicando causa e quando reabilitar
+- PR de feature em área crítica (auth, RLS, billing, PII, anonimização, ACL master) sem teste novo no mesmo PR → questionar antes de aprovar. Ver `feedback_testing_standards.md` pra lista do que **deve** ter teste
 
 ---
 
