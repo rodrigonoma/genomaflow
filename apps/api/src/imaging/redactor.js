@@ -243,4 +243,9 @@ async function redactPiiFromImage(imageBuffer) {
   };
 }
 
-module.exports = { redactPiiFromImage, drawRedaction };
+module.exports = {
+  redactPiiFromImage,
+  drawRedaction,
+  // Exportados pra teste — funções puras sem side effects
+  _internals: { classifyByRegex, PII_PATTERNS },
+};
