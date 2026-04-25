@@ -64,16 +64,17 @@ type Phase = 'loading' | 'ready' | 'composing' | 'error';
   standalone: true,
   imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule, MatCheckboxModule, FormsModule],
   styles: [`
-    :host { display:block; color:#dae2fd; }
-    .header { display:flex; align-items:center; justify-content:space-between; padding:1.25rem 1.5rem 0.5rem; }
+    /* Modal compact: header/subtitle topo, body com scroll, footer sempre visível */
+    :host { display:flex; flex-direction:column; max-height:90vh; color:#dae2fd; }
+    .header { display:flex; align-items:center; justify-content:space-between; padding:1.25rem 1.5rem 0.5rem; flex-shrink:0; }
     .header h2 { font-family:'Space Grotesk',sans-serif; font-size:1.0625rem; font-weight:700; margin:0; color:#c0c1ff; }
-    .subtitle { padding:0 1.5rem 0.75rem; font-family:'JetBrains Mono',monospace; font-size:10px; color:#908fa0; letter-spacing:0.08em; text-transform:uppercase; }
-    .body { padding:0 1.5rem 1rem; display:flex; flex-direction:column; gap:0.875rem; }
+    .subtitle { padding:0 1.5rem 0.75rem; font-family:'JetBrains Mono',monospace; font-size:10px; color:#908fa0; letter-spacing:0.08em; text-transform:uppercase; flex-shrink:0; }
+    .body { padding:0 1.5rem 1rem; display:flex; flex-direction:column; gap:0.875rem; overflow-y:auto; flex:1; min-height:0; }
     .pager { display:flex; align-items:center; justify-content:space-between; gap:0.75rem; padding:0.5rem 0.75rem; background:rgba(192,193,255,0.06); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:0.8125rem; }
     .pager-buttons { display:flex; gap:0.5rem; }
     .pager-btn { background:#0b1326; color:#c0c1ff; border:1px solid rgba(192,193,255,0.2); border-radius:5px; padding:0.375rem 0.75rem; font-size:0.75rem; font-family:inherit; cursor:pointer; }
     .pager-btn:disabled { opacity:0.3; cursor:not-allowed; }
-    .canvas-wrap { position:relative; background:#000; border:1px solid rgba(70,69,84,0.3); border-radius:6px; overflow:auto; max-height:55vh; user-select:none; }
+    .canvas-wrap { position:relative; background:#000; border:1px solid rgba(70,69,84,0.3); border-radius:6px; overflow:auto; max-height:45vh; user-select:none; }
     canvas { display:block; cursor:crosshair; max-width:100%; }
     .instructions { font-size:0.75rem; color:#a09fb2; font-family:'JetBrains Mono',monospace; line-height:1.5; background:rgba(192,193,255,0.06); padding:0.5rem 0.75rem; border-radius:5px; }
     .instructions strong { color:#c0c1ff; }
@@ -81,8 +82,11 @@ type Phase = 'loading' | 'ready' | 'composing' | 'error';
     .stat-value { color:#dae2fd; font-weight:600; }
     .warning { background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.25); color:#fbbf24; font-family:'JetBrains Mono',monospace; font-size:11px; padding:0.625rem 0.75rem; border-radius:5px; line-height:1.45; }
     .confirm-row { display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0; }
+    .confirm-row ::ng-deep .mdc-form-field,
+    .confirm-row ::ng-deep .mdc-form-field > label,
+    .confirm-row ::ng-deep .mdc-label { color:#dae2fd !important; font-size:0.8125rem; }
     .loading { text-align:center; padding:3rem 1rem; color:#908fa0; font-family:'JetBrains Mono',monospace; font-size:0.8125rem; }
-    .footer { display:flex; justify-content:space-between; align-items:center; padding:0.875rem 1.5rem; border-top:1px solid rgba(70,69,84,0.2); }
+    .footer { display:flex; justify-content:space-between; align-items:center; padding:0.875rem 1.5rem; border-top:1px solid rgba(70,69,84,0.2); flex-shrink:0; background:#0b1326; }
     .footer-left { font-size:0.75rem; color:#7c7b8f; font-family:'JetBrains Mono',monospace; }
     .footer-buttons { display:flex; gap:0.625rem; }
     .submit-btn { background:#c0c1ff; color:#1000a9; border:none; border-radius:6px; padding:0.625rem 1.125rem; font-size:0.75rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; }
