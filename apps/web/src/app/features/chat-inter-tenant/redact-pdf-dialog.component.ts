@@ -1,4 +1,4 @@
-import { Component, ElementRef, ViewChild, inject, signal, AfterViewInit, computed } from '@angular/core';
+import { Component, ElementRef, ViewChild, inject, signal, AfterViewInit, AfterViewChecked, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { MatDialogRef, MatDialogModule, MAT_DIALOG_DATA } from '@angular/material/dialog';
@@ -160,7 +160,7 @@ type Phase = 'loading' | 'ready' | 'composing' | 'error';
     </div>
   `,
 })
-export class RedactPdfDialogComponent implements AfterViewInit {
+export class RedactPdfDialogComponent implements AfterViewInit, AfterViewChecked {
   @ViewChild('canvas') canvasRef?: ElementRef<HTMLCanvasElement>;
 
   private http = inject(HttpClient);
@@ -181,8 +181,21 @@ export class RedactPdfDialogComponent implements AfterViewInit {
   private dragStart: { x: number; y: number } | null = null;
   private dragCurrent: { x: number; y: number } | null = null;
 
+  private lastDrawnPageIdx = -1;
+
   ngAfterViewInit(): void {
     this.callBackend();
+  }
+
+  ngAfterViewChecked(): void {
+    // Rede de segurança: redesenha quando canvas+imagem prontos pra página atual
+    if (this.phase() !== 'ready' || !this.canvasRef) return;
+    const idx = this.currentIdx();
+    const p = this.currentPage();
+    if (!p || !p.imgEl || !p.imgLoaded) return;
+    if (idx === this.lastDrawnPageIdx) return;
+    this.redraw();
+    this.lastDrawnPageIdx = idx;
   }
 
   engineLabel(): string {
@@ -268,13 +281,15 @@ export class RedactPdfDialogComponent implements AfterViewInit {
   prevPage() {
     if (this.currentIdx() > 0) {
       this.currentIdx.update(i => i - 1);
-      setTimeout(() => this.redraw(), 0);
+      this.lastDrawnPageIdx = -1; // força afterViewChecked redesenhar
+      requestAnimationFrame(() => this.redraw());
     }
   }
   nextPage() {
     if (this.currentIdx() < this.pages().length - 1) {
       this.currentIdx.update(i => i + 1);
-      setTimeout(() => this.redraw(), 0);
+      this.lastDrawnPageIdx = -1;
+      requestAnimationFrame(() => this.redraw());
     }
   }
 
@@ -282,8 +297,11 @@ export class RedactPdfDialogComponent implements AfterViewInit {
     const p = this.currentPage();
     if (!p || !p.imgLoaded || !p.imgEl || !this.canvasRef) return;
     const c = this.canvasRef.nativeElement;
-    c.width = p.meta.width || p.imgEl.naturalWidth;
-    c.height = p.meta.height || p.imgEl.naturalHeight;
+    const w = p.meta.width || p.imgEl.naturalWidth || 0;
+    const h = p.meta.height || p.imgEl.naturalHeight || 0;
+    if (w === 0 || h === 0) return;
+    c.width = w;
+    c.height = h;
     const ctx = c.getContext('2d');
     if (!ctx) return;
 
