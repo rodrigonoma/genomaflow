@@ -11,7 +11,9 @@ describe('WsService', () => {
     };
     (global as any).WebSocket = jest.fn(() => mockWs);
 
-    service = new WsService();
+    // NgZone passthrough — execução síncrona no run() é suficiente pra teste
+    const fakeZone: any = { run: (fn: () => void) => fn() };
+    service = new WsService(fakeZone);
   });
 
   it('opens WebSocket on connect', () => {

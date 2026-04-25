@@ -18,7 +18,10 @@ describe('AuthService', () => {
     mockWs = { connect: jest.fn(), disconnect: jest.fn() };
     mockRouter = { navigate: jest.fn() };
     mockHttp = {
-      post: jest.fn(() => of({ token: fakeToken }))
+      post: jest.fn(() => of({ token: fakeToken })),
+      // /auth/me chamado por fetchProfile após login pra hidratar profile —
+      // retorna observable vazio pra não quebrar o pipeline do tap
+      get: jest.fn(() => of({ tenant_name: 'Clínica X', module: 'human' })),
     };
 
     // Instantiate service with mocked dependencies
