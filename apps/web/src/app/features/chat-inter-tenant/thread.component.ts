@@ -17,6 +17,7 @@ import { PdfAttachmentCardComponent } from './pdf-attachment-card.component';
 import { ImageAttachmentCardComponent } from './image-attachment-card.component';
 import { ImageUploadConfirmComponent } from './image-upload-confirm.component';
 import { RedactImageDialogComponent, RedactDialogData, RedactDialogResult } from './redact-image-dialog.component';
+import { RedactPdfDialogComponent, RedactPdfDialogData, RedactPdfDialogResult } from './redact-pdf-dialog.component';
 import { ReportDialogComponent } from './report-dialog.component';
 import { CounterpartContactDialogComponent } from './counterpart-contact-dialog.component';
 
@@ -411,42 +412,66 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
       return;
     }
 
-    this.sending = true;
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
       const base64 = result.split(',')[1] || result;
-      const body = this.draft.trim() || undefined;
-      this.chat.sendMessage(this.conversationId, {
-        body,
-        pdf: { filename: file.name, data_base64: base64, mime_type: 'application/pdf' }
-      }).subscribe({
-        next: (msg) => {
-          this.messages.update(arr => [...arr, msg]);
-          this.draft = '';
-          this.sending = false;
-          this.shouldScroll = true;
-          input.value = '';
-          this.snack.open('PDF anexado.', '', { duration: 2500 });
-        },
-        error: (err) => {
-          this.sending = false;
-          input.value = '';
-          const e = err.error || {};
-          if (e.detected_kinds?.length) {
-            this.snack.open(
-              `PDF bloqueado — detectados: ${e.detected_kinds.join(', ')}. Remova dados pessoais e tente novamente.`,
-              'Fechar',
-              { duration: 8000, panelClass: ['snack-error'] }
-            );
-          } else {
-            this.snack.open(e.error || 'Erro ao anexar PDF.', 'Fechar', { duration: 5000 });
-          }
+
+      // Abrir modal de redação de PII com revisão por página
+      const dialogData: RedactPdfDialogData = {
+        filename: file.name,
+        data_base64: base64,
+      };
+      const redactRef = this.dialog.open<RedactPdfDialogComponent, RedactPdfDialogData, RedactPdfDialogResult | null>(
+        RedactPdfDialogComponent,
+        {
+          width: '900px',
+          maxWidth: '95vw',
+          panelClass: 'dark-dialog',
+          autoFocus: false,
+          disableClose: true,
+          data: dialogData,
         }
+      );
+      redactRef.afterClosed().subscribe((res) => {
+        input.value = '';
+        if (!res) return;
+
+        this.sending = true;
+        const body = this.draft.trim() || undefined;
+        this.chat.sendMessage(this.conversationId, {
+          body,
+          pdf: { filename: res.filename, data_base64: res.data_base64, mime_type: 'application/pdf' }
+        }).subscribe({
+          next: (msg) => {
+            this.messages.update(arr => [...arr, msg]);
+            this.draft = '';
+            this.sending = false;
+            this.shouldScroll = true;
+            this.snack.open(
+              `PDF anexado (${res.page_count} páginas, ${res.total_auto_regions - res.total_manual_removed + res.total_manual_added} blocos aplicados).`,
+              '', { duration: 4000 }
+            );
+          },
+          error: (err) => {
+            this.sending = false;
+            const e = err.error || {};
+            if (e.detected_kinds?.length) {
+              // Esse caso fica como backstop — PDF redigido não deveria mais ter PII detectável.
+              // Se cair aqui, há sinal de bug na pipeline; logar e avisar.
+              this.snack.open(
+                `Mesmo após redação, o PDF ainda tem PII detectável: ${e.detected_kinds.join(', ')}. Reveja e tente de novo.`,
+                'Fechar',
+                { duration: 8000, panelClass: ['snack-error'] }
+              );
+            } else {
+              this.snack.open(e.error || 'Erro ao anexar PDF.', 'Fechar', { duration: 5000 });
+            }
+          }
+        });
       });
     };
     reader.onerror = () => {
-      this.sending = false;
       this.snack.open('Erro ao ler o arquivo.', 'Fechar', { duration: 4000 });
     };
     reader.readAsDataURL(file);
