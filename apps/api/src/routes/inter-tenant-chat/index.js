@@ -13,4 +13,5 @@ module.exports = async function (fastify) {
   fastify.register(require('./messages'),      { prefix: '' });
   fastify.register(require('./reads'),         { prefix: '' });
   fastify.register(require('./reports'),       { prefix: '/reports' });
+  fastify.register(require('./image-redact'),  { prefix: '/images' });
 };

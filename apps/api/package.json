@@ -25,7 +25,9 @@
     "ioredis": "^5.3.2",
     "openai": "^4.52.0",
     "pdf-parse": "^2.4.5",
-    "pg": "^8.12.0"
+    "pg": "^8.12.0",
+    "sharp": "^0.33.5",
+    "tesseract.js": "^5.1.1"
   },
   "devDependencies": {
     "jest": "^29.7.0",
