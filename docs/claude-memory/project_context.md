@@ -1,6 +1,6 @@
 ---
 name: GenomaFlow Project Context
-description: Frontend + backend em produção — stack, arquitetura, estado atual (atualizado 2026-04-23)
+description: Frontend + backend em produção — stack, arquitetura, estado atual (atualizado 2026-04-25)
 type: project
 ---
 
@@ -122,6 +122,30 @@ Obrigatório verificar email antes de logar. Reset de senha via link single-use 
 - **Email delivery:** AWS SES v2 (us-east-1). Domínio `genomaflow.com.br` verificado (DKIM + SPF + DMARC via Route53). `SES_MOCK=1` em dev loga o email ao invés de mandar.
 - **Env vars prod** (injetadas no task def via CI): `SES_FROM_EMAIL=noreply@genomaflow.com.br`, `FRONTEND_URL=https://genomaflow.com.br`.
 - **SES sandbox status**: pedido de production access enviado 2026-04-24 (análise de ~24h). Enquanto no sandbox, só manda pra emails pré-verificados via `aws sesv2 create-email-identity`.
+
+## Chat entre Clínicas (V1 + Phases 2–7 entregues 2026-04-23 a 2026-04-25)
+
+Comunicação 1:1 admin↔admin entre tenants do mesmo módulo (human↔human, vet↔vet). Convite + aceite obrigatórios; diretório opt-in default OFF.
+
+- **Schema (migrations 053–062, todas RLS ENABLE+FORCE):** `tenant_chat_settings`, `tenant_directory_listing`, `tenant_invitations`, `tenant_blocks`, `tenant_conversations`, `tenant_messages` (com `body_tsv` GIN tsvector pt), `tenant_message_attachments`, `tenant_message_pii_checks`, `tenant_message_reactions`, `tenant_conversation_reads`, `tenant_chat_reports`.
+- **Rotas** (`/inter-tenant-chat/*`, todas admin-only — role≠admin → 403):
+  - Convites: POST `/invitations` (rate 20/dia/tenant; cooldown 3 rejeições=429), POST `/invitations/:id/accept`, POST `/invitations/:id/reject`
+  - Blocos: POST `/blocks`, DELETE `/blocks/:tenant_id` (bilateral, mensagem genérica)
+  - Diretório: GET `/directory?q=` (filtra por módulo, last_active_month preserva privacidade)
+  - Conversas: GET `/conversations` (com `unread_count` por conversa), GET `/conversations/:id`, POST `/conversations/:id/messages` (rate 200/dia/tenant), GET `/conversations/:id/search?q=` (ts_headline pt com `<mark>`)
+  - Reações: POST `/messages/:id/reactions` (whitelist `['👍','❤️','🤔','✅','🚨','📌']`, toggle)
+  - Anexos PII: POST `/images/redact` (Tesseract+Haiku, retorna regions+signed URLs), POST `/images/redact-pdf-text-layer` (V2 — pdfjs-dist+pd-lib, retorna `has_text_layer:bool`)
+  - Anexos download: GET `/attachments/:id/url` (signed URL TTL 1h)
+  - Reads: POST `/conversations/:id/read` (atualiza `last_read_at`, emite `chat:unread_change`)
+  - Denúncias: POST `/reports`, GET `/reports/mine`; master: GET `/master/reports`, POST `/reports/:id/resolve`. Suspensão automática: 3+ denúncias pending de reporters distintos em 30d → tenant suspenso (POST /messages e /invitations retornam 403)
+- **WS events (via Redis pub/sub `chat:event:{tenant_id}`):** `chat:invitation_received`, `chat:invitation_accepted`, `chat:message_received`, `chat:reaction_changed`, `chat:unread_change`. Frontend `WsService` expõe Subjects correspondentes
+- **Frontend:** rota `/chat` com guard auth+terms+professional. Sidebar agrega badge `chatUnreadTotal` somando `unread_count` de todas as conversas (`reduce`), refresca via REST a cada WS event. Componentes principais: `ChatListComponent`, `ThreadComponent`, `DirectoryModalComponent`, `RedactImageDialogComponent` (canvas editor), `RedactPdfPreviewDialogComponent` (V2 com chips de summary + iframe), `PdfScannedConfirmDialogComponent` (LGPD checkbox), `ReportDialogComponent`, `CounterpartContactDialogComponent`
+- **Anexos PII pipeline V2 (2026-04-25):**
+  - **PDF text-layer** (`pdf-text-redactor.js`): pdfjs-dist extrai texto+posições, regex+Haiku classifica PII, pd-lib desenha retângulos pretos. Mantém text layer e tamanho original (1–3s pra PDFs típicos)
+  - **PDF escaneado**: detecção via heurística `totalChars < numPages*30` → modal LGPD com checkbox de responsabilidade do usuário; backend aceita `pdf.user_confirmed_scanned: true` pra pular hard-block (audit row marca `user_confirmed_scanned`)
+  - **Imagens** (canvas editor): exporta JPEG q=0.85 (não PNG) → reduz upload típico 3MB→300KB
+  - V1.5 (rasterização via pdf-to-png-converter + Tesseract por página) **removida** — era 100x mais lenta e gerava payloads >10MB
+- **Documentação user-facing:** `docs/user-help/chat-*.md` — overview, anexar PDF, anexar imagem, anexar análise IA, reações/busca/denúncias, convites/diretório. Indexada no Copilot de Ajuda
 
 ## Infra em git (versionada 2026-04-24)
 

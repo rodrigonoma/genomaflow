@@ -1,5 +1,13 @@
 # Chat Entre Tenants V1 — Fase 5A (Anexo PDF + PII Hard-Block) Implementation Plan
 
+> **Status (2026-04-25):** ✅ ENTREGUE em produção, mas **superseded pela V2** (PDF text-layer redaction). O hard-block 400 descrito aqui só é acionado hoje no caminho legado quando o frontend não chama `/redact-pdf-text-layer` antes; o fluxo padrão atual é auto-redação (PDFs digitais) ou modal LGPD com checkbox (PDFs escaneados). Para a estratégia atual, ver:
+>
+> - `docs/superpowers/specs/2026-04-23-inter-tenant-chat-design.md` → seção "Changelog 2026-04-25 — V2 PDF redaction"
+> - `docs/claude-memory/feedback_pdf_redaction_strategy.md`
+> - `docs/user-help/chat-anexar-pdf.md`
+>
+> Este plano permanece no histórico como referência da implementação original. Não usar como guia para mudanças novas — partir da V2.
+
 **Goal:** Permitir que o médico anexe PDF a uma mensagem, com filtro automático de PII em 2 camadas (regex + LLM). Se detectar PII → hard-block (400 com lista). Se limpo → upload no S3 + attachment. Sem auto-redação ou preview ainda (isso fica para Phase 5B).
 
 **Scope trim do spec:** apenas PDF (imagem = Phase 5B). Apenas hard-block (auto-redação = Phase 5B). Sem staging (upload acontece como parte do POST /messages).

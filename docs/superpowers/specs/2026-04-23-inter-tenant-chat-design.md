@@ -574,3 +574,57 @@ Nenhuma regressão no módulo: chat é feature aditiva.
    - **Fase 8**: Smoke test E2E + audit log + ajuste de UX
 
 3. Cada fase entra em branch separada conforme regra "uma concern por branch" (`CLAUDE.md`).
+
+---
+
+## Changelog
+
+### 2026-04-25 — V2 PDF redaction (substituiu V1.5 da Fase 5A)
+
+**Contexto:** A primeira implementação do anexo PDF (Fase 5A V1) hard-blocava com 400 quando detectava PII via regex+Haiku, exigindo que o usuário removesse os dados na origem antes de tentar de novo. Em 2026-04-25 entregamos V1.5 que **rasterizava** cada página do PDF (via `pdf-to-png-converter`), rodava Tesseract por página, classificava PII e regenerava o PDF redigido. Funcionalmente correto, mas **inviável**: ~3min pra um PDF de 9 páginas e payload de saída >10MB (413 errors).
+
+**Decisão:** V1.5 foi descartada e substituída por V2 (text-layer redaction).
+
+**Implementação V2:**
+
+- Novo módulo `apps/api/src/imaging/pdf-text-redactor.js`:
+  - `pdfjs-dist` extrai itens de texto com posições (`transform[4]`, `transform[5]`, `width`, `height`) — sem renderizar imagens
+  - Mesmos `PII_PATTERNS` do redactor de imagens (regex pra cpf/cnpj/rg/phone/email/cep/date) + Haiku conservador pra nomes próprios (prompt explícito com exclusões de termos médicos: ACL, T1, T2, FLAIR, AVC, RM, TC, ECG etc.)
+  - `pd-lib` desenha `drawRectangle` preto sobre cada item identificado, com PAD=1.5 — preserva o text layer original e o tamanho do PDF
+  - Heurística `totalChars < numPages * MIN_CHARS_PER_PAGE_FOR_TEXT_LAYER (30)` detecta PDFs escaneados → retorna `{has_text_layer: false, page_count, reasoning}` em vez de redigir
+
+- Novo endpoint `POST /inter-tenant-chat/images/redact-pdf-text-layer` (`image-redact.js`) — substitui o endpoint `/redact-pdf` da V1.5. Returna:
+  - PDFs digitais: `{has_text_layer: true, redact_id, original_url, redacted_url, redacted_data_base64, summary, total_regions, page_count}`
+  - PDFs escaneados: `{has_text_layer: false, page_count, reasoning}`
+
+- Frontend (`thread.component.ts onPdfPicked`):
+  - Chama `/redact-pdf-text-layer` antes de qualquer dialog
+  - `has_text_layer && total_regions > 0` → abre `RedactPdfPreviewDialogComponent` (chips de summary "3 nomes · 1 CPF" + iframe com PDF redigido + link pro original + checkbox de confirmação)
+  - `has_text_layer && total_regions === 0` → envia direto sem fricção (não há PII a revisar)
+  - `!has_text_layer` → abre `PdfScannedConfirmDialogComponent` (aviso LGPD + checkbox de responsabilidade do usuário)
+
+- Backend (`messages.js POST /conversations/:id/messages`):
+  - Aceita novo campo `pdf.user_confirmed_scanned: true` (strict equality)
+  - Quando presente, pula `extractPdfText` + `checkPii` (audit row em `tenant_message_pii_checks` marca `detected_kinds: ['user_confirmed_scanned']`)
+  - Sem a flag, mantém o hard-block 400 do fluxo legado
+
+- Imagens (`redact-image-dialog.component.ts submit()`): canvas exporta JPEG q=0.85 em vez de PNG q=0.92. Reduz upload típico de ~3MB pra ~300KB sem perda visível pra exames anonimizados (texto preto sobre fundo claro). Filename ganha sufixo `.jpg` automaticamente; `mime_type` enviado é `image/jpeg`.
+
+**Removidos:**
+- `apps/api/src/imaging/pdf-redactor.js` (V1.5 com `redactPiiFromPdf`)
+- Dependência `pdf-to-png-converter` em `apps/api/package.json`
+- `apps/web/src/app/features/chat-inter-tenant/redact-pdf-dialog.component.ts` (modal paginado V1.5 que rodava editor canvas por página)
+
+**Performance:**
+- PDF digital típico (até 10 páginas): 1–3 segundos (vs ~3 minutos da V1.5)
+- PDF redigido mantém o tamanho original (sem rasterização) — antes inflava 3–10x
+- Imagens: ~300KB (q=0.85) vs ~3MB (PNG)
+
+**Trade-offs aceitos:**
+- O texto continua na camada de texto do PDF redigido, apenas oculto pelos retângulos pretos. Ferramentas avançadas conseguem extrair o texto coberto. Isso é **redação visual**, não criptografia. Documentado nos docs user-facing (`docs/user-help/chat-anexar-pdf.md`).
+- PDFs escaneados não passam por OCR no backend — a anonimização é responsabilidade do usuário via checkbox LGPD. Decisão pesada pelo argumento custo/tempo: rodar Tesseract num PDF escaneado de 10 páginas é o mesmo problema da V1.5 que rejeitamos. Se passar a haver demanda, criar fila assíncrona dedicada.
+
+**Commits:**
+- Feature: `feat(chat-pdf): redação por text layer + JPEG q=0.85 nas imagens` (`20b532d7`)
+- Merge: `merge: feat/pdf-text-redaction-with-preview → main` (`33620ab5`)
+- Validado em prod 2026-04-25 com PDF digital real (testado pelo product owner). PDF escaneado ainda não testado em prod até o momento desta atualização.
