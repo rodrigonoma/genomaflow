@@ -429,12 +429,16 @@ export class RedactImageDialogComponent implements AfterViewInit, AfterViewCheck
     });
     this.manualRegions.forEach((r) => ctx.fillRect(r.x, r.y, r.w, r.h));
 
-    const dataUrl = off.toDataURL(this.data.mime_type, 0.92);
+    // Sempre exporta JPEG q=0.85 — payload muito menor que PNG sem perda visível
+    // pra exames anonimizados (texto preto sobre fundo claro). Reduz upload de
+    // ~3MB pra ~300KB típico e poupa banda/storage S3.
+    const dataUrl = off.toDataURL('image/jpeg', 0.85);
     const base64 = dataUrl.split(',')[1] || dataUrl;
+    const outFilename = this.data.filename.replace(/\.(png|jpe?g)$/i, '') + '.jpg';
 
     this.ref.close({
-      filename: this.data.filename,
-      mime_type: this.data.mime_type,
+      filename: outFilename,
+      mime_type: 'image/jpeg',
       data_base64: base64,
       auto_regions: this.autoRegions.length,
       manual_added: this.manualRegions.length,

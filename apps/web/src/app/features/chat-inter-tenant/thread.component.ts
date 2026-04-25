@@ -17,9 +17,29 @@ import { PdfAttachmentCardComponent } from './pdf-attachment-card.component';
 import { ImageAttachmentCardComponent } from './image-attachment-card.component';
 import { ImageUploadConfirmComponent } from './image-upload-confirm.component';
 import { RedactImageDialogComponent, RedactDialogData, RedactDialogResult } from './redact-image-dialog.component';
-import { RedactPdfDialogComponent, RedactPdfDialogData, RedactPdfDialogResult } from './redact-pdf-dialog.component';
+import { RedactPdfPreviewDialogComponent, RedactPdfPreviewDialogData, RedactPdfPreviewDialogResult } from './redact-pdf-preview-dialog.component';
+import { PdfScannedConfirmDialogComponent, PdfScannedConfirmDialogData, PdfScannedConfirmDialogResult } from './pdf-scanned-confirm-dialog.component';
+import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../environments/environment';
 import { ReportDialogComponent } from './report-dialog.component';
 import { CounterpartContactDialogComponent } from './counterpart-contact-dialog.component';
+
+type RedactPdfTextLayerResponse =
+  | {
+      has_text_layer: true;
+      redact_id: string;
+      original_url: string;
+      redacted_url: string;
+      redacted_data_base64: string;
+      summary: Record<string, number>;
+      total_regions: number;
+      page_count: number;
+    }
+  | {
+      has_text_layer: false;
+      page_count: number;
+      reasoning: string;
+    };
 
 @Component({
   selector: 'app-thread',
@@ -299,6 +319,7 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
   private auth = inject(AuthService);
   private dialog = inject(MatDialog);
   private snack = inject(MatSnackBar);
+  private http = inject(HttpClient);
 
   messages = signal<InterTenantMessage[]>([]);
   conv = signal<InterTenantConversation | null>(null);
@@ -417,64 +438,154 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
       const result = reader.result as string;
       const base64 = result.split(',')[1] || result;
 
-      // Abrir modal de redação de PII com revisão por página
-      const dialogData: RedactPdfDialogData = {
-        filename: file.name,
-        data_base64: base64,
-      };
-      const redactRef = this.dialog.open<RedactPdfDialogComponent, RedactPdfDialogData, RedactPdfDialogResult | null>(
-        RedactPdfDialogComponent,
-        {
-          width: '900px',
-          maxWidth: '95vw',
-          panelClass: 'dark-dialog',
-          autoFocus: false,
-          disableClose: true,
-          data: dialogData,
-        }
-      );
-      redactRef.afterClosed().subscribe((res) => {
-        input.value = '';
-        if (!res) return;
+      // Indica processamento (chamada ao backend pode levar 1-3s)
+      this.sending = true;
+      this.snack.open('Analisando PDF...', '', { duration: 2000 });
 
-        this.sending = true;
-        const body = this.draft.trim() || undefined;
-        this.chat.sendMessage(this.conversationId, {
-          body,
-          pdf: { filename: res.filename, data_base64: res.data_base64, mime_type: 'application/pdf' }
-        }).subscribe({
-          next: (msg) => {
-            this.messages.update(arr => [...arr, msg]);
-            this.draft = '';
-            this.sending = false;
-            this.shouldScroll = true;
-            this.snack.open(
-              `PDF anexado (${res.page_count} páginas, ${res.total_auto_regions - res.total_manual_removed + res.total_manual_added} blocos aplicados).`,
-              '', { duration: 4000 }
-            );
-          },
-          error: (err) => {
-            this.sending = false;
-            const e = err.error || {};
-            if (e.detected_kinds?.length) {
-              // Esse caso fica como backstop — PDF redigido não deveria mais ter PII detectável.
-              // Se cair aqui, há sinal de bug na pipeline; logar e avisar.
-              this.snack.open(
-                `Mesmo após redação, o PDF ainda tem PII detectável: ${e.detected_kinds.join(', ')}. Reveja e tente de novo.`,
-                'Fechar',
-                { duration: 8000, panelClass: ['snack-error'] }
-              );
-            } else {
-              this.snack.open(e.error || 'Erro ao anexar PDF.', 'Fechar', { duration: 5000 });
-            }
+      this.http.post<RedactPdfTextLayerResponse>(
+        `${environment.apiUrl}/inter-tenant-chat/images/redact-pdf-text-layer`,
+        {
+          filename: file.name,
+          mime_type: 'application/pdf',
+          data_base64: base64,
+        }
+      ).subscribe({
+        next: (res) => {
+          this.sending = false;
+          if (res.has_text_layer) {
+            this.handleTextLayerPdf(res, file.name, base64, input);
+          } else {
+            this.handleScannedPdf(res, file.name, base64, input);
           }
-        });
+        },
+        error: (err) => {
+          this.sending = false;
+          input.value = '';
+          this.snack.open(err.error?.error || 'Falha ao analisar o PDF.', 'Fechar', { duration: 5000 });
+        }
       });
     };
     reader.onerror = () => {
       this.snack.open('Erro ao ler o arquivo.', 'Fechar', { duration: 4000 });
     };
     reader.readAsDataURL(file);
+  }
+
+  private handleTextLayerPdf(
+    res: Extract<RedactPdfTextLayerResponse, { has_text_layer: true }>,
+    originalFilename: string,
+    originalBase64: string,
+    input: HTMLInputElement,
+  ): void {
+    // Sem PII detectada — envia direto sem fricção
+    if (res.total_regions === 0) {
+      this.sendPdfMessage(originalFilename, originalBase64, input,
+        'PDF anexado (sem dados pessoais detectados).');
+      return;
+    }
+
+    // Com PII — abre preview do PDF redigido
+    const dialogData: RedactPdfPreviewDialogData = {
+      filename: originalFilename,
+      redacted_data_base64: res.redacted_data_base64,
+      original_url: res.original_url,
+      redacted_url: res.redacted_url,
+      summary: res.summary,
+      total_regions: res.total_regions,
+      page_count: res.page_count,
+    };
+    const ref = this.dialog.open<
+      RedactPdfPreviewDialogComponent,
+      RedactPdfPreviewDialogData,
+      RedactPdfPreviewDialogResult | null
+    >(RedactPdfPreviewDialogComponent, {
+      width: '760px',
+      maxWidth: '95vw',
+      panelClass: 'dark-dialog',
+      autoFocus: false,
+      disableClose: true,
+      data: dialogData,
+    });
+    ref.afterClosed().subscribe((out) => {
+      input.value = '';
+      if (!out) return;
+      this.sendPdfMessage(out.filename, out.data_base64, null,
+        `PDF anexado (${out.page_count} páginas, ${out.total_regions} bloco${out.total_regions === 1 ? '' : 's'} aplicado${out.total_regions === 1 ? '' : 's'}).`);
+    });
+  }
+
+  private handleScannedPdf(
+    res: Extract<RedactPdfTextLayerResponse, { has_text_layer: false }>,
+    originalFilename: string,
+    originalBase64: string,
+    input: HTMLInputElement,
+  ): void {
+    const dialogData: PdfScannedConfirmDialogData = {
+      filename: originalFilename,
+      page_count: res.page_count,
+      reasoning: res.reasoning || '',
+    };
+    const ref = this.dialog.open<
+      PdfScannedConfirmDialogComponent,
+      PdfScannedConfirmDialogData,
+      PdfScannedConfirmDialogResult | null
+    >(PdfScannedConfirmDialogComponent, {
+      width: '560px',
+      maxWidth: '95vw',
+      panelClass: 'dark-dialog',
+      autoFocus: false,
+      disableClose: true,
+      data: dialogData,
+    });
+    ref.afterClosed().subscribe((out) => {
+      input.value = '';
+      if (!out) return;
+      // Envia o PDF original com flag de responsabilidade do usuário
+      this.sendPdfMessage(originalFilename, originalBase64, null,
+        'PDF escaneado anexado (responsabilidade do usuário).',
+        true);
+    });
+  }
+
+  private sendPdfMessage(
+    filename: string,
+    base64: string,
+    input: HTMLInputElement | null,
+    successMsg: string,
+    userConfirmedScanned = false,
+  ): void {
+    this.sending = true;
+    const body = this.draft.trim() || undefined;
+    const pdfPayload: any = {
+      filename,
+      data_base64: base64,
+      mime_type: 'application/pdf',
+    };
+    if (userConfirmedScanned) pdfPayload.user_confirmed_scanned = true;
+
+    this.chat.sendMessage(this.conversationId, { body, pdf: pdfPayload }).subscribe({
+      next: (msg) => {
+        if (input) input.value = '';
+        this.messages.update(arr => [...arr, msg]);
+        this.draft = '';
+        this.sending = false;
+        this.shouldScroll = true;
+        this.snack.open(successMsg, '', { duration: 4000 });
+      },
+      error: (err) => {
+        this.sending = false;
+        const e = err.error || {};
+        if (e.detected_kinds?.length) {
+          this.snack.open(
+            `O PDF ainda contém PII detectável: ${e.detected_kinds.join(', ')}. Reveja e tente novamente.`,
+            'Fechar',
+            { duration: 8000, panelClass: ['snack-error'] }
+          );
+        } else {
+          this.snack.open(e.error || 'Erro ao anexar PDF.', 'Fechar', { duration: 5000 });
+        }
+      }
+    });
   }
 
   onMessagesScroll() {
