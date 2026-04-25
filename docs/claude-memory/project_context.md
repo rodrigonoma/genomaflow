@@ -108,9 +108,31 @@ Ajuda contextual in-app via AI (Haiku 4.5) com RAG sobre `docs/superpowers/plans
 - **Frontend:** botão `help_outline` no topbar (ao lado do `smart_toy` clínico — UIs e namespaces completamente separados); `ProductHelpPanelComponent` é side panel com streaming visível + botões de ação clicáveis + exibição de fontes.
 - **Master panel** ganhou aba "Ajuda" com top rotas (revela UX ruim) + últimas 100 perguntas.
 - **Hesitation detector** (`HesitationDetectorService`) detecta padrão A→B→A→B em <15s e oferece snackbar "ABRIR COPILOT" proativamente.
-- **Reindex** via `apps/worker/src/rag/reindex-product-help.js` (manual por enquanto; CI com skip-if-missing task def, criar infra depois).
+- **Reindex automático via CI:** worker image tem `docs/` + `CLAUDE.md` baked in. Task ECS Fargate `genomaflow-prod-reindex-help` (família criada via CDK) roda `node src/rag/reindex-product-help.js`. Deploy.yml detecta mudança em `docs/` ou `CLAUDE.md` via `git diff HEAD~1 HEAD` e dispara o task; falha não derruba deploy (Copilot segue com docs anteriores).
+- **Último estado em prod**: 162 chunks indexados (primeiro reindex 2026-04-24). Custo: ~$0.001 por reindex completo (embedding) + fração de centavo Fargate.
 
 **Não confundir:** chatbot clínico (`smart_toy`) usa `chat_embeddings` + diretrizes médicas, cobra créditos. Copilot de ajuda usa `rag_documents` com namespace novo, gratuito.
+
+## Email verification + password reset (entregue 2026-04-24)
+
+Obrigatório verificar email antes de logar. Reset de senha via link single-use 1h.
+
+- **Schema:** colunas em `users` (`email_verified_at`, tokens com hash SHA-256, expiration, last_sent_at). Migration 051 faz backfill retroativo (usuários existentes marcados como verificados).
+- **Backend:** `/auth/email-verification/{send,verify,send-by-email}` + `/auth/password-reset/{request,confirm}`. Rate limits agressivos. Sempre 204 em endpoints públicos pra evitar enumeration.
+- **Email delivery:** AWS SES v2 (us-east-1). Domínio `genomaflow.com.br` verificado (DKIM + SPF + DMARC via Route53). `SES_MOCK=1` em dev loga o email ao invés de mandar.
+- **Env vars prod** (injetadas no task def via CI): `SES_FROM_EMAIL=noreply@genomaflow.com.br`, `FRONTEND_URL=https://genomaflow.com.br`.
+- **SES sandbox status**: pedido de production access enviado 2026-04-24 (análise de ~24h). Enquanto no sandbox, só manda pra emails pré-verificados via `aws sesv2 create-email-identity`.
+
+## Infra em git (versionada 2026-04-24)
+
+`infra/` passou a ser versionada (antes vivia só no WSL do mantenedor).
+
+- **Stacks CDK**: `genomaflow-{vpc,rds,redis,ecr,dns,ecs}`.
+- **Task defs ECS one-shot** (executadas via `aws ecs run-task` pelo CI):
+  - `genomaflow-prod-migrate`: aplica migrations SQL em `apps/api/src/db/migrations/`
+  - `genomaflow-prod-reindex-help`: reindexa docs/ do Copilot
+- **Deploy CDK ainda é manual**: `cd infra && npx cdk deploy <stack>`. Workflow do GitHub Actions só gerencia container deploys (build + register-task-definition + update-service). Mudanças em stacks precisam de `cdk deploy` local + commit na mesma PR.
+- **Padrão de one-shot task**: task def com `family: genomaflow-prod-<name>` + container image (api pra operações de DB, worker pra jobs com docs); CI detecta condição (`git diff HEAD~1 HEAD`) → `aws ecs run-task` com config de subnet/SG da VPC → `aws ecs wait tasks-stopped` → puxa exit code. Modelo do `genomaflow-prod-migrate`.
 
 ## ICP e Filosofia
 

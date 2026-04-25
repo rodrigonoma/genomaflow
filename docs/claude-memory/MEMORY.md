@@ -17,3 +17,4 @@
 - [Angular prod build — fileReplacements](feedback_angular_prod_build.md) — angular.json SEM fileReplacements faz environment.production=false em prod; sintoma inclui WS quebrado e flags de debug vazadas; auditar bundle minificado (incidente 2026-04-24)
 - [AuthService — hidratar profile no F5](feedback_auth_profile_hydration.md) — persistir profile em localStorage pra evitar flicker/sumiço do chip do tenant no F5 (incidente 2026-04-24)
 - [Material Modal Padding](feedback_material_modal_padding.md) — modal-body com overflow+padding-top:0 clipa floating label do mat-form-field outline; usar padding: 1.25rem 1.5rem (incidente 2026-04-24)
+- [Padrão ECS one-shot tasks](feedback_ecs_one_shot_tasks.md) — Receita pra jobs condicionais (migrate, reindex): CDK task def + CI com git diff + aws ecs run-task + wait tasks-stopped. Modelo vivo em genomaflow-prod-migrate e -reindex-help
