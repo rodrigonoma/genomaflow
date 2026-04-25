@@ -35,3 +35,20 @@ E procurar uso de `uploadFile` no código:
 ```bash
 grep -rn "uploadFile(" apps/api/src/ | grep -v "node_modules"
 ```
+
+---
+
+## Bonus — CORS do bucket
+
+Se uma feature carrega arquivos S3 **dentro do browser** (canvas, fetch com `crossOrigin`, leitura de pixels), o bucket precisa ter CORS configurado. Sem CORS:
+- `<img src=signedUrl>` simples funciona (browser só renderiza)
+- `<img crossOrigin='anonymous'>` quebra silenciosamente — `onerror` dispara
+- `fetch(signedUrl)` quebra com erro CORS
+
+Config atual em `genomaflow-uploads-prod`:
+```bash
+aws s3api get-bucket-cors --bucket genomaflow-uploads-prod
+```
+Permite GET de `https://genomaflow.com.br`, `https://www.genomaflow.com.br`, `http://localhost:4200`. Se adicionar novo domínio (ex: app.genomaflow.com.br no futuro), atualizar.
+
+**Why incluir aqui:** o redact endpoint (2026-04-25) precisou simultaneamente de fix de IAM e CORS. Os dois são lições da mesma feature, então ficam juntos.
