@@ -27,18 +27,22 @@ const ctx = {
 
 describe('runHematologyAgent', () => {
   it('returns interpretation string', async () => {
-    expect(typeof (await runHematologyAgent(ctx)).interpretation).toBe('string');
+    const { result } = await runHematologyAgent(ctx);
+    expect(typeof result.interpretation).toBe('string');
   });
 
   it('returns hematology risk score', async () => {
-    expect((await runHematologyAgent(ctx)).risk_scores).toHaveProperty('hematology');
+    const { result } = await runHematologyAgent(ctx);
+    expect(result.risk_scores).toHaveProperty('hematology');
   });
 
   it('returns alerts array', async () => {
-    expect(Array.isArray((await runHematologyAgent(ctx)).alerts)).toBe(true);
+    const { result } = await runHematologyAgent(ctx);
+    expect(Array.isArray(result.alerts)).toBe(true);
   });
 
   it('always sets the mandatory disclaimer', async () => {
-    expect((await runHematologyAgent(ctx)).disclaimer).toContain('não substitui avaliação médica');
+    const { result } = await runHematologyAgent(ctx);
+    expect(result.disclaimer).toContain('não substitui avaliação médica');
   });
 });

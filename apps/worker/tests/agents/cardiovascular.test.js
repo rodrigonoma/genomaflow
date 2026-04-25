@@ -27,18 +27,22 @@ const ctx = {
 
 describe('runCardiovascularAgent', () => {
   it('returns interpretation string', async () => {
-    expect(typeof (await runCardiovascularAgent(ctx)).interpretation).toBe('string');
+    const { result } = await runCardiovascularAgent(ctx);
+    expect(typeof result.interpretation).toBe('string');
   });
 
   it('returns cardiovascular risk score', async () => {
-    expect((await runCardiovascularAgent(ctx)).risk_scores).toHaveProperty('cardiovascular');
+    const { result } = await runCardiovascularAgent(ctx);
+    expect(result.risk_scores).toHaveProperty('cardiovascular');
   });
 
   it('returns alerts array', async () => {
-    expect(Array.isArray((await runCardiovascularAgent(ctx)).alerts)).toBe(true);
+    const { result } = await runCardiovascularAgent(ctx);
+    expect(Array.isArray(result.alerts)).toBe(true);
   });
 
   it('always sets the mandatory disclaimer', async () => {
-    expect((await runCardiovascularAgent(ctx)).disclaimer).toContain('não substitui avaliação médica');
+    const { result } = await runCardiovascularAgent(ctx);
+    expect(result.disclaimer).toContain('não substitui avaliação médica');
   });
 });
