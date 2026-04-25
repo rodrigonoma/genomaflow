@@ -12,9 +12,17 @@ const pool = new Pool({
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Diretórios que entram no índice. Paths relativos ao root do repo.
+//
+// IMPORTANTE — NUNCA indexar docs/superpowers/plans/ nem docs/superpowers/specs/:
+// esses arquivos contêm detalhes internos de implementação (código, nomes de
+// tabelas, rotas, arquitetura) e vazariam informação sensível pro usuário final
+// se o Copilot resgatasse e echoasse. Incidente 2026-04-24 motivou a remoção.
+//
+// TODO(product): quando houver docs/user-help/ com conteúdo intencionalmente
+// user-facing, adicionar aqui. Até lá, Copilot usa apenas claude-memory (decisões
+// de alto nível) + CLAUDE.md (com prompt hardening pra recusar conteúdo técnico).
 const SOURCES = [
-  { dir: 'docs/superpowers/plans', sourceKind: 'plan' },
-  { dir: 'docs/superpowers/specs', sourceKind: 'spec' },
+  { dir: 'docs/user-help',     sourceKind: 'guide' },    // não existe ainda — TODO
   { dir: 'docs/claude-memory', sourceKind: 'memory' },
 ];
 
