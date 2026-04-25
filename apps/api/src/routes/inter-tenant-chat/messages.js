@@ -192,6 +192,11 @@ module.exports = async function (fastify) {
       if (pdf.mime_type && pdf.mime_type !== 'application/pdf') {
         return reply.status(400).send({ error: 'somente PDF suportado nesta fase' });
       }
+      // strict equality — só pula PII check se for literalmente true (usuário aceitou
+      // responsabilidade LGPD via modal de PDF escaneado)
+      if (pdf.user_confirmed_scanned !== undefined && pdf.user_confirmed_scanned !== true) {
+        return reply.status(400).send({ error: 'pdf.user_confirmed_scanned deve ser true' });
+      }
     }
 
     if (image) {
@@ -222,15 +227,26 @@ module.exports = async function (fastify) {
       if (buffer.length === 0) return reply.status(400).send({ error: 'pdf vazio' });
       if (buffer.length > 10 * 1024 * 1024) return reply.status(400).send({ error: 'PDF excede 10MB' });
 
-      const text = await extractPdfText(buffer);
-      const piiResult = await checkPii(text);
-
-      if (piiResult.has_pii) {
-        return reply.status(400).send({
-          error: 'PDF contém dados pessoais — remova antes de anexar.',
-          detected_kinds: piiResult.detected_kinds,
-          region_count: piiResult.region_count,
-        });
+      // Quando o usuário confirmou explicitamente que o PDF é escaneado (sem text
+      // layer extraível), assume responsabilidade LGPD — pula o PII check e marca
+      // no audit trail. Front só envia essa flag depois do modal de confirmação.
+      let piiResult;
+      if (pdf.user_confirmed_scanned === true) {
+        piiResult = {
+          has_pii: false,
+          detected_kinds: ['user_confirmed_scanned'],
+          region_count: 0,
+        };
+      } else {
+        const text = await extractPdfText(buffer);
+        piiResult = await checkPii(text);
+        if (piiResult.has_pii) {
+          return reply.status(400).send({
+            error: 'PDF contém dados pessoais — remova antes de anexar.',
+            detected_kinds: piiResult.detected_kinds,
+            region_count: piiResult.region_count,
+          });
+        }
       }
 
       // Upload S3 (fora da tx)

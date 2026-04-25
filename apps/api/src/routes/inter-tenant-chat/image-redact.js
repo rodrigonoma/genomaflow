@@ -1,7 +1,7 @@
 'use strict';
 const { randomUUID } = require('crypto');
 const { redactPiiFromImage } = require('../../imaging/redactor');
-const { redactPiiFromPdf, MAX_PAGES: PDF_MAX_PAGES } = require('../../imaging/pdf-redactor');
+const { redactPiiInTextLayerPdf } = require('../../imaging/pdf-text-redactor');
 const { uploadFile, getSignedDownloadUrl } = require('../../storage/s3');
 
 const ADMIN_ONLY = async function (request, reply) {
@@ -123,25 +123,35 @@ module.exports = async function (fastify) {
   });
 
   /**
-   * POST /inter-tenant-chat/images/redact-pdf
+   * POST /inter-tenant-chat/images/redact-pdf-text-layer
    *
    * Body: { filename, mime_type='application/pdf', data_base64 }
-   * Response: {
-   *   redact_id,
-   *   page_count: number,
-   *   truncated: boolean (true se excedeu MAX_PAGES e cortamos),
-   *   pages: Array<{
-   *     page_number, original_url, redacted_url, regions, width, height,
-   *     engine, ocr_word_count
-   *   }>
-   * }
    *
-   * Cada página vira 2 imagens em S3 temp (lifecycle 1h).
-   * Rate limit 5/hora — PDFs são caros (até 20 páginas × ~3s/página).
+   * Resposta dependendo do PDF:
+   *
+   * (1) PDF com text layer (digital, ~95% dos casos):
+   *     Retorna o PDF redigido (retângulos pretos sobre os tokens de PII)
+   *     e signed URLs pra preview do original e do redigido.
+   *     {
+   *       has_text_layer: true,
+   *       redact_id, original_url, redacted_url,
+   *       redacted_data_base64,   // pra reuso direto pelo client (preview)
+   *       summary: { name: 3, cpf: 1, ... },
+   *       total_regions, page_count
+   *     }
+   *
+   * (2) PDF escaneado (sem text layer suficiente):
+   *     Não redige. Front mostra modal de confirmação de responsabilidade.
+   *     {
+   *       has_text_layer: false,
+   *       page_count, reasoning
+   *     }
+   *
+   * Rate limit 10/hora — pdfjs+pdf-lib é leve (1-3s pro PDF típico).
    */
-  fastify.post('/redact-pdf', {
+  fastify.post('/redact-pdf-text-layer', {
     preHandler: [fastify.authenticate, ADMIN_ONLY],
-    config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
+    config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
   }, async (request, reply) => {
     const { tenant_id, user_id } = request.user;
     const { filename, mime_type, data_base64 } = request.body || {};
@@ -163,74 +173,68 @@ module.exports = async function (fastify) {
 
     let result;
     try {
-      result = await redactPiiFromPdf(buffer);
+      result = await redactPiiInTextLayerPdf(buffer);
     } catch (err) {
-      request.log.error({ err }, 'redact-pdf: pipeline failed');
+      request.log.error({ err }, 'redact-pdf-text-layer: pipeline failed');
       return reply.status(500).send({
-        error: 'Falha ao processar o PDF. Tente novamente ou anonimize manualmente.',
+        error: 'Falha ao processar o PDF. Tente novamente.',
       });
     }
 
-    // Sharp pra metadata por página
-    const sharp = require('sharp');
+    if (!result.hasTextLayer) {
+      request.log.info({
+        tenant_id, user_id,
+        page_count: result.pageCount,
+        reasoning: result.reasoning,
+      }, 'redact-pdf-text-layer: scanned (no text)');
+      return {
+        has_text_layer: false,
+        page_count: result.pageCount,
+        reasoning: result.reasoning,
+      };
+    }
+
+    // PDF com text layer — sobe original + redigido em S3 temp pra preview
     const redactId = randomUUID();
     const safeName = (filename || 'document').replace(/[^\w.-]/g, '_').slice(0, 80);
+    const keyOriginal = `${TEMP_PREFIX}/${tenant_id}/${redactId}/original-${safeName}`;
+    const keyRedacted = `${TEMP_PREFIX}/${tenant_id}/${redactId}/redacted-${safeName}`;
 
-    // Uploads + signed URLs em paralelo pra TODAS as páginas (não sequencial entre
-    // elas). Pra 9 páginas: ~9 puts em paralelo + 9 metadatas + 9 signed URLs.
-    // S3 aceita centenas de PUTs/seg de um único cliente sem throttling.
-    let pages;
     try {
-      pages = await Promise.all(result.pages.map(async (p) => {
-        const meta = await sharp(p.originalBuffer).metadata().catch(() => ({}));
-        const keyOriginal = `${TEMP_PREFIX}/${tenant_id}/${redactId}/page-${p.pageNumber}-original.png`;
-        const keyRedacted = `${TEMP_PREFIX}/${tenant_id}/${redactId}/page-${p.pageNumber}-redacted.png`;
-
-        await Promise.all([
-          uploadFile(keyOriginal, p.originalBuffer, 'image/png'),
-          uploadFile(keyRedacted, p.redactedBuffer, 'image/png'),
-        ]);
-
-        const [originalUrl, redactedUrl] = await Promise.all([
-          getSignedDownloadUrl(keyOriginal, 1800),
-          getSignedDownloadUrl(keyRedacted, 1800),
-        ]);
-
-        return {
-          page_number: p.pageNumber,
-          original_url: originalUrl,
-          redacted_url: redactedUrl,
-          regions: p.regions,
-          width: meta.width || 0,
-          height: meta.height || 0,
-          engine: p.engine,
-          ocr_word_count: p.ocrWordCount,
-        };
-      }));
+      await Promise.all([
+        uploadFile(keyOriginal, buffer, 'application/pdf'),
+        uploadFile(keyRedacted, result.redactedBuffer, 'application/pdf'),
+      ]);
     } catch (err) {
-      request.log.error({ err }, 'redact-pdf: S3 upload failed');
-      return reply.status(500).send({ error: 'Falha ao armazenar páginas temporariamente.' });
+      request.log.error({ err }, 'redact-pdf-text-layer: S3 upload failed');
+      return reply.status(500).send({ error: 'Falha ao armazenar PDF temporariamente.' });
     }
+
+    const [originalUrl, redactedUrl] = await Promise.all([
+      getSignedDownloadUrl(keyOriginal, 1800),
+      getSignedDownloadUrl(keyRedacted, 1800),
+    ]);
 
     request.log.info({
       tenant_id, user_id,
       redact_id: redactId,
       filename: safeName,
-      original_filename: filename,
       page_count: result.pageCount,
-      pages_processed: pages.length,
-      truncated: result.truncated,
-      total_regions: pages.reduce((s, p) => s + p.regions.length, 0),
-      pdf_bytes: buffer.length,
-    }, 'redact-pdf: ok');
+      total_regions: result.totalRegions,
+      summary: result.summary,
+      pdf_bytes_in: buffer.length,
+      pdf_bytes_out: result.redactedBuffer.length,
+    }, 'redact-pdf-text-layer: ok');
 
     return {
+      has_text_layer: true,
       redact_id: redactId,
+      original_url: originalUrl,
+      redacted_url: redactedUrl,
+      redacted_data_base64: result.redactedBuffer.toString('base64'),
+      summary: result.summary,
+      total_regions: result.totalRegions,
       page_count: result.pageCount,
-      pages_processed: pages.length,
-      truncated: result.truncated,
-      max_pages: PDF_MAX_PAGES,
-      pages,
     };
   });
 };
