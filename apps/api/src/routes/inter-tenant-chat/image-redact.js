@@ -1,6 +1,7 @@
 'use strict';
 const { randomUUID } = require('crypto');
 const { redactPiiFromImage } = require('../../imaging/redactor');
+const { redactPiiFromPdf, MAX_PAGES: PDF_MAX_PAGES } = require('../../imaging/pdf-redactor');
 const { uploadFile, getSignedDownloadUrl } = require('../../storage/s3');
 
 const ADMIN_ONLY = async function (request, reply) {
@@ -118,6 +119,117 @@ module.exports = async function (fastify) {
       height,
       engine: result.engine,
       ocr_word_count: result.ocrWordCount,
+    };
+  });
+
+  /**
+   * POST /inter-tenant-chat/images/redact-pdf
+   *
+   * Body: { filename, mime_type='application/pdf', data_base64 }
+   * Response: {
+   *   redact_id,
+   *   page_count: number,
+   *   truncated: boolean (true se excedeu MAX_PAGES e cortamos),
+   *   pages: Array<{
+   *     page_number, original_url, redacted_url, regions, width, height,
+   *     engine, ocr_word_count
+   *   }>
+   * }
+   *
+   * Cada página vira 2 imagens em S3 temp (lifecycle 1h).
+   * Rate limit 5/hora — PDFs são caros (até 20 páginas × ~3s/página).
+   */
+  fastify.post('/redact-pdf', {
+    preHandler: [fastify.authenticate, ADMIN_ONLY],
+    config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
+    const { tenant_id, user_id } = request.user;
+    const { filename, mime_type, data_base64 } = request.body || {};
+
+    if (!data_base64 || typeof data_base64 !== 'string') {
+      return reply.status(400).send({ error: 'data_base64 obrigatório' });
+    }
+    if (mime_type !== 'application/pdf') {
+      return reply.status(400).send({ error: 'Apenas PDF aceito neste endpoint' });
+    }
+
+    let buffer;
+    try { buffer = Buffer.from(data_base64, 'base64'); }
+    catch (_) { return reply.status(400).send({ error: 'data_base64 inválido' }); }
+
+    if (buffer.length > MAX_BYTES) {
+      return reply.status(400).send({ error: 'PDF maior que 10MB' });
+    }
+
+    let result;
+    try {
+      result = await redactPiiFromPdf(buffer);
+    } catch (err) {
+      request.log.error({ err }, 'redact-pdf: pipeline failed');
+      return reply.status(500).send({
+        error: 'Falha ao processar o PDF. Tente novamente ou anonimize manualmente.',
+      });
+    }
+
+    // Sharp pra metadata por página
+    const sharp = require('sharp');
+    const redactId = randomUUID();
+    const safeName = (filename || 'document').replace(/[^\w.-]/g, '_').slice(0, 80);
+
+    // Upload em paralelo dentro de cada página (ainda assim sequencial entre páginas
+    // pra evitar pico de S3 puts em PDFs grandes)
+    const pages = [];
+    for (const p of result.pages) {
+      const meta = await sharp(p.originalBuffer).metadata().catch(() => ({}));
+      const keyOriginal = `${TEMP_PREFIX}/${tenant_id}/${redactId}/page-${p.pageNumber}-original.png`;
+      const keyRedacted = `${TEMP_PREFIX}/${tenant_id}/${redactId}/page-${p.pageNumber}-redacted.png`;
+
+      try {
+        await Promise.all([
+          uploadFile(keyOriginal, p.originalBuffer, 'image/png'),
+          uploadFile(keyRedacted, p.redactedBuffer, 'image/png'),
+        ]);
+      } catch (err) {
+        request.log.error({ err, page: p.pageNumber }, 'redact-pdf: S3 upload failed');
+        return reply.status(500).send({ error: 'Falha ao armazenar páginas temporariamente.' });
+      }
+
+      const [originalUrl, redactedUrl] = await Promise.all([
+        getSignedDownloadUrl(keyOriginal, 1800),
+        getSignedDownloadUrl(keyRedacted, 1800),
+      ]);
+
+      pages.push({
+        page_number: p.pageNumber,
+        original_url: originalUrl,
+        redacted_url: redactedUrl,
+        regions: p.regions,
+        width: meta.width || 0,
+        height: meta.height || 0,
+        engine: p.engine,
+        ocr_word_count: p.ocrWordCount,
+      });
+    }
+
+    request.log.info({
+      tenant_id, user_id,
+      redact_id: redactId,
+      filename: safeName,
+      original_filename: filename,
+      page_count: result.pageCount,
+      pages_processed: pages.length,
+      truncated: result.truncated,
+      total_regions: pages.reduce((s, p) => s + p.regions.length, 0),
+      pdf_bytes: buffer.length,
+    }, 'redact-pdf: ok');
+
+    return {
+      redact_id: redactId,
+      page_count: result.pageCount,
+      pages_processed: pages.length,
+      truncated: result.truncated,
+      max_pages: PDF_MAX_PAGES,
+      pages,
     };
   });
 };
