@@ -16,6 +16,7 @@ import { AiAnalysisPickerComponent } from './ai-analysis-picker.component';
 import { PdfAttachmentCardComponent } from './pdf-attachment-card.component';
 import { ImageAttachmentCardComponent } from './image-attachment-card.component';
 import { ImageUploadConfirmComponent } from './image-upload-confirm.component';
+import { RedactImageDialogComponent, RedactDialogData, RedactDialogResult } from './redact-image-dialog.component';
 import { ReportDialogComponent } from './report-dialog.component';
 import { CounterpartContactDialogComponent } from './counterpart-contact-dialog.component';
 
@@ -559,28 +560,36 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
     reader.onload = () => {
       const dataUrl = reader.result as string;
       const base64 = dataUrl.split(',')[1] || dataUrl;
-      const confirmRef = this.dialog.open(ImageUploadConfirmComponent, {
-        width: '560px',
-        panelClass: 'dark-dialog',
-        autoFocus: false,
-        data: {
-          filename: file.name,
-          mime_type: file.type,
-          data_url: dataUrl,
-          size_bytes: file.size,
+
+      // Novo fluxo: OCR + redação automática + revisão visual com canvas editor
+      const dialogData: RedactDialogData = {
+        filename: file.name,
+        mime_type: file.type,
+        data_base64: base64,
+      };
+      const redactRef = this.dialog.open<RedactImageDialogComponent, RedactDialogData, RedactDialogResult | null>(
+        RedactImageDialogComponent,
+        {
+          width: '900px',
+          maxWidth: '95vw',
+          panelClass: 'dark-dialog',
+          autoFocus: false,
+          disableClose: true,
+          data: dialogData,
         }
-      });
-      confirmRef.afterClosed().subscribe((confirmed: boolean | undefined) => {
+      );
+      redactRef.afterClosed().subscribe((result) => {
         input.value = '';
-        if (!confirmed) return;
+        if (!result) return; // cancelou
+
         this.sending = true;
         const body = this.draft.trim() || undefined;
         this.chat.sendMessage(this.conversationId, {
           body,
           image: {
-            filename: file.name,
-            data_base64: base64,
-            mime_type: file.type as 'image/png' | 'image/jpeg',
+            filename: result.filename,
+            data_base64: result.data_base64,  // imagem já redigida pelo canvas
+            mime_type: result.mime_type as 'image/png' | 'image/jpeg',
             user_confirmed_anonymized: true,
           }
         }).subscribe({
@@ -589,7 +598,10 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
             this.draft = '';
             this.sending = false;
             this.shouldScroll = true;
-            this.snack.open('Imagem anexada.', '', { duration: 2500 });
+            this.snack.open(
+              `Imagem anexada. Blocos: ${result.auto_regions - result.manual_removed} auto + ${result.manual_added} manual.`,
+              '', { duration: 3500 }
+            );
           },
           error: (err) => {
             this.sending = false;
