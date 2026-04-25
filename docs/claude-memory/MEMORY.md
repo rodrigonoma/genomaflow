@@ -20,3 +20,4 @@
 - [Padrão ECS one-shot tasks](feedback_ecs_one_shot_tasks.md) — Receita pra jobs condicionais (migrate, reindex): CDK task def + CI com git diff + aws ecs run-task + wait tasks-stopped. Modelo vivo em genomaflow-prod-migrate e -reindex-help
 - [IAM S3 — cobrir prefixos](feedback_iam_s3_prefixes.md) — feature nova com upload em prefixo novo exige atualizar policy IAM da task ECS, senão 500 silencioso na prod (incidente 2026-04-25 com redact endpoint)
 - [PDF redaction strategy](feedback_pdf_redaction_strategy.md) — PDFs digitais: pdfjs-dist + pd-lib (não rasterizar); PDFs escaneados: modal LGPD com checkbox; imagens canvas: JPEG q=0.85 (não PNG)
+- [Testing standards](feedback_testing_standards.md) — CI gate em deploy.yml bloqueia deploy em falha de teste (api/worker/web); test:unit = subset sem DB; padrão Fastify isolado; skip com TODO; cobertura atual: 216 verdes / 7 skipped (snapshot 2026-04-25)
