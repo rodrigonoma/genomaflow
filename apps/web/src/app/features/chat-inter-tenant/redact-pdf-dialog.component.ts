@@ -452,7 +452,10 @@ export class RedactPdfDialogComponent implements AfterViewInit, AfterViewChecked
         page.drawImage(png, { x: 0, y: 0, width: fp.width, height: fp.height });
       }
       const pdfBytes = await pdfDoc.save();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
+      // FileReader.readAsDataURL faz a conversão em chunks nativos — evita
+      // 'Maximum call stack size exceeded' do btoa(String.fromCharCode(...arr))
+      // que estoura com PDFs grandes (5MB+).
+      const base64 = await bytesToBase64Async(new Uint8Array(pdfBytes));
 
       // Stats agregadas
       let totalAuto = 0, totalManualAdded = 0, totalRemoved = 0;
@@ -476,4 +479,24 @@ export class RedactPdfDialogComponent implements AfterViewInit, AfterViewChecked
       this.phase.set('error');
     }
   }
+}
+
+/**
+ * Converte Uint8Array em base64 usando FileReader (chunked nativo).
+ * Necessário pra arrays grandes (>~1MB) — btoa(String.fromCharCode(...arr))
+ * estoura "Maximum call stack size exceeded" porque o spread passa milhões
+ * de args ao mesmo tempo pra String.fromCharCode.
+ */
+function bytesToBase64Async(bytes: Uint8Array): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const blob = new Blob([bytes]);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const i = dataUrl.indexOf(',');
+      resolve(i >= 0 ? dataUrl.slice(i + 1) : dataUrl);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }

@@ -176,39 +176,40 @@ module.exports = async function (fastify) {
     const redactId = randomUUID();
     const safeName = (filename || 'document').replace(/[^\w.-]/g, '_').slice(0, 80);
 
-    // Upload em paralelo dentro de cada página (ainda assim sequencial entre páginas
-    // pra evitar pico de S3 puts em PDFs grandes)
-    const pages = [];
-    for (const p of result.pages) {
-      const meta = await sharp(p.originalBuffer).metadata().catch(() => ({}));
-      const keyOriginal = `${TEMP_PREFIX}/${tenant_id}/${redactId}/page-${p.pageNumber}-original.png`;
-      const keyRedacted = `${TEMP_PREFIX}/${tenant_id}/${redactId}/page-${p.pageNumber}-redacted.png`;
+    // Uploads + signed URLs em paralelo pra TODAS as páginas (não sequencial entre
+    // elas). Pra 9 páginas: ~9 puts em paralelo + 9 metadatas + 9 signed URLs.
+    // S3 aceita centenas de PUTs/seg de um único cliente sem throttling.
+    let pages;
+    try {
+      pages = await Promise.all(result.pages.map(async (p) => {
+        const meta = await sharp(p.originalBuffer).metadata().catch(() => ({}));
+        const keyOriginal = `${TEMP_PREFIX}/${tenant_id}/${redactId}/page-${p.pageNumber}-original.png`;
+        const keyRedacted = `${TEMP_PREFIX}/${tenant_id}/${redactId}/page-${p.pageNumber}-redacted.png`;
 
-      try {
         await Promise.all([
           uploadFile(keyOriginal, p.originalBuffer, 'image/png'),
           uploadFile(keyRedacted, p.redactedBuffer, 'image/png'),
         ]);
-      } catch (err) {
-        request.log.error({ err, page: p.pageNumber }, 'redact-pdf: S3 upload failed');
-        return reply.status(500).send({ error: 'Falha ao armazenar páginas temporariamente.' });
-      }
 
-      const [originalUrl, redactedUrl] = await Promise.all([
-        getSignedDownloadUrl(keyOriginal, 1800),
-        getSignedDownloadUrl(keyRedacted, 1800),
-      ]);
+        const [originalUrl, redactedUrl] = await Promise.all([
+          getSignedDownloadUrl(keyOriginal, 1800),
+          getSignedDownloadUrl(keyRedacted, 1800),
+        ]);
 
-      pages.push({
-        page_number: p.pageNumber,
-        original_url: originalUrl,
-        redacted_url: redactedUrl,
-        regions: p.regions,
-        width: meta.width || 0,
-        height: meta.height || 0,
-        engine: p.engine,
-        ocr_word_count: p.ocrWordCount,
-      });
+        return {
+          page_number: p.pageNumber,
+          original_url: originalUrl,
+          redacted_url: redactedUrl,
+          regions: p.regions,
+          width: meta.width || 0,
+          height: meta.height || 0,
+          engine: p.engine,
+          ocr_word_count: p.ocrWordCount,
+        };
+      }));
+    } catch (err) {
+      request.log.error({ err }, 'redact-pdf: S3 upload failed');
+      return reply.status(500).send({ error: 'Falha ao armazenar páginas temporariamente.' });
     }
 
     request.log.info({
