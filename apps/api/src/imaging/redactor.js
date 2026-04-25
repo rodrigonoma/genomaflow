@@ -64,27 +64,43 @@ async function runOcr(imageBuffer) {
   }
 }
 
-/** Aplica regex em cada palavra. Retorna Set de índices com match. */
+/**
+ * Aplica regex em cada palavra. Retorna Set de índices com match.
+ *
+ * Estratégia: monta o texto completo concatenando words com 1 espaço entre cada,
+ * grava o offset (start, end) de cada palavra no texto, e roda regex global.
+ * Palavras cujo bbox de offset SOBREPÕE o match são marcadas — sem partial-match
+ * permissivo (que antes pegava "-" e "(" e ")" como PII por engano).
+ *
+ * Defesa adicional: ignora palavras com <2 caracteres (pontuação, single char OCR
+ * artifacts) — não devem ser PII por si.
+ */
 function classifyByRegex(words) {
   const matched = new Set();
-  // Combina o texto inteiro pra rodar regex que atravessa palavras (ex: CPF espaçado)
+  // Calcula offset de cada palavra no fullText
+  const offsets = [];
+  let pos = 0;
+  for (const w of words) {
+    const start = pos;
+    const end = pos + w.text.length;
+    offsets.push({ start, end });
+    pos = end + 1; // +1 pelo espaço de junção
+  }
   const fullText = words.map(w => w.text).join(' ');
-  for (const { kind, re } of PII_PATTERNS) {
-    let m;
+
+  for (const { re } of PII_PATTERNS) {
     const reGlobal = new RegExp(re.source, 'g');
+    let m;
     while ((m = reGlobal.exec(fullText)) !== null) {
-      const matchText = m[0];
-      // Acha quais palavras caem no match
-      const matchTokens = matchText.split(/\s+/).filter(Boolean);
-      // Estratégia simples: acha cada token no array de words
-      let startIdx = 0;
-      for (const tok of matchTokens) {
-        for (let i = startIdx; i < words.length; i++) {
-          if (words[i].text.includes(tok) || tok.includes(words[i].text)) {
-            matched.add(i);
-            startIdx = i + 1;
-            break;
-          }
+      const matchStart = m.index;
+      const matchEnd = m.index + m[0].length;
+      for (let i = 0; i < words.length; i++) {
+        // ignora ruído: palavras curtas raramente são PII
+        if (words[i].text.length < 2) continue;
+        const o = offsets[i];
+        // overlap entre [o.start, o.end) e [matchStart, matchEnd)
+        if (o.start < matchEnd && o.end > matchStart) {
+          matched.add(i);
         }
       }
     }
@@ -109,13 +125,34 @@ async function classifyByLlm(words, alreadyMatched) {
   if (candidates.length === 0) return new Set();
   if (candidates.length > 200) candidates.length = 200; // guardrail
 
-  const prompt = `Abaixo está uma lista de palavras extraídas por OCR de uma imagem de exame médico/veterinário. Identifique APENAS palavras que são **nomes próprios de pessoas** (primeiro nome, sobrenome) ou **nomes de animais de estimação**.
+  const prompt = `Você é um classificador conservador de PII em palavras extraídas por OCR de exame médico/veterinário (laudo, RM, RX, TC, US, ECG, etc). Sua tarefa: identificar APENAS palavras que são **nomes próprios de pessoa** (primeiro nome, sobrenome) ou **nome de animal de estimação**.
 
-NÃO marque: termos médicos, nomes de medicamentos, unidades (mg/dL, kg), marcas de aparelhos, nomes de exames, diagnósticos, nomes de cidades/estados, nomes de clínicas/laboratórios, dias da semana, meses.
+REGRA DE OURO: NA DÚVIDA, NÃO MARCAR. É melhor deixar passar do que marcar coisa errada. Só marca se tem certeza absoluta que é nome de pessoa/animal.
 
-Responda APENAS com um array JSON dos índices de palavras que são nomes de pessoa/animal. Exemplo: [0, 5, 12]. Sem comentários, sem texto adicional.
+NUNCA marcar como nome (mesmo que pareça):
+- Termos anatômicos / abreviações (ACL, MCL, PCL, LCA, LCM, LCP, ECA, RCA, AHA, AVC, etc)
+- Sequências/protocolos de RM (T1, T2, T2*, FLAIR, STIR, DWI, ADC, GRE, SE, FSE, TSE, MRA, MRI, RM, RNM)
+- Vistas/orientações (AX, AXIAL, SAG, SAGITAL, COR, CORONAL, TRANS, LONG, OBLIQ)
+- Parâmetros técnicos (TR, TE, TI, FOV, SLICE, MATRIX, NEX, BW, FLIP)
+- Marcas de aparelho/software (Siemens, GE, Philips, Toshiba, Hitachi, OsiriX, Horos, RadiAnt, DICOM)
+- Tipos de exame (ULTRASSOM, US, RX, TC, ECG, EEG, EMG, HEMOGRAMA, GLICEMIA, etc)
+- Medicamentos / princípios ativos (paracetamol, ibuprofeno, etc) e nomes comerciais
+- Unidades (mg/dL, mmol/L, kg, cm, mm, ms, °C)
+- Diagnósticos / patologias (em qualquer idioma)
+- Cidades, estados, países, regiões
+- Nomes de clínicas, laboratórios, hospitais (têm "Clínica", "Lab", "Hospital", "Centro Médico", etc)
+- Dias da semana, meses, estações
+- Termos de relatório (CONCLUSÃO, IMPRESSÃO, INDICAÇÃO, ACHADOS, COMPARAÇÃO, TÉCNICA)
+- Palavras genéricas em português ou inglês que não são claramente um nome
 
-Palavras:
+Marcar APENAS:
+- Primeiro nome de pessoa (Maria, João, Pedro, Ana, etc)
+- Sobrenome (Silva, Santos, Oliveira, Souza, etc)
+- Nome próprio de animal de estimação (Rex, Bidu, Mel, etc) — geralmente curto e incomum
+
+Responda APENAS com um array JSON dos índices das palavras que são nomes próprios de pessoa/animal — sem comentários, sem texto adicional, sem nada além do array. Exemplos válidos: [], [3, 7], [0].
+
+Palavras (formato "índice: texto"):
 ${candidates.map(c => `${c.idx}: ${c.text}`).join('\n')}`;
 
   try {
