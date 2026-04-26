@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output, inject, signal, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Component, EventEmitter, Output, inject, signal, ViewChild, ElementRef, AfterViewChecked, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -157,7 +157,7 @@ interface Msg {
     @if (voice.recording()) {
       <div class="voice-hint">
         <mat-icon style="font-size:12px;width:12px;height:12px;color:#ef4444">mic</mat-icon>
-        <span>Gravando...</span>
+        <span>Microfone ligado — fale à vontade</span>
         @if (voice.interim()) { <span class="interim">"{{ voice.interim() }}"</span> }
       </div>
     }
@@ -166,8 +166,7 @@ interface Msg {
         <button class="mic-btn"
                 [class.recording]="voice.recording()"
                 (click)="toggleMic()"
-                [matTooltip]="voice.recording() ? 'Clique pra parar' : 'Falar (pt-BR)'"
-                [disabled]="loading()">
+                [matTooltip]="voice.recording() ? 'Desligar microfone' : 'Ligar microfone (pt-BR, contínuo)'">
           <mat-icon style="font-size:18px;width:18px;height:18px">mic</mat-icon>
         </button>
       }
@@ -179,9 +178,15 @@ interface Msg {
     </div>
   `
 })
-export class ProductHelpPanelComponent implements AfterViewChecked {
+export class ProductHelpPanelComponent implements AfterViewChecked, OnDestroy {
   @Output() close = new EventEmitter<void>();
   @ViewChild('messagesBox') messagesBox?: ElementRef<HTMLDivElement>;
+
+  ngOnDestroy(): void {
+    // Garante que o mic não fique gravando após fechar o panel
+    if (this.voice.recording()) this.voice.stop();
+    if (this.abortCtrl) { this.abortCtrl.abort(); this.abortCtrl = null; }
+  }
 
   private svc = inject(ProductHelpService);
   private ctx = inject(HelpContextService);

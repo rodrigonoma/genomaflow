@@ -42,6 +42,7 @@ module.exports = fp(async function (fastify) {
     'exam:done:*', 'exam:error:*',
     'billing:alert:*', 'billing:exhausted:*',
     'chat:event:*',
+    'appointment:event:*',
     (err) => {
       if (err) fastify.log.error('Redis psubscribe error:', err);
     }
@@ -65,6 +66,11 @@ module.exports = fp(async function (fastify) {
       // Chat events: a mensagem JSON já traz 'event' e todos os campos.
       // O channel suffix é o tenant destinatário.
       tenantId = channel.replace('chat:event:', '');
+      payload = JSON.parse(message);
+    } else if (channel.startsWith('appointment:event:')) {
+      // Appointment events (criados via UI ou via Copilot tools).
+      // Mensagem JSON já traz 'event' (created/updated/cancelled) e payload.
+      tenantId = channel.replace('appointment:event:', '');
       payload = JSON.parse(message);
     } else {
       return;

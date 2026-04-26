@@ -11,6 +11,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { Subscription } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/auth/auth.service';
+import { WsService } from '../../core/ws/ws.service';
 import { AgendaService } from './agenda.service';
 import {
   Appointment,
@@ -269,6 +270,7 @@ export class AgendaPageComponent implements OnInit, OnDestroy {
   private dialog = inject(MatDialog);
   private snack = inject(MatSnackBar);
   private http = inject(HttpClient);
+  private ws = inject(WsService);
   auth = inject(AuthService);
 
   // Hours visible in grid: 7h–22h = 15 rows (60px each = 900px)
@@ -370,6 +372,11 @@ export class AgendaPageComponent implements OnInit, OnDestroy {
     this.loadSettings();
     this.loadSubjects();
     this.loadWeek();
+
+    // Auto-refresh quando alguém (eu mesmo via UI ou via Copilot) cria/edita/
+    // cancela um appointment do meu tenant. Mantém a tela sincronizada com o
+    // backend sem precisar de F5 nem polling.
+    this.subs.add(this.ws.appointmentEvent$.subscribe(() => this.loadWeek()));
   }
 
   mobileDayLabel(): string {
