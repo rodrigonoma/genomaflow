@@ -107,6 +107,26 @@ const TOOL_DEFINITIONS = [
       required: ['appointment_id'],
     },
   },
+  {
+    name: 'update_appointment_status',
+    description:
+      'Atualiza o status de um agendamento (confirmar paciente, marcar como concluído, ' +
+      'marcar falta, voltar pra scheduled). NÃO use pra cancelar — use cancel_appointment. ' +
+      'Use list_my_agenda ou get_appointment_details primeiro pra encontrar o id e mostrar ' +
+      'detalhes ao usuário antes de mudar.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        appointment_id: { type: 'string', description: 'UUID do agendamento' },
+        status: {
+          type: 'string',
+          enum: ['scheduled', 'confirmed', 'completed', 'no_show'],
+          description: 'Novo status: scheduled (volta pra agendado), confirmed (paciente confirmou), completed (atendimento realizado), no_show (paciente faltou)',
+        },
+      },
+      required: ['appointment_id', 'status'],
+    },
+  },
 ];
 
 // ── Executors ─────────────────────────────────────────────────────
@@ -317,12 +337,56 @@ async function execCancelAppointment(input, ctx) {
   };
 }
 
+async function execUpdateAppointmentStatus(input, ctx) {
+  if (!input?.appointment_id) return { error: 'appointment_id obrigatório' };
+  const VALID = ['scheduled', 'confirmed', 'completed', 'no_show'];
+  if (!VALID.includes(input.status)) {
+    return { error: `status deve ser um de ${VALID.join(', ')} (use cancel_appointment pra cancelar)` };
+  }
+
+  const result = await withTenant(ctx.fastify.pg, ctx.tenant_id, async (client) => {
+    const { rows } = await client.query(
+      `UPDATE appointments
+       SET status = $1, updated_at = NOW()
+       WHERE id = $2 AND tenant_id = $3 AND user_id = $4
+         AND status NOT IN ('cancelled', 'blocked')
+       RETURNING id, status, start_at, duration_minutes`,
+      [input.status, input.appointment_id, ctx.tenant_id, ctx.user_id]
+    );
+    return rows[0];
+  });
+
+  if (!result) {
+    return {
+      error: 'not_found',
+      message: 'Agendamento não encontrado, ou já está cancelado/é bloqueio (não é possível alterar status).',
+    };
+  }
+
+  try {
+    if (ctx.fastify.redis) {
+      await ctx.fastify.redis.publish(
+        `appointment:event:${ctx.tenant_id}`,
+        JSON.stringify({ event: 'appointment:updated', appointment: result })
+      );
+    }
+  } catch (_) {}
+
+  return {
+    id: result.id,
+    status: result.status,
+    start_at: result.start_at,
+    duration_minutes: result.duration_minutes,
+  };
+}
+
 const EXECUTORS = {
   find_subject: execFindSubject,
   list_my_agenda: execListMyAgenda,
   get_appointment_details: execGetAppointmentDetails,
   create_appointment: execCreateAppointment,
   cancel_appointment: execCancelAppointment,
+  update_appointment_status: execUpdateAppointmentStatus,
 };
 
 /**
