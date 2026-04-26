@@ -194,6 +194,9 @@ interface SubjectMap { [id: string]: string; }
       <span class="range-label desktop-only">{{ rangeLabel() }}</span>
       <span class="range-label mobile-only">{{ mobileDayLabel() }}</span>
       <div class="toolbar-spacer"></div>
+      <button mat-icon-button class="settings-btn" (click)="refresh()" matTooltip="Recarregar agenda">
+        <mat-icon>refresh</mat-icon>
+      </button>
       <button mat-icon-button class="settings-btn" (click)="openSettings()" matTooltip="Configurações da agenda">
         <mat-icon>settings</mat-icon>
       </button>
@@ -289,6 +292,10 @@ export class AgendaPageComponent implements OnInit, OnDestroy {
   // Drag state pra reschedule via drag-and-drop
   dragState = signal<{ id: string; durationMinutes: number; overDayIso: string | null } | null>(null);
 
+  // Listeners de focus/visibility — cleanup no ngOnDestroy
+  private onFocus: (() => void) | null = null;
+  private onVisibility: (() => void) | null = null;
+
   hourLabels = computed(() => {
     const arr: string[] = [];
     for (let h = this.HOUR_START; h < this.HOUR_END; h++) {
@@ -373,10 +380,26 @@ export class AgendaPageComponent implements OnInit, OnDestroy {
     this.loadSubjects();
     this.loadWeek();
 
-    // Auto-refresh quando alguém (eu mesmo via UI ou via Copilot) cria/edita/
-    // cancela um appointment do meu tenant. Mantém a tela sincronizada com o
-    // backend sem precisar de F5 nem polling.
+    // Auto-refresh em 3 redes de segurança:
+    //
+    // 1) WS event (idealmente o canal único — agenda viva em tempo real).
+    //    Funciona pra ações via UI ou via Copilot tools.
     this.subs.add(this.ws.appointmentEvent$.subscribe(() => this.loadWeek()));
+
+    // 2) Window focus / visibility — fallback caso WS tenha perdido evento
+    //    (timing entre publish e subscription, ou disconnect transitório).
+    //    Quando user volta pra tela, busca dados frescos.
+    this.onFocus = () => this.loadWeek();
+    this.onVisibility = () => {
+      if (document.visibilityState === 'visible') this.loadWeek();
+    };
+    window.addEventListener('focus', this.onFocus);
+    document.addEventListener('visibilitychange', this.onVisibility);
+  }
+
+  /** Refresh manual do botão de recarregar na toolbar. */
+  refresh(): void {
+    this.loadWeek();
   }
 
   mobileDayLabel(): string {
@@ -385,7 +408,11 @@ export class AgendaPageComponent implements OnInit, OnDestroy {
     if (!day) return '';
     return `${day.weekday} ${day.dayNumber}`;
   }
-  ngOnDestroy() { this.subs.unsubscribe(); }
+  ngOnDestroy() {
+    this.subs.unsubscribe();
+    if (this.onFocus) window.removeEventListener('focus', this.onFocus);
+    if (this.onVisibility) document.removeEventListener('visibilitychange', this.onVisibility);
+  }
 
   private startOfWeek(d: Date): Date {
     const day = d.getDay();

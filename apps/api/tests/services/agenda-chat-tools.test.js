@@ -229,6 +229,49 @@ describe('update_appointment_status', () => {
     expect(r.result.error).toBe('not_found');
   });
 
+  test('reativar cancelled → scheduled funciona (limpa cancelled_at)', async () => {
+    const c = ctx();
+    const queryFn = jest.fn()
+      .mockResolvedValueOnce({}) // BEGIN
+      .mockResolvedValueOnce({}) // set_config
+      .mockResolvedValueOnce({
+        rows: [{ id: 'a1', status: 'scheduled', start_at: '2030-01-01T10:00:00Z', duration_minutes: 30 }],
+      })
+      .mockResolvedValueOnce({}); // COMMIT
+    c.connectMock.mockResolvedValueOnce({ query: queryFn, release: jest.fn() });
+
+    const r = await executeTool('update_appointment_status', {
+      appointment_id: 'a1', status: 'scheduled',
+    }, c);
+    expect(r.result.status).toBe('scheduled');
+
+    // SQL deve incluir cleanup de cancelled_at quando target != cancelled
+    const updateSql = queryFn.mock.calls[2][0];
+    expect(updateSql).toMatch(/cancelled_at = CASE/);
+    // E excluir apenas blocked (não cancelled)
+    expect(updateSql).toMatch(/status != 'blocked'/);
+    expect(updateSql).not.toMatch(/status NOT IN \('cancelled'/);
+  });
+
+  test('overlap (23P01) ao reativar retorna erro inteligível', async () => {
+    const c = ctx();
+    const err = new Error('overlap');
+    err.code = '23P01';
+    c.connectMock.mockResolvedValueOnce({
+      query: jest.fn()
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockRejectedValueOnce(err),
+      release: jest.fn(),
+    });
+
+    const r = await executeTool('update_appointment_status', {
+      appointment_id: 'a1', status: 'scheduled',
+    }, c);
+    expect(r.result.error).toBe('overlap');
+    expect(r.result.message).toMatch(/horário já está ocupado/i);
+  });
+
   test.each(['scheduled', 'confirmed', 'completed', 'no_show'])(
     'status=%s aceito + UPDATE escopa por tenant + user',
     async (status) => {
