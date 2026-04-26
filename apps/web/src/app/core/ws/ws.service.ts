@@ -24,6 +24,9 @@ export class WsService {
   chatUnreadChange$       = new Subject<{ conversation_id: string; delta?: number; absolute?: number }>();
   chatReactionChanged$    = new Subject<{ conversation_id: string; message_id: string; emoji: string; count: number; action: 'added'|'removed' }>();
 
+  // Agenda events — emitidos por agenda.js + agenda-chat-tools.js
+  appointmentEvent$ = new Subject<{ event: 'appointment:created'|'appointment:updated'|'appointment:cancelled'; appointment?: any; appointment_id?: string }>();
+
   connect(token: string): void {
     this.disconnect();
     this.token = token;
@@ -69,6 +72,8 @@ export class WsService {
             this.chatUnreadChange$.next(msg as any);
           } else if (kind === 'chat:reaction_changed') {
             this.chatReactionChanged$.next(msg as any);
+          } else if (kind === 'appointment:created' || kind === 'appointment:updated' || kind === 'appointment:cancelled') {
+            this.appointmentEvent$.next(msg as any);
           } else {
             this.examUpdates$.next(msg as { exam_id: string });
           }
