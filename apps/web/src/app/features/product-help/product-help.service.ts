@@ -5,19 +5,40 @@ import { HelpContext } from '../../core/help-context/help-context.service';
 
 export interface HelpAction { label: string; url: string; }
 
+export type HistoryMessage = { role: 'user' | 'assistant'; content: any };
+
 export interface AskCallbacks {
   onDelta(text: string): void;
-  onDone(sources: Array<{ source: string; title: string; score: number }>, actions: HelpAction[]): void;
+  onDone(sources: Array<{ source: string; title: string; score: number }>, actions: HelpAction[], toolCallsSummary?: string[]): void;
   onError(message: string): void;
+  onToolStart?(toolName: string): void;
+  onToolComplete?(toolName: string, ok: boolean): void;
+}
+
+export interface AskOptions {
+  enableAgendaTools?: boolean;
+  conversationHistory?: HistoryMessage[];
 }
 
 @Injectable({ providedIn: 'root' })
 export class ProductHelpService {
   private auth = inject(AuthService);
 
-  async ask(question: string, ctx: HelpContext, cb: AskCallbacks, signal?: AbortSignal): Promise<void> {
+  async ask(
+    question: string,
+    ctx: HelpContext,
+    cb: AskCallbacks,
+    signal?: AbortSignal,
+    opts?: AskOptions,
+  ): Promise<void> {
     const token = this.auth.getToken();
     if (!token) { cb.onError('Não autenticado'); return; }
+
+    const body: any = { question, context: ctx };
+    if (opts?.enableAgendaTools) body.enable_agenda_tools = true;
+    if (opts?.conversationHistory && opts.conversationHistory.length > 0) {
+      body.conversation_history = opts.conversationHistory;
+    }
 
     try {
       const res = await fetch(`${environment.apiUrl}/product-help/ask`, {
@@ -27,13 +48,13 @@ export class ProductHelpService {
           'Authorization': `Bearer ${token}`,
           'Accept': 'text/event-stream',
         },
-        body: JSON.stringify({ question, context: ctx }),
+        body: JSON.stringify(body),
         signal,
       });
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        cb.onError(body.error || `Erro ${res.status}`);
+        const errBody = await res.json().catch(() => ({}));
+        cb.onError(errBody.error || `Erro ${res.status}`);
         return;
       }
 
@@ -71,8 +92,11 @@ export class ProductHelpService {
     try {
       const parsed = JSON.parse(data);
       if (event === 'delta' && parsed.text) cb.onDelta(parsed.text);
-      else if (event === 'done') cb.onDone(parsed.sources || [], parsed.actions || []);
-      else if (event === 'error') cb.onError(parsed.error || 'Erro');
+      else if (event === 'done') {
+        cb.onDone(parsed.sources || [], parsed.actions || [], parsed.tool_calls_summary);
+      } else if (event === 'error') cb.onError(parsed.error || 'Erro');
+      else if (event === 'tool_call_started' && cb.onToolStart) cb.onToolStart(parsed.tool_name);
+      else if (event === 'tool_call_completed' && cb.onToolComplete) cb.onToolComplete(parsed.tool_name, parsed.ok);
     } catch { /* ignore malformed */ }
   }
 }
