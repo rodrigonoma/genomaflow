@@ -48,6 +48,15 @@ interface SubjectMap { [id: string]: string; }
       display:flex; align-items:center; gap:0.75rem;
       padding:0.875rem 1.5rem;
       border-bottom:1px solid rgba(70,69,84,0.15);
+      flex-wrap: wrap;
+    }
+    .mobile-only { display:none; }
+    @media (max-width: 768px) {
+      .toolbar { padding:0.75rem 1rem; gap:0.5rem; }
+      .nav-btn.today { padding:0.375rem 0.625rem; }
+      .range-label { font-size: 0.875rem; }
+      .desktop-only { display:none !important; }
+      .mobile-only { display:inline-flex; }
     }
     .nav-btn {
       background:transparent; color:#c0c1ff; border:1px solid rgba(192,193,255,0.2);
@@ -78,6 +87,10 @@ interface SubjectMap { [id: string]: string; }
       background:#0b1326;
       border-bottom:1px solid rgba(70,69,84,0.15);
     }
+    @media (max-width: 768px) {
+      .day-headers { grid-template-columns: 60px 1fr; }
+      .day-headers .day-header:not(.mobile-active) { display:none; }
+    }
     .corner-cell { background:#0b1326; }
     .day-header {
       padding:0.5rem 0.5rem 0.625rem;
@@ -95,6 +108,10 @@ interface SubjectMap { [id: string]: string; }
       display:grid;
       grid-template-columns: 60px repeat(7, 1fr);
       position:relative;
+    }
+    @media (max-width: 768px) {
+      .grid { grid-template-columns: 60px 1fr; }
+      .grid .day-column:not(.mobile-active) { display:none; }
     }
     .hour-label {
       padding:0.25rem 0.5rem 0;
@@ -128,13 +145,23 @@ interface SubjectMap { [id: string]: string; }
       border-radius:4px;
       padding:4px 6px;
       font-size:11px;
-      cursor:pointer;
+      cursor:grab;
       overflow:hidden;
       box-sizing:border-box;
       transition: transform 80ms;
       z-index:2;
+      user-select:none;
     }
     .appt:hover { transform: translateX(1px); box-shadow:0 2px 6px rgba(0,0,0,0.3); }
+    .appt:active { cursor:grabbing; }
+    .appt.dragging { opacity:0.5; }
+    .appt.drop-target-hint {
+      outline: 2px dashed #c0c1ff;
+      outline-offset: 2px;
+    }
+    @media (max-width: 768px) {
+      .appt { cursor:pointer; }
+    }
     .appt-name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .appt-time { font-family:'JetBrains Mono',monospace; font-size:10px; opacity:0.85; margin-top:1px; }
     .appt.cancelled { opacity:0.5; text-decoration:line-through; }
@@ -163,7 +190,8 @@ interface SubjectMap { [id: string]: string; }
       <button class="nav-btn" (click)="nextWeek()" matTooltip="Próxima semana (→)">
         <mat-icon>chevron_right</mat-icon>
       </button>
-      <span class="range-label">{{ rangeLabel() }}</span>
+      <span class="range-label desktop-only">{{ rangeLabel() }}</span>
+      <span class="range-label mobile-only">{{ mobileDayLabel() }}</span>
       <div class="toolbar-spacer"></div>
       <button mat-icon-button class="settings-btn" (click)="openSettings()" matTooltip="Configurações da agenda">
         <mat-icon>settings</mat-icon>
@@ -173,8 +201,10 @@ interface SubjectMap { [id: string]: string; }
     <div class="calendar-wrap">
       <div class="day-headers">
         <div class="corner-cell"></div>
-        @for (day of weekDays(); track day.iso) {
-          <div class="day-header" [class.today]="day.isToday">
+        @for (day of weekDays(); track day.iso; let i = $index) {
+          <div class="day-header"
+               [class.today]="day.isToday"
+               [class.mobile-active]="i === mobileDayIdx()">
             {{ day.weekday }}
             <strong>{{ day.dayNumber }}</strong>
           </div>
@@ -188,10 +218,14 @@ interface SubjectMap { [id: string]: string; }
           }
         </div>
 
-        @for (day of weekDays(); track day.iso) {
+        @for (day of weekDays(); track day.iso; let i = $index) {
           <div class="day-column click-area"
                [class.no-business]="!day.hasBusinessHours"
-               (click)="onDayClick($event, day.iso)">
+               [class.mobile-active]="i === mobileDayIdx()"
+               [class.drop-target-hint]="dragState() && dragState()!.overDayIso === day.iso"
+               (click)="onDayClick($event, day.iso)"
+               (dragover)="onDragOver($event, day.iso)"
+               (drop)="onDrop($event, day.iso)">
             @for (h of hourLabels(); track h; let i = $index) {
               <div class="hour-row" [class.half]="i % 2 === 1"></div>
             }
@@ -204,11 +238,15 @@ interface SubjectMap { [id: string]: string; }
               <div class="appt"
                    [class.cancelled]="a.status === 'cancelled'"
                    [class.blocked]="a.status === 'blocked'"
+                   [class.dragging]="dragState()?.id === a.id"
                    [style.top.px]="a._top"
                    [style.height.px]="a._height"
                    [style.background]="colorBg(a)"
                    [style.border-left-color]="colorBorder(a)"
                    [style.color]="colorText(a)"
+                   [draggable]="canDrag(a)"
+                   (dragstart)="onDragStart($event, a)"
+                   (dragend)="onDragEnd()"
                    (click)="$event.stopPropagation(); openEdit(a)">
                 <div class="appt-name">
                   @if (a.status === 'blocked') {
@@ -242,6 +280,12 @@ export class AgendaPageComponent implements OnInit, OnDestroy {
   appointments = signal<Appointment[]>([]);
   settings = signal<ScheduleSettings | null>(null);
   subjectMap = signal<SubjectMap>({});
+
+  // Mobile: índice 0–6 dentro da semana atual (0=segunda, 6=domingo)
+  mobileDayIdx = signal(0);
+
+  // Drag state pra reschedule via drag-and-drop
+  dragState = signal<{ id: string; durationMinutes: number; overDayIso: string | null } | null>(null);
 
   hourLabels = computed(() => {
     const arr: string[] = [];
@@ -317,9 +361,22 @@ export class AgendaPageComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
 
   ngOnInit() {
+    // Mobile inicia no dia atual
+    const today = new Date();
+    const ws = this.weekStart();
+    const diffDays = Math.floor((today.setHours(0,0,0,0) - ws.getTime()) / (24*3600*1000));
+    if (diffDays >= 0 && diffDays <= 6) this.mobileDayIdx.set(diffDays);
+
     this.loadSettings();
     this.loadSubjects();
     this.loadWeek();
+  }
+
+  mobileDayLabel(): string {
+    const days = this.weekDays();
+    const day = days[this.mobileDayIdx()];
+    if (!day) return '';
+    return `${day.weekday} ${day.dayNumber}`;
   }
   ngOnDestroy() { this.subs.unsubscribe(); }
 
@@ -360,17 +417,47 @@ export class AgendaPageComponent implements OnInit, OnDestroy {
   }
 
   prevWeek() {
+    // Mobile: navegação por dia. Desktop: por semana.
+    if (window.innerWidth <= 768) {
+      const idx = this.mobileDayIdx();
+      if (idx > 0) {
+        this.mobileDayIdx.set(idx - 1);
+        return;
+      }
+      // Wrap pra semana anterior, último dia
+      const w = new Date(this.weekStart()); w.setDate(w.getDate() - 7);
+      this.weekStart.set(w);
+      this.mobileDayIdx.set(6);
+      this.loadWeek();
+      return;
+    }
     const w = new Date(this.weekStart()); w.setDate(w.getDate() - 7);
     this.weekStart.set(w);
     this.loadWeek();
   }
   nextWeek() {
+    if (window.innerWidth <= 768) {
+      const idx = this.mobileDayIdx();
+      if (idx < 6) {
+        this.mobileDayIdx.set(idx + 1);
+        return;
+      }
+      const w = new Date(this.weekStart()); w.setDate(w.getDate() + 7);
+      this.weekStart.set(w);
+      this.mobileDayIdx.set(0);
+      this.loadWeek();
+      return;
+    }
     const w = new Date(this.weekStart()); w.setDate(w.getDate() + 7);
     this.weekStart.set(w);
     this.loadWeek();
   }
   goToToday() {
     this.weekStart.set(this.startOfWeek(new Date()));
+    const today = new Date();
+    const ws = this.weekStart();
+    const diffDays = Math.floor((today.setHours(0,0,0,0) - ws.getTime()) / (24*3600*1000));
+    if (diffDays >= 0 && diffDays <= 6) this.mobileDayIdx.set(diffDays);
     this.loadWeek();
   }
 
@@ -428,6 +515,78 @@ export class AgendaPageComponent implements OnInit, OnDestroy {
       if (saved) {
         this.settings.set(saved);
         this.snack.open('Configurações salvas.', '', { duration: 2500 });
+      }
+    });
+  }
+
+  // ── Drag-and-drop pra reschedule ────────────────
+  canDrag(a: Appointment): boolean {
+    return a.status !== 'cancelled' && a.status !== 'completed' && a.status !== 'no_show';
+  }
+
+  onDragStart(evt: DragEvent, a: Appointment) {
+    if (!this.canDrag(a)) { evt.preventDefault(); return; }
+    this.dragState.set({ id: a.id, durationMinutes: a.duration_minutes, overDayIso: null });
+    if (evt.dataTransfer) {
+      evt.dataTransfer.effectAllowed = 'move';
+      // Empty image placeholder pra evitar ghost feio em alguns browsers
+      evt.dataTransfer.setData('text/plain', a.id);
+    }
+  }
+
+  onDragOver(evt: DragEvent, dayIso: string) {
+    if (!this.dragState()) return;
+    evt.preventDefault();
+    if (evt.dataTransfer) evt.dataTransfer.dropEffect = 'move';
+    const cur = this.dragState();
+    if (cur && cur.overDayIso !== dayIso) {
+      this.dragState.set({ ...cur, overDayIso: dayIso });
+    }
+  }
+
+  onDragEnd() {
+    this.dragState.set(null);
+  }
+
+  onDrop(evt: DragEvent, dayIso: string) {
+    evt.preventDefault();
+    const state = this.dragState();
+    this.dragState.set(null);
+    if (!state) return;
+
+    // Calcula novo start_at baseado em offset Y do drop dentro da day-column
+    const target = evt.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const offsetY = evt.clientY - rect.top;
+    const totalMinFromStart = Math.floor(offsetY / 30) * 30;
+    const hour = this.HOUR_START + Math.floor(totalMinFromStart / 60);
+    const minute = totalMinFromStart % 60;
+    if (hour < this.HOUR_START || hour >= this.HOUR_END) return;
+
+    const newStart = new Date(`${dayIso}T${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:00`);
+    const original = this.appointments().find(x => x.id === state.id);
+    if (!original) return;
+
+    // Optimistic update
+    const oldList = this.appointments();
+    const optimistic = oldList.map(x =>
+      x.id === state.id ? { ...x, start_at: newStart.toISOString() } : x
+    );
+    this.appointments.set(optimistic);
+
+    this.agenda.update(state.id, { start_at: newStart.toISOString() }).subscribe({
+      next: (updated) => {
+        // Re-aplica versão final
+        this.appointments.set(this.appointments().map(x => x.id === updated.id ? updated : x));
+        this.snack.open('Reagendado.', '', { duration: 2000 });
+      },
+      error: (err) => {
+        // Revert
+        this.appointments.set(oldList);
+        const msg = err.error?.code === 'OVERLAP'
+          ? 'Não foi possível mover — horário já ocupado.'
+          : (err.error?.error || 'Erro ao reagendar.');
+        this.snack.open(msg, 'Fechar', { duration: 4000, panelClass: ['snack-error'] });
       }
     });
   }
