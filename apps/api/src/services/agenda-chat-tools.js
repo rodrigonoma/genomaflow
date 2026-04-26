@@ -15,6 +15,36 @@
 const { withTenant } = require('../db/tenant');
 
 const VALID_DURATION = [30, 45, 60, 75, 90, 105, 120];
+const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
+
+/**
+ * Formata ISO UTC pra string legível no timezone do tenant.
+ * Saída: "DD/MM/YYYY HH:mm" em pt-BR no fuso correto.
+ *
+ * Importante: o LLM recebe ISO UTC como start_at + esta string formatada
+ * como start_at_local. Quando fala com o usuário, deve usar a versão local;
+ * quando chama tools (input start_at), continua passando ISO com offset.
+ */
+function formatLocal(isoString, timezone) {
+  if (!isoString) return null;
+  const tz = timezone || DEFAULT_TIMEZONE;
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return null;
+  try {
+    const datePart = d.toLocaleDateString('pt-BR', {
+      timeZone: tz,
+      day: '2-digit', month: '2-digit', year: 'numeric',
+    });
+    const timePart = d.toLocaleTimeString('pt-BR', {
+      timeZone: tz,
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+    return `${datePart} ${timePart}`;
+  } catch (_) {
+    // Timezone inválido — fallback pra default
+    return formatLocal(isoString, DEFAULT_TIMEZONE);
+  }
+}
 
 // ── Definitions (Anthropic SDK shape) ─────────────────────────────
 
@@ -197,12 +227,14 @@ async function execListMyAgenda(input, ctx) {
     appointments: rows.map(r => ({
       id: r.id,
       start_at: r.start_at,
+      start_at_local: formatLocal(r.start_at, ctx.timezone),
       duration_minutes: r.duration_minutes,
       status: r.status,
       subject_name: r.subject_name || undefined,
       reason: r.reason || undefined,
     })),
     range: { from, to },
+    timezone: ctx.timezone || DEFAULT_TIMEZONE,
   };
 }
 
@@ -221,12 +253,14 @@ async function execGetAppointmentDetails(input, ctx) {
   return {
     id: r.id,
     start_at: r.start_at,
+    start_at_local: formatLocal(r.start_at, ctx.timezone),
     duration_minutes: r.duration_minutes,
     status: r.status,
     subject_id: r.subject_id || null,
     subject_name: r.subject_name || null,
     notes: r.notes || null,
     reason: r.reason || null,
+    timezone: ctx.timezone || DEFAULT_TIMEZONE,
   };
 }
 
@@ -289,6 +323,7 @@ async function execCreateAppointment(input, ctx) {
     return {
       id: result.id,
       start_at: result.start_at,
+      start_at_local: formatLocal(result.start_at, ctx.timezone),
       duration_minutes: result.duration_minutes,
       status: result.status,
     };
@@ -385,6 +420,7 @@ async function execUpdateAppointmentStatus(input, ctx) {
       id: result.id,
       status: result.status,
       start_at: result.start_at,
+      start_at_local: formatLocal(result.start_at, ctx.timezone),
       duration_minutes: result.duration_minutes,
     };
   } catch (err) {
