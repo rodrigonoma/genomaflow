@@ -12,6 +12,7 @@ function ctx(overrides = {}) {
     tenant_id: '00000000-0000-0000-0000-00000000000A',
     user_id: '00000000-0000-0000-0000-00000000000B',
     module: 'human',
+    timezone: 'America/Sao_Paulo',
     log: { error: jest.fn() },
     queryMock, connectMock,
     ...overrides,
@@ -396,6 +397,55 @@ describe('ACL — args do LLM nunca controlam tenant_id ou user_id', () => {
     const args = c.queryMock.mock.calls[0][1];
     expect(args[1]).toBe(c.tenant_id);
     expect(args[2]).toBe(c.user_id);
+  });
+});
+
+describe('timezone formatting — start_at_local em retornos', () => {
+  test('list_my_agenda inclui start_at_local em São Paulo (UTC-3)', async () => {
+    const c = ctx({ timezone: 'America/Sao_Paulo' });
+    c.queryMock.mockResolvedValueOnce({
+      rows: [{
+        id: 'a1',
+        start_at: '2030-04-20T10:00:00.000Z', // 10h UTC = 7h SP
+        duration_minutes: 30,
+        status: 'scheduled',
+        subject_id: 's1',
+        subject_name: 'Rafaela',
+        reason: null,
+      }],
+    });
+    const r = await executeTool('list_my_agenda', { preset: 'today' }, c);
+    expect(r.result.appointments[0].start_at_local).toContain('07:00');
+    expect(r.result.appointments[0].start_at_local).toContain('20/04/2030');
+    expect(r.result.timezone).toBe('America/Sao_Paulo');
+  });
+
+  test('get_appointment_details inclui start_at_local em UTC quando timezone=UTC', async () => {
+    const c = ctx({ timezone: 'UTC' });
+    c.queryMock.mockResolvedValueOnce({
+      rows: [{
+        id: 'a1', start_at: '2030-04-20T10:00:00.000Z',
+        duration_minutes: 30, status: 'scheduled',
+        subject_id: 's1', subject_name: 'X', notes: null, reason: null,
+      }],
+    });
+    const r = await executeTool('get_appointment_details', { appointment_id: 'a1' }, c);
+    expect(r.result.start_at_local).toContain('10:00');
+    expect(r.result.timezone).toBe('UTC');
+  });
+
+  test('timezone inválido cai no default (não joga)', async () => {
+    const c = ctx({ timezone: 'Mars/Olympus' });
+    c.queryMock.mockResolvedValueOnce({
+      rows: [{
+        id: 'a1', start_at: '2030-04-20T10:00:00.000Z',
+        duration_minutes: 30, status: 'scheduled',
+        subject_id: null, subject_name: null, reason: null,
+      }],
+    });
+    const r = await executeTool('list_my_agenda', { preset: 'today' }, c);
+    // Não joga; usa default America/Sao_Paulo (UTC-3) → 07:00
+    expect(r.result.appointments[0].start_at_local).toContain('07:00');
   });
 });
 

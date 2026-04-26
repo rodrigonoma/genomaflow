@@ -23,7 +23,10 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
  * sobre "código/SQL/schema" porque tools=fonte de verdade, não docs.
  */
 function actionFocusedSystemPrompt(ctx) {
-  const today = new Date().toISOString().slice(0, 10);
+  const tz = ctx.timezone || 'America/Sao_Paulo';
+  // Calcula data atual no timezone do tenant pra contexto correto
+  const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
+  const nowLocal = new Date().toLocaleString('pt-BR', { timeZone: tz });
   const moduleLabel = ctx.module === 'veterinary' ? 'veterinária (animais)' : 'humana (pacientes)';
   return `Você é o Copilot do GenomaFlow agindo como **assistente de agenda** pra um profissional de clínica ${moduleLabel}.
 
@@ -33,7 +36,24 @@ Seu papel: executar ações na agenda do usuário usando as tools fornecidas, e/
 - Rota atual: ${ctx.route || 'desconhecida'}
 - Role: ${ctx.user_role || 'admin'}
 - Módulo: ${ctx.module || 'human'}
-- Data atual: ${today}
+- Timezone da clínica: ${tz}
+- Data/hora local agora: ${nowLocal} (${todayLocal})
+
+## ⚠ TIMEZONE — REGRA CRÍTICA
+
+Tudo no banco é armazenado em **UTC**. O timezone da clínica é **${tz}**.
+
+QUANDO O USUÁRIO FALA HORÁRIO:
+- "às 7 horas" = 7h NO HORÁRIO DA CLÍNICA (${tz}), NÃO em UTC.
+- "amanhã 14h" = 14h local da clínica.
+- Você DEVE converter pra ISO com offset correto antes de chamar tools.
+  Exemplo: se usuário diz "20/04 às 7h" e tz=${tz} (UTC-3), envie pro tool: "2026-04-20T07:00:00-03:00".
+
+QUANDO MOSTRAR HORÁRIO PRO USUÁRIO:
+- Tools retornam appointments com DOIS campos: \`start_at\` (ISO UTC) e \`start_at_local\` (formatado em ${tz}).
+- USE SEMPRE \`start_at_local\` ao falar com o usuário. NUNCA mencione o ISO UTC.
+- Exemplo correto: "Encontrei: Rafaela, 20/04/2026 07:00, status agendado".
+- Exemplo ERRADO: "Encontrei: Rafaela, 2026-04-20T10:00:00Z, agendado".
 
 ## PRINCÍPIO #1 — AÇÕES SEMPRE EXECUTADAS
 
@@ -70,7 +90,7 @@ Mudanças de status (confirmed, completed, no_show, voltar pra scheduled) **não
 
 ## REGRAS DE EXECUÇÃO
 
-1. **Datas em pt-BR:** "amanhã", "hoje", "próxima segunda", "20/04", "20 de abril", "às 7", "14h", "duas da tarde", "meia-noite". Converta pra ISO antes de passar pra tool.
+1. **Datas em pt-BR:** "amanhã", "hoje", "próxima segunda", "20/04", "20 de abril", "às 7", "14h", "duas da tarde", "meia-noite". Converta pra ISO **com offset do timezone da clínica** antes de passar pra tool. Exemplo (tz=${tz}, UTC-3): "amanhã às 14h" → "${todayLocal}T14:00:00-03:00" (ajuste a data).
 
 2. **Duração default 30min**, whitelist [30, 45, 60, 75, 90, 105, 120]. Se usuário pedir fora, escolha o mais próximo e mencione.
 
@@ -264,8 +284,20 @@ module.exports = async function (fastify) {
         : [];
       messages.push({ role: 'user', content: question });
 
+      // Timezone do tenant — passar pras tools (formatar saídas em horário
+      // local) E pro system prompt (LLM converter input do usuário corretamente)
+      let tenantTimezone = 'America/Sao_Paulo';
+      try {
+        const { rows: tzRows } = await fastify.pg.query(
+          `SELECT timezone FROM tenants WHERE id = $1`, [tenant_id]
+        );
+        if (tzRows[0]?.timezone) tenantTimezone = tzRows[0].timezone;
+      } catch (_) { /* fallback default */ }
+      ctx.timezone = tenantTimezone;
+
       const toolContext = {
         fastify, tenant_id, user_id, module: userModule,
+        timezone: tenantTimezone,
         log: request.log,
       };
 
