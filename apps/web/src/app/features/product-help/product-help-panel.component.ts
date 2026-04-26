@@ -7,6 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { HelpContextService } from '../../core/help-context/help-context.service';
 import { ProductHelpService, HelpAction, HistoryMessage } from './product-help.service';
+import { VoiceInputService } from './voice-input.service';
 
 interface Msg {
   role: 'user' | 'assistant';
@@ -67,6 +68,30 @@ interface Msg {
     .quick-chip:hover { background:rgba(192,193,255,0.15); }
 
     .clear-btn { color:#7c7b8f; }
+
+    /* Mic button — Web Speech */
+    .mic-btn {
+      background:transparent; color:#c0c1ff; border:1px solid rgba(192,193,255,0.2);
+      border-radius:6px; width:36px; height:36px; min-width:36px;
+      display:inline-flex; align-items:center; justify-content:center;
+      cursor:pointer; transition: all 120ms; padding:0;
+    }
+    .mic-btn:hover { background:rgba(192,193,255,0.08); }
+    .mic-btn:disabled { opacity:0.4; cursor:not-allowed; }
+    .mic-btn.recording {
+      background:rgba(239,68,68,0.18); border-color:#ef4444; color:#ef4444;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+      50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+    }
+    .voice-hint {
+      font-family:'JetBrains Mono',monospace; font-size:10px;
+      color:#ef4444; padding:0 1rem 0.25rem; letter-spacing:0.06em;
+      display:flex; align-items:center; gap:0.375rem;
+    }
+    .voice-hint .interim { color:#dae2fd; font-style:italic; }
   `],
   template: `
     <div class="header">
@@ -137,7 +162,23 @@ interface Msg {
       }
     </div>
 
+    @if (voice.recording()) {
+      <div class="voice-hint">
+        <mat-icon style="font-size:12px;width:12px;height:12px;color:#ef4444">mic</mat-icon>
+        <span>Gravando...</span>
+        @if (voice.interim()) { <span class="interim">"{{ voice.interim() }}"</span> }
+      </div>
+    }
     <div class="input-row">
+      @if (voice.supported) {
+        <button class="mic-btn"
+                [class.recording]="voice.recording()"
+                (click)="toggleMic()"
+                [matTooltip]="voice.recording() ? 'Clique pra parar' : 'Falar (pt-BR)'"
+                [disabled]="loading()">
+          <mat-icon style="font-size:18px;width:18px;height:18px">mic</mat-icon>
+        </button>
+      }
       <textarea [(ngModel)]="draft" (keydown.enter)="onEnter($any($event))" rows="1"
         placeholder="Pergunte ou peça pra agendar/cancelar..." [disabled]="loading()"></textarea>
       <button class="send-btn" (click)="send()" [disabled]="!draft.trim() || loading()">
@@ -153,6 +194,7 @@ export class ProductHelpPanelComponent implements AfterViewChecked {
   private svc = inject(ProductHelpService);
   private ctx = inject(HelpContextService);
   private router = inject(Router);
+  voice = inject(VoiceInputService);
 
   messages = signal<Msg[]>([]);
   loading = signal(false);
@@ -184,6 +226,31 @@ export class ProductHelpPanelComponent implements AfterViewChecked {
   quickAsk(question: string): void {
     this.draft = question;
     this.send();
+  }
+
+  toggleMic(): void {
+    if (this.voice.recording()) {
+      this.voice.stop();
+      // Se houver interim, usa como rascunho no input
+      const interim = this.voice.getInterim();
+      if (interim && !this.draft) {
+        this.draft = interim;
+      }
+      return;
+    }
+    this.voice.start((finalText) => {
+      if (finalText === '__PERMISSION_DENIED__') {
+        this.draft = '';
+        // Mostra aviso visual breve via mensagem do sistema
+        this.messages.update(m => [...m, {
+          role: 'assistant',
+          content: '⚠ Permissão de microfone negada. Verifique nas configurações do navegador.',
+        }]);
+        return;
+      }
+      // Texto final transcrito vai pro input — usuário revisa antes de enviar
+      this.draft = finalText;
+    });
   }
 
   clear(): void {
