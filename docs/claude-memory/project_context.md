@@ -173,6 +173,26 @@ Médico/veterinário gerencia sua própria agenda. V1 single-doctor (cada user v
 - **Multi-módulo:** schema agnóstico. Labels UI: "Consulta"/"Buscar paciente" (human) vs "Atendimento"/"Buscar animal" (vet). Mesmo backend.
 - **Docs user-facing:** `docs/user-help/agenda-{overview,configuracao,bloqueios}.md` (RAG do Copilot).
 
+## Copilot — ações na agenda (entregue 2026-04-26)
+
+Estende o Copilot de Ajuda existente (`/product-help/ask`) com tool use do Anthropic SDK + Web Speech API browser native pra voz. Spec: `docs/superpowers/specs/2026-04-26-agenda-chat-actions-design.md`.
+
+- **Migration 054**: ALTER help_questions ADD tool_calls JSONB + actions_taken JSONB (audit trail completo).
+- **5 tools** em `apps/api/src/services/agenda-chat-tools.js`:
+  - `find_subject` (resolução de paciente antes de criar)
+  - `list_my_agenda` (preset today/tomorrow/this_week ou ISO range)
+  - `get_appointment_details` (pra confirmação antes de cancel)
+  - `create_appointment` (status scheduled ou blocked)
+  - `cancel_appointment` (description menciona "SEMPRE confirme antes")
+- **Defesa em profundidade**: tools SEMPRE usam tenant_id/user_id do JWT (context), nunca do input do LLM. Tests específicos garantem que args maliciosos como `{tenant_id: 'OUTRO'}` são ignorados.
+- **Endpoint estendido**: `POST /product-help/ask` aceita `enable_agenda_tools: bool` + `conversation_history: Message[]`. Default `false` preserva comportamento atual byte-a-byte. Quando `true`, loop de tool use com hard cap MAX_TOOL_ITERATIONS=5.
+- **System prompt** ganha bloco "AÇÕES NA AGENDA" só quando tools ativas. Inclui regra crítica "SEMPRE confirme antes de cancel" + data atual injetada pra resolver "amanhã".
+- **SSE events**: além de delta/done/error, agora emite `tool_call_started`, `tool_call_completed` durante a execução.
+- **Frontend** (Copilot panel): histórico de conversa preservado no state (`signal<Msg[]>`); cap 10 mensagens enviadas como `conversation_history`. Tool events visíveis em cada mensagem do assistant (spinner + label pt-BR + check verde / error vermelho). Quick suggestions chips no estado vazio. Botão refresh pra nova conversa.
+- **Voz**: `voice-input.service.ts` wraps Web Speech API (SpeechRecognition / webkitSpeechRecognition), lang=pt-BR. Botão de mic ao lado do textarea, vermelho pulsante quando gravando. Áudio nunca sai do browser — só o texto final. Hide do botão se !supported (Firefox). Permissão negada → mensagem amigável.
+- **Cobertura testes**: 31 unit + 9 integration mockando Anthropic SDK = 40 testes novos. Total CI gate: 283 verdes (era 243).
+- **Docs user-facing**: `docs/user-help/copilot-agenda-acoes.md` (RAG do Copilot indexa).
+
 ## Test gate no CI (entregue 2026-04-25)
 
 `.github/workflows/deploy.yml` ganhou job `test` que precede `deploy` (`needs: test`). Falha em qualquer teste bloqueia o build/push de imagens e o update de ECS.
