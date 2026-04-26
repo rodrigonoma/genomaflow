@@ -344,40 +344,58 @@ async function execUpdateAppointmentStatus(input, ctx) {
     return { error: `status deve ser um de ${VALID.join(', ')} (use cancel_appointment pra cancelar)` };
   }
 
-  const result = await withTenant(ctx.fastify.pg, ctx.tenant_id, async (client) => {
-    const { rows } = await client.query(
-      `UPDATE appointments
-       SET status = $1, updated_at = NOW()
-       WHERE id = $2 AND tenant_id = $3 AND user_id = $4
-         AND status NOT IN ('cancelled', 'blocked')
-       RETURNING id, status, start_at, duration_minutes`,
-      [input.status, input.appointment_id, ctx.tenant_id, ctx.user_id]
-    );
-    return rows[0];
-  });
-
-  if (!result) {
-    return {
-      error: 'not_found',
-      message: 'Agendamento não encontrado, ou já está cancelado/é bloqueio (não é possível alterar status).',
-    };
-  }
-
+  // Reativar appointment cancelado (cancelled → scheduled) é caso de uso
+  // legítimo — médico cancelou por engano e quer voltar. EXCLUDE constraint
+  // do DB protege contra overlap caso outro tenha sido criado no mesmo slot
+  // entretanto (joga 23P01).
+  // Bloquear apenas mudança de status em 'blocked' (bloqueio é diferente
+  // conceitualmente — não tem subject_id, tem reason).
   try {
-    if (ctx.fastify.redis) {
-      await ctx.fastify.redis.publish(
-        `appointment:event:${ctx.tenant_id}`,
-        JSON.stringify({ event: 'appointment:updated', appointment: result })
+    const result = await withTenant(ctx.fastify.pg, ctx.tenant_id, async (client) => {
+      const { rows } = await client.query(
+        `UPDATE appointments
+         SET status = $1,
+             cancelled_at = CASE WHEN status = 'cancelled' AND $1 != 'cancelled' THEN NULL ELSE cancelled_at END,
+             updated_at = NOW()
+         WHERE id = $2 AND tenant_id = $3 AND user_id = $4
+           AND status != 'blocked'
+         RETURNING id, status, start_at, duration_minutes`,
+        [input.status, input.appointment_id, ctx.tenant_id, ctx.user_id]
       );
-    }
-  } catch (_) {}
+      return rows[0];
+    });
 
-  return {
-    id: result.id,
-    status: result.status,
-    start_at: result.start_at,
-    duration_minutes: result.duration_minutes,
-  };
+    if (!result) {
+      return {
+        error: 'not_found',
+        message: 'Agendamento não encontrado, é um bloqueio (não pode alterar status), ou não pertence a você.',
+      };
+    }
+
+    try {
+      if (ctx.fastify.redis) {
+        await ctx.fastify.redis.publish(
+          `appointment:event:${ctx.tenant_id}`,
+          JSON.stringify({ event: 'appointment:updated', appointment: result })
+        );
+      }
+    } catch (_) {}
+
+    return {
+      id: result.id,
+      status: result.status,
+      start_at: result.start_at,
+      duration_minutes: result.duration_minutes,
+    };
+  } catch (err) {
+    if (err.code === '23P01') {
+      return {
+        error: 'overlap',
+        message: 'Não foi possível reativar — esse horário já está ocupado por outro agendamento.',
+      };
+    }
+    throw err;
+  }
 }
 
 const EXECUTORS = {
