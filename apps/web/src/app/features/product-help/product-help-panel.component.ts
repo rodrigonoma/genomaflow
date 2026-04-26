@@ -231,7 +231,9 @@ export class ProductHelpPanelComponent implements AfterViewChecked {
   toggleMic(): void {
     if (this.voice.recording()) {
       this.voice.stop();
-      // Se houver interim, usa como rascunho no input
+      // Se usuário parou manualmente ANTES da transcrição final, mantém interim
+      // como rascunho pra ele revisar e enviar manualmente. NÃO auto-envia
+      // nesse caso porque o stop manual sinaliza intenção de revisar.
       const interim = this.voice.getInterim();
       if (interim && !this.draft) {
         this.draft = interim;
@@ -241,15 +243,20 @@ export class ProductHelpPanelComponent implements AfterViewChecked {
     this.voice.start((finalText) => {
       if (finalText === '__PERMISSION_DENIED__') {
         this.draft = '';
-        // Mostra aviso visual breve via mensagem do sistema
         this.messages.update(m => [...m, {
           role: 'assistant',
           content: '⚠ Permissão de microfone negada. Verifique nas configurações do navegador.',
         }]);
         return;
       }
-      // Texto final transcrito vai pro input — usuário revisa antes de enviar
-      this.draft = finalText;
+      // Texto final chegou via reconhecimento natural (pause de fala detectado).
+      // Auto-envia imediatamente — fluxo hands-free, sem clique extra.
+      // Confirmação multi-turn pra ações destrutivas continua valendo (LLM
+      // pergunta "Confirma?" antes de cancel/delete), garantindo segurança.
+      const trimmed = (finalText || '').trim();
+      if (!trimmed) return;
+      this.draft = trimmed;
+      this.send();
     });
   }
 
