@@ -271,6 +271,10 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
               }
             }
           </a>
+          <a class="nav-item" routerLink="/agenda" routerLinkActive="active">
+            <mat-icon>event</mat-icon>
+            <span>Agenda</span>
+          </a>
           <a class="nav-item" routerLink="/chat" routerLinkActive="active">
             <mat-icon>forum</mat-icon>
             <span>Chat entre clínicas</span>

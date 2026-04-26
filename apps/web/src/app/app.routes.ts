@@ -79,6 +79,12 @@ export const routes: Routes = [
       import('./features/chat-inter-tenant/chat.routes').then(m => m.CHAT_ROUTES)
   },
   {
+    path: 'agenda',
+    canActivate: [authGuard, termsGuard, professionalInfoGuard],
+    loadChildren: () =>
+      import('./features/agenda/agenda.routes').then(m => m.AGENDA_ROUTES)
+  },
+  {
     path: 'onboarding/terms',
     canActivate: [authGuard],
     loadComponent: () =>
