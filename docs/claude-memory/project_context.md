@@ -147,6 +147,32 @@ Comunicação 1:1 admin↔admin entre tenants do mesmo módulo (human↔human, v
   - V1.5 (rasterização via pdf-to-png-converter + Tesseract por página) **removida** — era 100x mais lenta e gerava payloads >10MB
 - **Documentação user-facing:** `docs/user-help/chat-*.md` — overview, anexar PDF, anexar imagem, anexar análise IA, reações/busca/denúncias, convites/diretório. Indexada no Copilot de Ajuda
 
+## Agenda — agendamento de exames/consultas (entregue 2026-04-26)
+
+Médico/veterinário gerencia sua própria agenda. V1 single-doctor (cada user vê só sua agenda). Spec: `docs/superpowers/specs/2026-04-26-scheduling-design.md`.
+
+- **Schema (migration 053):** extensão `btree_gist` + função IMMUTABLE `appointment_range(start, minutes)` + `tenants.timezone` (default `America/Sao_Paulo`) + tabelas `schedule_settings` (1:1 com user, default_slot_minutes IN (30,45,60,75,90,105,120), business_hours JSONB) e `appointments` (status enum, EXCLUDE constraint impede overlap no DB com cancelled/no_show liberando slot). RLS ENABLE+FORCE em ambas.
+- **Princípio core (D1 da spec):** `appointments.duration_minutes` capturado na criação, imutável. Mudar config só afeta novos; passado preserva original. Zero data migration ao trocar duração padrão.
+- **Rotas (`/agenda/*`, todas authenticate):**
+  - GET/PUT `/settings` (defaults se sem linha; PUT valida slot enum + business_hours shape)
+  - GET `/appointments?from=&to=` (default semana atual, max 90 dias)
+  - POST `/appointments` (409 OVERLAP via 23P01)
+  - PATCH `/appointments/:id` (partial; auto-cancelled_at se status=cancelled)
+  - POST `/appointments/:id/cancel` (idempotente)
+  - DELETE `/appointments/:id` (só status=blocked; outros usam cancel)
+  - GET `/appointments/free-slots?date=YYYY-MM-DD` (deriva business_hours - active_appointments em incrementos de default_slot_minutes)
+- **Defesa em profundidade:** `withTenant` em escritas; `AND tenant_id` + `AND user_id` explícito em SELECTs/UPDATEs/DELETEs; subject_id validado contra mesmo tenant antes de inserir; WS pub/sub via Redis (`appointment:event:{tenant_id}`).
+- **Frontend:** `/agenda` lazy route (guards auth+terms+professional). Componentes em `apps/web/src/app/features/agenda/`:
+  - `agenda-page` (week grid 7 col × 15h, business hours overlay, cores por status)
+  - `quick-create-dialog` (toggle consulta/bloqueio, autocomplete subject multi-módulo)
+  - `edit-appointment-dialog` (status + duration + quick actions)
+  - `settings-dialog` (slot dropdown + horários por dia)
+  - Mobile: media query 768px troca grid pra 1 dia, prev/next vira navegação dia-a-dia
+  - Drag-to-reschedule HTML5 native (desktop) com optimistic update + revert em 409
+- **Testes:** 55 unit (validators + Fastify isolado validation) + 12 ACL/multi-módulo guards + 8 DB (RLS + EXCLUDE + check) = 75 testes scheduling. CI gate: 243+ verdes.
+- **Multi-módulo:** schema agnóstico. Labels UI: "Consulta"/"Buscar paciente" (human) vs "Atendimento"/"Buscar animal" (vet). Mesmo backend.
+- **Docs user-facing:** `docs/user-help/agenda-{overview,configuracao,bloqueios}.md` (RAG do Copilot).
+
 ## Test gate no CI (entregue 2026-04-25)
 
 `.github/workflows/deploy.yml` ganhou job `test` que precede `deploy` (`needs: test`). Falha em qualquer teste bloqueia o build/push de imagens e o update de ECS.
