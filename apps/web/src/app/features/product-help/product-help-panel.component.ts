@@ -35,7 +35,7 @@ interface Msg {
     .sources { margin-top:0.5rem;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#7c7b8f; }
     .sources-title { text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.25rem;color:#908fa0; }
     .input-row { padding:0.75rem 1rem;border-top:1px solid rgba(70,69,84,0.2);display:flex;gap:0.5rem;align-items:flex-end; }
-    textarea { flex:1;background:#060d1a;color:#dae2fd;border:1px solid rgba(192,193,255,0.12);border-radius:6px;padding:0.5rem 0.75rem;font-family:'JetBrains Mono',monospace;font-size:0.8125rem;resize:none;outline:none;min-height:36px;max-height:120px; }
+    textarea { flex:1;background:#060d1a;color:#dae2fd;border:1px solid rgba(192,193,255,0.12);border-radius:6px;padding:0.625rem 0.75rem;font-family:'JetBrains Mono',monospace;font-size:0.8125rem;resize:none;outline:none;min-height:64px;max-height:140px;line-height:1.45; }
     textarea:focus { border-color:rgba(192,193,255,0.35); }
     .send-btn { background:#c0c1ff;color:#1000a9;border:none;border-radius:6px;padding:0.5rem 0.875rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;cursor:pointer;text-transform:uppercase; }
     .send-btn:disabled { opacity:0.4;cursor:not-allowed; }
@@ -150,14 +150,6 @@ interface Msg {
               }
             </div>
           }
-          @if (m.sources && m.sources.length > 0) {
-            <div class="sources">
-              <div class="sources-title">Fontes</div>
-              @for (s of m.sources; track s.source) {
-                <div>• {{ s.title }} ({{ s.score }})</div>
-              }
-            </div>
-          }
         </div>
       }
     </div>
@@ -179,7 +171,7 @@ interface Msg {
           <mat-icon style="font-size:18px;width:18px;height:18px">mic</mat-icon>
         </button>
       }
-      <textarea [(ngModel)]="draft" (keydown.enter)="onEnter($any($event))" rows="1"
+      <textarea [(ngModel)]="draft" (keydown.enter)="onEnter($any($event))" rows="3"
         placeholder="Pergunte ou peça pra agendar/cancelar..." [disabled]="loading()"></textarea>
       <button class="send-btn" (click)="send()" [disabled]="!draft.trim() || loading()">
         {{ loading() ? '...' : 'ENVIAR' }}
