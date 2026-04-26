@@ -19,8 +19,8 @@ function ctx(overrides = {}) {
 }
 
 describe('TOOL_DEFINITIONS', () => {
-  test('5 tools registradas com nome + description + input_schema', () => {
-    expect(TOOL_DEFINITIONS).toHaveLength(5);
+  test('6 tools registradas com nome + description + input_schema', () => {
+    expect(TOOL_DEFINITIONS).toHaveLength(6);
     for (const t of TOOL_DEFINITIONS) {
       expect(t.name).toMatch(/^[a-z_]+$/);
       expect(typeof t.description).toBe('string');
@@ -37,6 +37,15 @@ describe('TOOL_DEFINITIONS', () => {
   test('create_appointment exige duration na whitelist', () => {
     const create = TOOL_DEFINITIONS.find(t => t.name === 'create_appointment');
     expect(create.input_schema.properties.duration_minutes.enum).toEqual(VALID_DURATION);
+  });
+
+  test('update_appointment_status status enum exclui cancelled e blocked', () => {
+    const update = TOOL_DEFINITIONS.find(t => t.name === 'update_appointment_status');
+    expect(update).toBeDefined();
+    const allowed = update.input_schema.properties.status.enum;
+    expect(allowed).toEqual(['scheduled', 'confirmed', 'completed', 'no_show']);
+    expect(allowed).not.toContain('cancelled');
+    expect(allowed).not.toContain('blocked');
   });
 });
 
@@ -184,6 +193,84 @@ describe('create_appointment — validação', () => {
     const c = ctx();
     const r = await executeTool('create_appointment', input, c);
     expect(r.result.error).toMatch(msgRegex);
+  });
+});
+
+describe('update_appointment_status', () => {
+  test('appointment_id obrigatório', async () => {
+    const c = ctx();
+    const r = await executeTool('update_appointment_status', { status: 'confirmed' }, c);
+    expect(r.result.error).toMatch(/appointment_id/);
+  });
+
+  test('status fora do enum rejeitado (incluindo cancelled e blocked)', async () => {
+    const c = ctx();
+    for (const bad of ['cancelled', 'blocked', 'unknown', 'CONFIRMED']) {
+      const r = await executeTool('update_appointment_status', {
+        appointment_id: 'a1', status: bad,
+      }, c);
+      expect(r.result.error).toMatch(/status deve ser/);
+    }
+  });
+
+  test('not found retorna erro', async () => {
+    const c = ctx();
+    c.connectMock.mockResolvedValueOnce({
+      query: jest.fn()
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({}) // set_config
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({}), // COMMIT
+      release: jest.fn(),
+    });
+    const r = await executeTool('update_appointment_status', {
+      appointment_id: 'a1', status: 'confirmed',
+    }, c);
+    expect(r.result.error).toBe('not_found');
+  });
+
+  test.each(['scheduled', 'confirmed', 'completed', 'no_show'])(
+    'status=%s aceito + UPDATE escopa por tenant + user',
+    async (status) => {
+      const c = ctx();
+      const queryFn = jest.fn()
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({}) // set_config
+        .mockResolvedValueOnce({
+          rows: [{ id: 'a1', status, start_at: '2030-01-01T10:00:00Z', duration_minutes: 30 }],
+        })
+        .mockResolvedValueOnce({}); // COMMIT
+      c.connectMock.mockResolvedValueOnce({ query: queryFn, release: jest.fn() });
+
+      const r = await executeTool('update_appointment_status', {
+        appointment_id: 'a1', status,
+      }, c);
+      expect(r.result.status).toBe(status);
+
+      // UPDATE call (3rd query) recebe tenant + user do contexto
+      const updateCall = queryFn.mock.calls[2];
+      expect(updateCall[1]).toEqual([status, 'a1', c.tenant_id, c.user_id]);
+    }
+  );
+
+  test('sucesso publica WS event', async () => {
+    const c = ctx();
+    c.connectMock.mockResolvedValueOnce({
+      query: jest.fn()
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({
+          rows: [{ id: 'a1', status: 'confirmed', start_at: '2030-01-01T10:00:00Z', duration_minutes: 30 }],
+        })
+        .mockResolvedValueOnce({}),
+      release: jest.fn(),
+    });
+    await executeTool('update_appointment_status', {
+      appointment_id: 'a1', status: 'confirmed',
+    }, c);
+    expect(c.fastify.redis.publish).toHaveBeenCalled();
+    const channel = c.fastify.redis.publish.mock.calls[0][0];
+    expect(channel).toBe(`appointment:event:${c.tenant_id}`);
   });
 });
 
