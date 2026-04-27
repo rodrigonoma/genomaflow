@@ -80,13 +80,26 @@ Use o histórico da conversa pra entender. NUNCA trate uma resposta curta como p
 
 ## PRINCÍPIO #3 — AÇÕES DESTRUTIVAS PEDEM CONFIRMAÇÃO
 
-Para **cancelar** ou **excluir** um agendamento:
-1. Primeiro encontre o agendamento (list_my_agenda ou get_appointment_details)
-2. Apresente os detalhes em texto: "Encontrei: Maria Silva, 28/04 às 14h, status agendado"
-3. Pergunte: "Confirma cancelar?" + aguarde resposta afirmativa
-4. Só após "sim"/"confirma"/"pode cancelar" → chame cancel_appointment
+Para **cancelar** um agendamento (fluxo de 2 turnos):
 
-Mudanças de status (confirmed, completed, no_show, voltar pra scheduled) **não exigem** confirmação prévia — são reversíveis.
+**Turn 1 — pedido inicial:**
+- Encontre o agendamento (list_my_agenda ou get_appointment_details)
+- Apresente os detalhes em texto: "Encontrei: Maria Silva, 28/04 às 14h, status agendado"
+- Pergunte: "Confirma cancelar?"
+- **NÃO chame cancel_appointment ainda — espere a resposta do usuário.**
+
+**Turn 2 — após usuário responder "sim"/"confirma"/"pode cancelar":**
+- **OBRIGATORIAMENTE chame cancel_appointment com o appointment_id encontrado.**
+- A resposta "sim" do usuário é PERMISSÃO PRA EXECUTAR, **NÃO** a execução em si.
+- Só DEPOIS que cancel_appointment retornar sucesso, escreva a confirmação ("✓ Agendamento cancelado").
+
+⚠️ **PROIBIDO:** escrever "✓ Agendamento cancelado", "cancelado com sucesso", ou qualquer afirmação de execução **SEM TER CHAMADO A TOOL ANTES NESSA MESMA RESPOSTA**. Fazer isso é mentir pro usuário — comportamento inaceitável.
+
+⚠️ **VERIFICAÇÃO MENTAL ANTES DE CONFIRMAR SUCESSO:**
+- "Acabei de invocar cancel_appointment nessa resposta?" Se NÃO → não posso afirmar que foi cancelado, devo chamar a tool agora.
+- "A tool retornou sem erro?" Se NÃO → reporto o erro, não simulo sucesso.
+
+Mudanças de status (confirmed, completed, no_show, voltar pra scheduled) seguem a mesma regra: chame update_appointment_status ANTES de afirmar que mudou. Não exigem turno separado de confirmação (são reversíveis), mas a tool DEVE ser chamada antes da confirmação textual.
 
 ## REGRAS DE EXECUÇÃO
 
@@ -363,9 +376,34 @@ module.exports = async function (fastify) {
           request.log.warn({ tool_calls: toolCallsLog }, 'product-help: hit MAX_TOOL_ITERATIONS');
         }
 
+        // Rede de segurança: detecta alucinação de sucesso destrutivo.
+        // LLM ocasionalmente produz "✓ Agendamento cancelado" sem ter chamado
+        // cancel_appointment NESSA request — turn anterior tinha tool calls
+        // de listagem mas nada destrutivo. Texto fingia execução, banco
+        // continuava intacto, usuário traído.
+        const SUCCESS_PATTERNS = /(?:✓|✔|✅).*\b(cancel(?:ad[oa])?|excluí?d[oa]|deletad[oa])\b|\b(?:agendamento|atendimento|consulta).*(?:cancelad[oa]|excluí?d[oa]|deletad[oa])\b/i;
+        const DESTRUCTIVE_TOOLS = ['cancel_appointment'];
+        const claimedDestruction = SUCCESS_PATTERNS.test(fullAnswer);
+        const calledDestructive = toolCallsLog.some(t => DESTRUCTIVE_TOOLS.includes(t.tool_name));
+
+        if (claimedDestruction && !calledDestructive) {
+          request.log.warn(
+            { fullAnswer: fullAnswer.slice(0, 300), toolCallsLog },
+            'product-help: HALLUCINATED_DESTRUCTIVE_SUCCESS — LLM claimed cancel/delete without calling tool'
+          );
+          // Anexa correção visível ao response stream pro usuário ver
+          const correction =
+            '\n\n⚠ ATENÇÃO: parece que a confirmação acima pode estar errada — ' +
+            'o cancelamento NÃO foi efetivamente registrado no sistema. Por favor, ' +
+            'tente novamente ("cancela X") e confirme se o agendamento sumiu da agenda.';
+          fullAnswer += correction;
+          reply.raw.write(`event: delta\ndata: ${JSON.stringify({ text: correction })}\n\n`);
+        }
+
         reply.raw.write(`event: done\ndata: ${JSON.stringify({
           sources: docs.map(d => ({ source: d.source, title: d.title, score: Number(d.score.toFixed(3)) })),
           tool_calls_summary: toolCallsLog.map(t => t.tool_name),
+          hallucinated_destruction: claimedDestruction && !calledDestructive,
         })}\n\n`);
       } catch (err) {
         request.log.error({ err }, 'product-help: tools loop failed');
