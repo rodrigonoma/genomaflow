@@ -274,13 +274,20 @@ describe('POST /master/broadcasts — happy path', () => {
     );
     expect(updateCall[1]).toEqual([2, 'bc-1']);
 
-    // Redis publish chamado 2x (1 por tenant)
-    expect(app.redis.publish).toHaveBeenCalledTimes(2);
+    // Redis publish chamado 4x (2 eventos por tenant: chat:message_received + chat:unread_change)
+    expect(app.redis.publish).toHaveBeenCalledTimes(4);
     expect(app.redis.publish.mock.calls[0][0]).toBe('chat:event:t-human');
     const msg = JSON.parse(app.redis.publish.mock.calls[0][1]);
-    expect(msg.event).toBe('master_broadcast_received');
+    expect(msg.event).toBe('chat:message_received');
     expect(msg.conversation_id).toBe('conv-x');
     expect(msg.message_id).toBe('msg-x');
+    expect(msg.sender_tenant_id).toBe('00000000-0000-0000-0000-000000000001');
+    expect(msg.body_preview).toBe('Teste de comunicado');
+
+    // Segundo publish é chat:unread_change pra badge global atualizar
+    const unread = JSON.parse(app.redis.publish.mock.calls[1][1]);
+    expect(unread.event).toBe('chat:unread_change');
+    expect(unread.delta).toBe(1);
 
     await app.close();
   });
