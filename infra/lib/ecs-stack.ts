@@ -98,6 +98,18 @@ export class EcsStack extends cdk.Stack {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
     });
 
+    // S3 — uploads de exames + anexos de chat inter-tenant + comunicados master.
+    // Sem isso, qualquer rota que faça uploadFile() retorna AccessDenied.
+    // Ver feedback_iam_s3_prefixes.md (incidente 2026-04-25).
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['s3:PutObject', 's3:GetObject', 's3:DeleteObject'],
+      resources: [
+        'arn:aws:s3:::genomaflow-uploads-prod/uploads/*',
+        'arn:aws:s3:::genomaflow-uploads-prod/inter-tenant-chat/*',
+        'arn:aws:s3:::genomaflow-uploads-prod/master-broadcasts/*',
+      ],
+    }));
+
     // ── ECS Cluster ──
     const cluster = new ecs.Cluster(this, 'Cluster', {
       vpc,

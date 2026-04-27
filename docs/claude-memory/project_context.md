@@ -210,6 +210,20 @@ Trail genérico de toda mutação em tabelas críticas pra compliance LGPD + inv
 - **Cobertura testes**: `tests/routes/master-audit-log.test.js` (11 verdes — clamp, filtros parametrizados, JOIN tenants+users, 404, drill-down) + ACL guards em `tests/security/master-acl.test.js` (37 verdes). Adicionado ao `test:unit` (CI gate). Total atual: **355 verdes / 3 skipped / 17 suites**.
 - **Red flag**: INSERT/UPDATE/DELETE em tabela com trigger fora de `withTenant({userId, channel})` → atribuição perdida (NULL/'ui' default). Toda nova rota de mutação em tabela auditada DEVE passar `userId` + `channel`.
 
+## Master Broadcasts (Comunicados) — entregue 2026-04-27
+
+Canal oficial "Administrador do GenomaFlow" → tenants pra promoções, features, bug fixes, e respostas a solicitações de melhoria. Demanda do usuário em 2026-04-27. Entregue em 6 fases (~migrations 058–061).
+
+- **Reaproveita inter-tenant chat** com nova coluna `kind` em `tenant_conversations` (default `'tenant_to_tenant'` preserva existente). `kind='master_broadcast'` é o canal master.
+- **Schema (migrations 058–061)**: tabelas `master_broadcasts` (canonical), `master_broadcast_attachments`, `master_broadcast_deliveries` master-only via RLS NULLIF; coluna kind + skip cross-module no trigger; policies tc/tcr/tm/tma extendidas pra master sem contexto cross-tenant.
+- **Fan-out síncrono**: master → N tenants via `withTenant(MASTER_TENANT_ID, ..., { channel: 'system' })`. Master é sempre `tenant_a_id` (menor UUID). UPSERT conversation → INSERT message → INSERT attachments (s3_key compartilhado) → INSERT delivery → Redis publish `chat:event:{tenant}` com event `master_broadcast_received`. Sync até ~500 tenants.
+- **Endpoints master**: POST /broadcasts (rate 20/dia, 80MB body p/ até 5 anexos × 10MB), GET /broadcasts (histórico com read_count), GET /broadcasts/:id (drill-down + read_by_tenant flag), GET /conversations (inbox de master_broadcast convs com unread_count), GET /conversations/:id/messages, POST /conversations/:id/reply (rate 100/dia).
+- **Anexos**: imagem JPG/PNG ou PDF, max 10MB, max 5 por broadcast. Upload S3 prefix `master-broadcasts/{broadcast_id}/{uuid}.{ext}`. S3 obj compartilhado entre tenants (1 upload pra N entregas). IAM atualizado em `infra/lib/ecs-stack.ts` (PutObject/GetObject/DeleteObject em master-broadcasts/*).
+- **Segmentação**: `all` / `module=human|veterinary` / `tenant=<uuid>`.
+- **Frontend tenant**: conversa pinned no topo da sidebar com branding "Administrador GenomaFlow" (ícone admin_panel_settings + push_pin); thread renderiza markdown sanitizado (marked + DOMPurify whitelist conservadora) APENAS pra mensagens do master; sem botão "reportar"/"ver contato"; tenant pode responder via endpoint normal (suspension gate skipado pra master_broadcast — tenant suspenso precisa poder falar com admin).
+- **Frontend master**: tab "Comunicados" no /master com composer (segment selector, markdown body, attachment picker), histórico com X/Y leram, inbox de respostas com unread badge, conversation viewer com reply box.
+- **Garantias contra regressão**: zero impacto em inter-tenant chat tenant↔tenant (132 testes integração verdes); cross-module skip só pra kind=master_broadcast; suspension gate só skipa em master_broadcast.
+
 ## Test gate no CI (entregue 2026-04-25)
 
 `.github/workflows/deploy.yml` ganhou job `test` que precede `deploy` (`needs: test`). Falha em qualquer teste bloqueia o build/push de imagens e o update de ECS.
