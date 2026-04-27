@@ -43,6 +43,7 @@ module.exports = fp(async function (fastify) {
     'billing:alert:*', 'billing:exhausted:*',
     'chat:event:*',
     'appointment:event:*',
+    'subject:upserted:*',
     (err) => {
       if (err) fastify.log.error('Redis psubscribe error:', err);
     }
@@ -72,6 +73,12 @@ module.exports = fp(async function (fastify) {
       // Mensagem JSON já traz 'event' (created/updated/cancelled) e payload.
       tenantId = channel.replace('appointment:event:', '');
       payload = JSON.parse(message);
+    } else if (channel.startsWith('subject:upserted:')) {
+      // Subject (paciente/animal) criado ou atualizado. Worker já consome
+      // este canal pra re-indexar RAG; aqui propagamos pro frontend pra
+      // refrescar a tela de Pacientes em tempo real.
+      tenantId = channel.replace('subject:upserted:', '');
+      payload = { event: 'subject:upserted', ...JSON.parse(message) };
     } else {
       return;
     }

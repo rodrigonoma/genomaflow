@@ -1,4 +1,6 @@
-import { Component, inject, OnInit, signal, computed } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy, signal, computed } from '@angular/core';
+import { Subscription } from 'rxjs';
+import { WsService } from '../../../core/ws/ws.service';
 import { HttpClient } from '@angular/common/http';
 import { RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -517,9 +519,11 @@ import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
     </div>
   `
 })
-export class PatientListComponent implements OnInit {
+export class PatientListComponent implements OnInit, OnDestroy {
   private http = inject(HttpClient);
+  private ws = inject(WsService);
   auth = inject(AuthService);
+  private subs = new Subscription();
 
   subjects: Subject[] = [];
   filtered: Subject[] = [];
@@ -559,6 +563,17 @@ export class PatientListComponent implements OnInit {
   ngOnInit(): void {
     this.loadSubjects();
     this.loadOwners();
+
+    // Auto-refresh quando paciente é criado/atualizado (UI manual ou Copilot
+    // tools). Mantém lista sincronizada sem F5.
+    this.subs.add(this.ws.subjectUpserted$.subscribe(() => {
+      this.loadSubjects();
+      this.loadOwners();
+    }));
+  }
+
+  ngOnDestroy(): void {
+    this.subs.unsubscribe();
   }
 
   private loadSubjects(): void {
