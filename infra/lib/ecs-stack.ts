@@ -170,7 +170,7 @@ export class EcsStack extends cdk.Stack {
       // DATABASE_URL montada via script de inicialização
       command: [
         'sh', '-c',
-        'export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}" && node src/server.js'
+        'export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require" && node src/server.js'
       ],
       portMappings: [{ containerPort: 3000 }],
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'api', logGroup }),
@@ -199,7 +199,7 @@ export class EcsStack extends cdk.Stack {
       secrets:     backendSecrets,
       command: [
         'sh', '-c',
-        'export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}" && node src/index.js'
+        'export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require" && node src/index.js'
       ],
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'worker', logGroup }),
     });
@@ -241,7 +241,7 @@ export class EcsStack extends cdk.Stack {
       secrets:     backendSecrets,
       command: [
         'sh', '-c',
-        'export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}" && node src/db/migrate.js'
+        'export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require" && node src/db/migrate.js'
       ],
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'migrate', logGroup }),
     });
@@ -266,7 +266,7 @@ export class EcsStack extends cdk.Stack {
       secrets:     backendSecrets,
       command: [
         'sh', '-c',
-        'export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}" && node src/rag/reindex-product-help.js'
+        'export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require" && node src/rag/reindex-product-help.js'
       ],
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'reindex', logGroup }),
     });
