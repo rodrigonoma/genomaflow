@@ -204,6 +204,49 @@ describe('POST /product-help/ask — enable_agenda_tools=true', () => {
     await localApp.close();
   });
 
+  test('detecta alucinação: LLM diz "cancelado" sem chamar cancel_appointment', async () => {
+    // LLM produz texto de sucesso destrutivo SEM chamar cancel_appointment
+    mockMessagesCreate.mockResolvedValueOnce({
+      content: [{ type: 'text', text: '✓ Agendamento cancelado — Maria Silva 14h' }],
+      usage: { input_tokens: 10, output_tokens: 8 },
+    });
+
+    const res = await app.inject({
+      method: 'POST', url: '/product-help/ask',
+      headers: { 'x-test-role': 'admin' },
+      payload: { question: 'sim', enable_agenda_tools: true },
+    });
+
+    expect(res.statusCode).toBe(200);
+    // Resposta inclui correção visível
+    expect(res.body).toContain('NÃO foi efetivamente registrado');
+    // event done sinaliza o problema
+    expect(res.body).toMatch(/hallucinated_destruction":true/);
+  });
+
+  test('NÃO marca alucinação se LLM realmente chamou cancel_appointment', async () => {
+    // 1ª: chama cancel_appointment
+    mockMessagesCreate.mockResolvedValueOnce({
+      content: [{ type: 'tool_use', id: 'tu_1', name: 'cancel_appointment', input: { appointment_id: 'a1' } }],
+      usage: { input_tokens: 5, output_tokens: 3 },
+    });
+    // 2ª: confirma sucesso
+    mockMessagesCreate.mockResolvedValueOnce({
+      content: [{ type: 'text', text: '✓ Agendamento cancelado.' }],
+      usage: { input_tokens: 5, output_tokens: 3 },
+    });
+
+    const res = await app.inject({
+      method: 'POST', url: '/product-help/ask',
+      headers: { 'x-test-role': 'admin' },
+      payload: { question: 'sim', enable_agenda_tools: true },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).not.toContain('NÃO foi efetivamente registrado');
+    expect(res.body).toMatch(/hallucinated_destruction":false/);
+  });
+
   test('conversation_history é preservado (cap 10 messages)', async () => {
     mockMessagesCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'continuando.' }],
