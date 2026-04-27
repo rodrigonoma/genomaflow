@@ -447,13 +447,32 @@ module.exports = async function masterRoutes(fastify) {
         );
         delivered += 1;
 
-        // WS notify via Redis pub/sub (padrão do chat existente)
+        // WS notify via Redis pub/sub — usa os MESMOS nomes de evento do chat
+        // existente (chat:message_received + chat:unread_change) pra que o
+        // WsService → app.component.refreshChatUnread → badge global no menu
+        // lateral atualize. Evento dedicado novo NÃO é escutado em lugar
+        // nenhum no front.
+        const previewBase = body.length > 80 ? body.slice(0, 77) + '...' : body;
+        const preview = uploadedAttachments.length > 0
+          ? (previewBase || '[anexo]')
+          : previewBase;
         await fastify.redis.publish(
           `chat:event:${t.id}`,
           JSON.stringify({
-            event: 'master_broadcast_received',
+            event: 'chat:message_received',
             conversation_id: conversationId,
             message_id: messageId,
+            sender_tenant_id: MASTER_TENANT_ID,
+            body_preview: preview,
+            created_at: new Date().toISOString(),
+          })
+        );
+        await fastify.redis.publish(
+          `chat:event:${t.id}`,
+          JSON.stringify({
+            event: 'chat:unread_change',
+            conversation_id: conversationId,
+            delta: 1,
           })
         );
       } catch (err) {
@@ -644,13 +663,26 @@ module.exports = async function masterRoutes(fastify) {
       { userId: request.user.user_id, channel: 'system' }
     );
 
-    // WS notify pro recipient
+    // WS notify pro recipient — usa eventos do chat existente pra que badge
+    // global e sidebar atualizem (igual fan-out do POST /broadcasts).
+    const previewBase = body.length > 80 ? body.slice(0, 77) + '...' : body;
     await fastify.redis.publish(
       `chat:event:${recipientTenantId}`,
       JSON.stringify({
-        event: 'master_broadcast_received',
+        event: 'chat:message_received',
         conversation_id: id,
         message_id: result.id,
+        sender_tenant_id: MASTER_TENANT_ID,
+        body_preview: previewBase,
+        created_at: result.created_at,
+      })
+    );
+    await fastify.redis.publish(
+      `chat:event:${recipientTenantId}`,
+      JSON.stringify({
+        event: 'chat:unread_change',
+        conversation_id: id,
+        delta: 1,
       })
     );
 
