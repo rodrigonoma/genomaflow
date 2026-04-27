@@ -215,11 +215,10 @@ describe('POST /conversations/:id/messages — validation', () => {
       await localApp.close();
     });
 
-    test('master_broadcast conversation pula gate de suspensão', async () => {
-      // Tenant suspenso ainda precisa poder responder ao admin pra resolver.
+    test('master_broadcast: tenant NÃO pode responder — 403 informativo', async () => {
+      // Mudança 2026-04-27: canal master é informativo apenas. Tenants
+      // devem usar "Reportar erro" / "Sugerir melhoria" pra escalar.
       const localApp = buildApp();
-      // Query 1: SELECT kind → master_broadcast
-      // isTenantSuspended NÃO é chamado nesse caminho — se for chamado é regressão
       localApp.pg.query.mockResolvedValueOnce({ rows: [{ kind: 'master_broadcast' }] });
       await localApp.register(require('../../../src/routes/inter-tenant-chat/messages'), {
         prefix: '/inter-tenant-chat',
@@ -232,15 +231,11 @@ describe('POST /conversations/:id/messages — validation', () => {
         payload: { body: 'oi pro admin' },
       });
 
-      // Não retorna 403 de suspensão. Vai cair em outro caminho (provavelmente
-      // 500/erro de access control no withConversationAccess) — o importante
-      // é que NÃO é o 403 de "suspensa". Validamos negativamente.
-      expect(res.statusCode).not.toBe(403);
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error).toMatch(/Canal informativo/);
+      expect(res.json().hint).toMatch(/Reportar erro|Sugerir melhoria/);
 
-      // Confirma que pg.query foi chamado APENAS 1 vez (só SELECT kind);
-      // se isTenantSuspended foi chamado, teria sido 2+.
-      // Pode haver chamadas de withConversationAccess depois, mas até a
-      // verificação de suspensão deveria ser só 1.
+      // isTenantSuspended NÃO foi chamado (curto-circuito antes)
       const calls = localApp.pg.query.mock.calls;
       const suspensionCheckCall = calls.find(c =>
         typeof c[0] === 'string' && c[0].toLowerCase().includes('chat_reports')

@@ -225,6 +225,28 @@ type RedactPdfTextLayerResponse =
     .input-row textarea:focus { border-color: #c0c1ff; }
     .send-btn { color: #c0c1ff; }
     .send-btn[disabled] { opacity: 0.4; }
+
+    /* Banner read-only quando conversa é master_broadcast (canal informativo) */
+    .master-readonly-banner {
+      display: flex; gap: 0.875rem; align-items: flex-start;
+      padding: 1rem 1.25rem;
+      border-top: 1px solid rgba(124,125,255,0.25);
+      background: linear-gradient(180deg, rgba(124,125,255,0.06), #0b1326);
+    }
+    .master-readonly-banner .info-icon {
+      color: #7c7dff; flex-shrink: 0;
+      font-size: 22px; width: 22px; height: 22px;
+    }
+    .master-readonly-banner .banner-text {
+      display: flex; flex-direction: column; gap: 0.25rem;
+      font-size: 0.8125rem; line-height: 1.4; color: #908fa0;
+    }
+    .master-readonly-banner .banner-text strong {
+      color: #c0c1ff; font-weight: 600;
+    }
+    .master-readonly-banner .banner-text em {
+      color: #c0c1ff; font-style: normal; font-weight: 500;
+    }
   `],
   template: `
     @if (conv()) {
@@ -323,26 +345,38 @@ type RedactPdfTextLayerResponse =
         </div>
       }
     </div>
-    <div class="input-row">
-      <input #pdfInput type="file" accept="application/pdf" style="display:none"
-             (change)="onPdfPicked($any($event.target))"/>
-      <input #imgInput type="file" accept="image/png,image/jpeg" style="display:none"
-             (change)="onImagePicked($any($event.target))"/>
-      <button mat-icon-button class="attach-btn" (click)="pdfInput.click()" matTooltip="Anexar PDF" [disabled]="sending">
-        <mat-icon>attach_file</mat-icon>
-      </button>
-      <button mat-icon-button class="attach-btn" (click)="imgInput.click()" matTooltip="Anexar imagem" [disabled]="sending">
-        <mat-icon>image</mat-icon>
-      </button>
-      <button mat-icon-button class="attach-btn" (click)="onAttachAiAnalysis()" matTooltip="Anexar análise IA" [disabled]="sending">
-        <mat-icon>insights</mat-icon>
-      </button>
-      <textarea [(ngModel)]="draft" placeholder="Mensagem…"
-        (keydown.enter)="onEnter($any($event))"></textarea>
-      <button mat-icon-button class="send-btn" [disabled]="!canSend()" (click)="onSend()" matTooltip="Enviar (Enter)">
-        <mat-icon>send</mat-icon>
-      </button>
-    </div>
+    @if (isMasterConv()) {
+      <div class="master-readonly-banner">
+        <mat-icon class="info-icon">info</mat-icon>
+        <div class="banner-text">
+          <strong>Canal informativo</strong>
+          <span>Esta conversa é somente para comunicados do Administrador GenomaFlow.
+          Para reportar erros ou sugerir melhorias, use os menus
+          <em>Reportar erro</em> e <em>Sugerir melhoria</em> no topo da aplicação.</span>
+        </div>
+      </div>
+    } @else {
+      <div class="input-row">
+        <input #pdfInput type="file" accept="application/pdf" style="display:none"
+               (change)="onPdfPicked($any($event.target))"/>
+        <input #imgInput type="file" accept="image/png,image/jpeg" style="display:none"
+               (change)="onImagePicked($any($event.target))"/>
+        <button mat-icon-button class="attach-btn" (click)="pdfInput.click()" matTooltip="Anexar PDF" [disabled]="sending">
+          <mat-icon>attach_file</mat-icon>
+        </button>
+        <button mat-icon-button class="attach-btn" (click)="imgInput.click()" matTooltip="Anexar imagem" [disabled]="sending">
+          <mat-icon>image</mat-icon>
+        </button>
+        <button mat-icon-button class="attach-btn" (click)="onAttachAiAnalysis()" matTooltip="Anexar análise IA" [disabled]="sending">
+          <mat-icon>insights</mat-icon>
+        </button>
+        <textarea [(ngModel)]="draft" placeholder="Mensagem…"
+          (keydown.enter)="onEnter($any($event))"></textarea>
+        <button mat-icon-button class="send-btn" [disabled]="!canSend()" (click)="onSend()" matTooltip="Enviar (Enter)">
+          <mat-icon>send</mat-icon>
+        </button>
+      </div>
+    }
   `
 })
 export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewChecked {
