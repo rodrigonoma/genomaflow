@@ -1,7 +1,21 @@
 'use strict';
 const Anthropic = require('@anthropic-ai/sdk');
 const { retrieveProductHelp } = require('../rag/product-help-retriever');
-const { TOOL_DEFINITIONS, executeTool } = require('../services/agenda-chat-tools');
+const agendaTools = require('../services/agenda-chat-tools');
+const patientTools = require('../services/patient-chat-tools');
+
+// Combina definitions dos dois módulos de tools. Dispatcher embaixo decide
+// qual executor chamar baseado no nome.
+const TOOL_DEFINITIONS = [
+  ...agendaTools.TOOL_DEFINITIONS,
+  ...patientTools.TOOL_DEFINITIONS,
+];
+
+async function executeTool(name, input, context) {
+  if (agendaTools.EXECUTORS[name]) return agendaTools.executeTool(name, input, context);
+  if (patientTools.EXECUTORS[name]) return patientTools.executeTool(name, input, context);
+  return { error: `Tool desconhecida: ${name}`, latency_ms: 0 };
+}
 
 const MODEL = process.env.PRODUCT_HELP_MODEL || 'claude-haiku-4-5-20251001';
 const MAX_TOKENS = 800;
@@ -57,9 +71,9 @@ QUANDO MOSTRAR HORÁRIO PRO USUÁRIO:
 
 ## PRINCÍPIO #1 — AÇÕES SEMPRE EXECUTADAS
 
-Quando o usuário pede uma ação na agenda (criar, cancelar, alterar status, listar, mostrar, remarcar), **execute via tools**. NUNCA recuse uma ação como se fosse "pergunta técnica de engenharia".
+Quando o usuário pede uma ação que está nas suas tools (agenda OU pacientes), **execute via tools**. NUNCA recuse uma ação como se fosse "pergunta técnica de engenharia".
 
-Pedidos que SÃO ações (sempre execute):
+### Ações de AGENDA (tools agenda):
 - "agenda Joana amanhã 14h" → find_subject + create_appointment
 - "alterar status do agendamento da Rafaela" → list_my_agenda + update_appointment_status
 - "cancela meu próximo atendimento" → list_my_agenda + cancel_appointment (com confirmação)
@@ -67,6 +81,22 @@ Pedidos que SÃO ações (sempre execute):
 - "faltou paciente das 10h" → list_my_agenda + update_appointment_status (status=no_show)
 - "o que tenho hoje?" → list_my_agenda
 - "bloqueia sexta de manhã" → create_appointment (status=blocked)
+
+### Ações de PACIENTES (tools pacientes):
+- "quantos pacientes tenho?" / "lista todos pacientes" → list_patients (sem filter)
+- "mostra dados completos da Maria" → list_patients(filter_name) + find_patient_full_details
+- "cadastra paciente Rodrigo Tavares" → create_patient (multi-turn pra coletar campos faltantes)
+- "novo animal: Rex, cachorro labrador" (vet) → create_patient (multi-turn pra coletar sex, etc.)
+
+### Workflow de cadastro de paciente (multi-turn):
+1. Usuário pede "cadastra X". Você verifica campos obrigatórios:
+   - Humano: name, birth_date (YYYY-MM-DD), sex
+   - Vet: name, sex, species
+2. Se faltar algo, PERGUNTE em mensagem de texto, um campo por vez (não chame a tool ainda).
+3. Quando tiver todos obrigatórios, apresente RESUMO em texto + peça confirmação:
+   "Vou cadastrar: Rodrigo Tavares, M, nascido em 23/03/1985. Confirma?"
+4. Após "sim", chame create_patient.
+5. Se a tool retornar duplicate_name, mostre os existentes e pergunte se é cadastro novo mesmo (ex: homônimos) — se sim, pode chamar de novo passando notes pra distinguir.
 
 ## PRINCÍPIO #2 — MENSAGENS CURTAS SÃO CONTINUAÇÕES
 
