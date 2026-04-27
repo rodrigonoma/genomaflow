@@ -1,6 +1,6 @@
 ---
 name: GenomaFlow Project Context
-description: Frontend + backend em produção — stack, arquitetura, estado atual (atualizado 2026-04-25 — pós CI test gate)
+description: Frontend + backend em produção — stack, arquitetura, estado atual (atualizado 2026-04-27 — pós audit log Option B)
 type: project
 ---
 
@@ -192,6 +192,23 @@ Estende o Copilot de Ajuda existente (`/product-help/ask`) com tool use do Anthr
 - **Voz**: `voice-input.service.ts` wraps Web Speech API (SpeechRecognition / webkitSpeechRecognition), lang=pt-BR. Botão de mic ao lado do textarea, vermelho pulsante quando gravando. Áudio nunca sai do browser — só o texto final. Hide do botão se !supported (Firefox). Permissão negada → mensagem amigável.
 - **Cobertura testes**: 31 unit + 9 integration mockando Anthropic SDK = 40 testes novos. Total CI gate: 283 verdes (era 243).
 - **Docs user-facing**: `docs/user-help/copilot-agenda-acoes.md` (RAG do Copilot indexa).
+
+## Audit log (Option B) — entregue 2026-04-27
+
+Trail genérico de toda mutação em tabelas críticas pra compliance LGPD + investigação de incidentes (cancelamento, alteração não-autorizada, atribuição UI vs Copilot). Spec interna executada em 5 fases (branches separadas, cada qual mergeada em main com smoke test).
+
+- **Migrations 055–057**:
+  - 055: tabela `audit_log` (append-only) + função `audit_trigger_fn()` SECURITY DEFINER + RLS NULLIF (master vê tudo, tenant só o próprio) + GRANT só SELECT/INSERT
+  - 056: trigger em `appointments`
+  - 057: triggers em `subjects`, `prescriptions`, `exams`
+- **Helper estendido** (`apps/api/src/db/tenant.js`): `withTenant(pg, tenantId, fn, opts)` agora aceita 4º arg `{ userId, channel }` que vira `SELECT set_config('app.user_id', ...)` + `set_config('app.actor_channel', ...)`. Channel whitelist: `ui`, `copilot`, `system`, `worker`. Backwards-compatible (sem opts → `actor_user_id` fica NULL e channel cai no default 'ui').
+- **Rotas/services com canal correto**:
+  - `apps/api/src/routes/agenda.js`, `patients.js`, `prescriptions.js`, `exams.js` → `{ channel: 'ui' }`
+  - `apps/api/src/services/agenda-chat-tools.js`, `patient-chat-tools.js` → `{ channel: 'copilot' }` (diferenciar UI de IA é o ponto core do Option B)
+- **Master panel `/master/audit-log`**: tab "Auditoria" com filtros (entity_type, actor_channel, action, tenant_id) + drill-down modal com diff side-by-side (`old_data` vs `new_data` via JsonPipe). Endpoints: `GET /master/audit-log` (paginado, clamps 30d/100 default, max 180/200) + `GET /master/audit-log/:id` (detalhe).
+- **Trade-off explícito** (vs Option A — colunas pontuais `cancelled_by`/`updated_by`): +cobertura genérica de toda mutação +zero overhead de instrumentar cada handler -1 trigger por tabela (mais boilerplate em migration). Escolhido B porque captura também `delete` e `insert` (não só update), atribui canal (UI vs Copilot) e a tabela única simplifica master panel.
+- **Cobertura testes**: `tests/routes/master-audit-log.test.js` (11 verdes — clamp, filtros parametrizados, JOIN tenants+users, 404, drill-down) + ACL guards em `tests/security/master-acl.test.js` (37 verdes). Adicionado ao `test:unit` (CI gate). Total atual: **355 verdes / 3 skipped / 17 suites**.
+- **Red flag**: INSERT/UPDATE/DELETE em tabela com trigger fora de `withTenant({userId, channel})` → atribuição perdida (NULL/'ui' default). Toda nova rota de mutação em tabela auditada DEVE passar `userId` + `channel`.
 
 ## Test gate no CI (entregue 2026-04-25)
 
