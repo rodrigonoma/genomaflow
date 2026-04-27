@@ -63,6 +63,7 @@ describe('Master ACL — /master/*', () => {
     { method: 'GET',    url: '/master/help-analytics' },
     { method: 'GET',    url: '/master/audit-log' },
     { method: 'GET',    url: '/master/audit-log/abc' },
+    { method: 'POST',   url: '/master/broadcasts' },
   ];
 
   for (const r of routes) {

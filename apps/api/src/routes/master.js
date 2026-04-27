@@ -1,5 +1,16 @@
 'use strict';
 
+const { withTenant } = require('../db/tenant');
+const {
+  resolveTargetTenants,
+  deliverToTenant,
+  VALID_SEGMENT_KINDS,
+  VALID_MODULES,
+  MASTER_TENANT_ID,
+} = require('../services/master-broadcasts');
+
+const BROADCAST_BODY_MAX = 2000;
+
 function masterOnly(fastify) {
   return async (request, reply) => {
     await fastify.authenticate(request, reply);
@@ -294,5 +305,97 @@ module.exports = async function masterRoutes(fastify) {
     );
     if (rows.length === 0) return reply.status(404).send({ error: 'Audit entry not found' });
     return rows[0];
+  });
+
+  // ── Master broadcasts (canal "Administrador GenomaFlow" → tenants) ───────
+  fastify.post('/broadcasts', {
+    ...auth(),
+    config: { rateLimit: { max: 20, timeWindow: '1 day' } },
+  }, async (request, reply) => {
+    const body = (request.body && typeof request.body.body === 'string') ? request.body.body.trim() : '';
+    const segment = request.body?.segment;
+
+    // Validação de body
+    if (!body) {
+      return reply.status(400).send({ error: 'body é obrigatório' });
+    }
+    if (body.length > BROADCAST_BODY_MAX) {
+      return reply.status(400).send({ error: `body excede ${BROADCAST_BODY_MAX} caracteres` });
+    }
+
+    // Validação de segment
+    if (!segment || typeof segment !== 'object') {
+      return reply.status(400).send({ error: 'segment é obrigatório' });
+    }
+    if (!VALID_SEGMENT_KINDS.includes(segment.kind)) {
+      return reply.status(400).send({ error: 'segment.kind inválido' });
+    }
+    if (segment.kind === 'module' && !VALID_MODULES.includes(segment.value)) {
+      return reply.status(400).send({ error: 'segment.value inválido pra kind=module' });
+    }
+    if (segment.kind === 'tenant' && !segment.value) {
+      return reply.status(400).send({ error: 'segment.value obrigatório pra kind=tenant' });
+    }
+
+    // Resolve targets (sem tenant_id setado — master vê tudo)
+    const targets = await resolveTargetTenants(fastify.pg, segment);
+    if (targets.length === 0) {
+      return reply.status(400).send({ error: 'Nenhum tenant elegível pra esse segmento' });
+    }
+
+    // INSERT canonical broadcast row (sem RLS context — master-only policy permite)
+    const { rows: [bc] } = await fastify.pg.query(
+      `INSERT INTO master_broadcasts (sender_user_id, body, segment_kind, segment_value, recipient_count)
+       VALUES ($1, $2, $3, $4, 0)
+       RETURNING id, created_at`,
+      [request.user.user_id, body, segment.kind, segment.value || null]
+    );
+
+    // Fan-out síncrono — pra cada tenant, withTenant cria conv+msg+delivery.
+    // RLS context = MASTER_TENANT_ID porque master é o sender em tenant_messages
+    // (tm_insert exige sender_tenant_id = app.tenant_id). Master também é
+    // tenant_a_id na conversa, então tc_insert passa. As policies master-only
+    // (mb/mba/mbd) aceitam master tenant id via 059.
+    let delivered = 0;
+    for (const t of targets) {
+      try {
+        const { conversationId, messageId } = await withTenant(
+          fastify.pg, MASTER_TENANT_ID,
+          (client) => deliverToTenant(client, {
+            broadcastId: bc.id,
+            masterUserId: request.user.user_id,
+            recipientTenant: t,
+            body,
+          }),
+          { userId: request.user.user_id, channel: 'system' }
+        );
+        delivered += 1;
+
+        // WS notify via Redis pub/sub (padrão do chat existente)
+        await fastify.redis.publish(
+          `chat:event:${t.id}`,
+          JSON.stringify({
+            event: 'master_broadcast_received',
+            conversation_id: conversationId,
+            message_id: messageId,
+          })
+        );
+      } catch (err) {
+        request.log.error({ err, tenant_id: t.id, broadcast_id: bc.id }, 'master broadcast delivery failed');
+      }
+    }
+
+    // Atualiza recipient_count com o que foi efetivamente entregue
+    await fastify.pg.query(
+      'UPDATE master_broadcasts SET recipient_count = $1 WHERE id = $2',
+      [delivered, bc.id]
+    );
+
+    return {
+      broadcast_id: bc.id,
+      recipient_count: delivered,
+      target_count: targets.length,
+      created_at: bc.created_at,
+    };
   });
 };
