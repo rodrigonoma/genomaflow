@@ -165,17 +165,27 @@ module.exports = async function (fastify) {
       return reply.status(400).send({ error: 'body ou attachment obrigatório' });
     }
 
-    // Detecta se a conversa é master_broadcast — replies pra master skipam
-    // suspensão (tenant suspenso ainda precisa poder falar com admin pra
-    // resolver). Reply em conversa tenant↔tenant mantém o gate normal.
+    // Detecta se a conversa é master_broadcast.
+    // Por design (2026-04-27): canal "Administrador GenomaFlow" é
+    // INFORMATIVO. Tenants NÃO podem responder — devem usar os menus
+    // "Reportar erro" e "Sugerir melhoria" (já existentes em app.component.ts)
+    // que escalam pra fluxos próprios. Reply via chat não é escalável
+    // (vira atendimento ad-hoc).
     const { rows: convKindRows } = await fastify.pg.query(
       'SELECT kind FROM tenant_conversations WHERE id = $1',
       [id]
     );
     const isMasterBroadcastConv = convKindRows[0]?.kind === 'master_broadcast';
 
+    if (isMasterBroadcastConv) {
+      return reply.status(403).send({
+        error: 'Canal informativo — não aceita respostas.',
+        hint: 'Use o menu "Reportar erro" ou "Sugerir melhoria" pra falar com o suporte.',
+      });
+    }
+
     // Suspensão por denúncias — só pra conversas peer-to-peer
-    if (!isMasterBroadcastConv && await isTenantSuspended(fastify.pg, tenant_id)) {
+    if (await isTenantSuspended(fastify.pg, tenant_id)) {
       return reply.status(403).send({
         error: 'Sua clínica está temporariamente suspensa no chat devido a denúncias recentes. Contate o suporte.'
       });
