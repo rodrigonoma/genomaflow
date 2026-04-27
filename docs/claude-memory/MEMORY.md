@@ -22,3 +22,4 @@
 - [PDF redaction strategy](feedback_pdf_redaction_strategy.md) — PDFs digitais: pdfjs-dist + pd-lib (não rasterizar); PDFs escaneados: modal LGPD com checkbox; imagens canvas: JPEG q=0.85 (não PNG)
 - [Testing standards](feedback_testing_standards.md) — CI gate em deploy.yml bloqueia deploy em falha de teste (api/worker/web); test:unit = subset sem DB; padrão Fastify isolado; skip com TODO; cobertura atual: 216 verdes / 7 skipped (snapshot 2026-04-25)
 - [Audit log (Option B)](project_audit_log.md) — Postgres triggers em appointments/subjects/prescriptions/exams + withTenant({userId, channel}) + master panel /audit-log (entregue 2026-04-27)
+- [Master Broadcasts (Comunicados)](project_master_broadcasts.md) — Canal "Administrador GenomaFlow" → tenants com markdown + anexos + segmentação + read receipts; reaproveita inter-tenant chat com kind=master_broadcast (entregue 2026-04-27)
