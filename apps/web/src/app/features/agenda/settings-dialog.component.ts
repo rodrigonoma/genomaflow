@@ -26,7 +26,28 @@ import {
     MatFormFieldModule, MatInputModule, MatSelectModule, MatCheckboxModule,
   ],
   styles: [`
-    :host { display:flex; flex-direction:column; max-height:85vh; color:#dae2fd; min-width:520px; }
+    :host { display:flex; flex-direction:column; max-height:85vh; color:#dae2fd; width:100%; max-width:520px; }
+    @media (max-width: 639px) {
+      :host { max-width: none; max-height: 100vh; height: 100vh; }
+      .body { padding: 0.5rem 1rem 1rem; }
+      .header { padding: 0.875rem 1rem 0.5rem; }
+      .footer { padding: 0.625rem 1rem; }
+      /* Day-row 2 linhas: dia + checkbox no topo, time inputs lado-a-lado embaixo */
+      .day-row {
+        grid-template-columns: 1fr auto !important;
+        grid-template-rows: auto auto;
+        gap: 0.375rem 0.5rem;
+        padding: 0.625rem 0;
+      }
+      .day-row .day-name { grid-column: 1; grid-row: 1; align-self: center; }
+      .day-row > :nth-child(2),
+      .day-row > :nth-child(3) {
+        grid-row: 2;
+      }
+      .day-row > :nth-child(2) { grid-column: 1; }
+      .day-row > :nth-child(3) { grid-column: 2; }
+      .day-row > :last-child { grid-column: 2; grid-row: 1; justify-self: end; }
+    }
     .header { padding:1rem 1.25rem 0.5rem; display:flex; justify-content:space-between; align-items:center; }
     h2 { font-family:'Space Grotesk',sans-serif; font-size:1rem; font-weight:700; margin:0; color:#c0c1ff; }
     .body { padding:0.5rem 1.25rem 1rem; display:flex; flex-direction:column; gap:0.875rem; flex:1; min-height:0; overflow-y:auto; }

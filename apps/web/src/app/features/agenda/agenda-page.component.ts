@@ -161,8 +161,43 @@ interface SubjectMap { [id: string]: string; }
       outline-offset: 2px;
     }
     @media (max-width: 768px) {
-      .appt { cursor:pointer; }
+      .appt {
+        cursor:pointer;
+        /* Garante touch target Apple HIG (44px); curtos ainda renderizam mas
+           ganham padding interno pra não ficarem um sliver impossível de tocar */
+        min-height: 44px;
+      }
+      .appt-name { font-size: 12px; }
+      .appt-time { font-size: 10px; }
     }
+    /* Indicador de dias da semana no mobile (mini tabs) — mostra qual dia
+       está ativo + swipe-ready. Aparece apenas em mobile. */
+    .mobile-day-tabs {
+      display: none;
+      gap: 4px;
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid rgba(70,69,84,0.12);
+    }
+    @media (max-width: 768px) {
+      .mobile-day-tabs { display: flex; justify-content: space-between; }
+    }
+    .mobile-day-tab {
+      flex: 1; text-align: center;
+      padding: 0.375rem 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; letter-spacing: 0.06em;
+      color: #7c7b8f;
+      background: transparent; border: none; border-radius: 4px;
+      cursor: pointer;
+      transition: background 120ms, color 120ms;
+    }
+    .mobile-day-tab.active {
+      background: rgba(192,193,255,0.12);
+      color: #c0c1ff;
+      font-weight: 700;
+    }
+    .mobile-day-tab.today { color: #c0c1ff; }
+    .mobile-day-tab strong { display: block; font-size: 14px; margin-top: 2px; font-family: 'Space Grotesk', sans-serif; }
     .appt-name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .appt-time { font-family:'JetBrains Mono',monospace; font-size:10px; opacity:0.85; margin-top:1px; }
     .appt.cancelled { opacity:0.5; text-decoration:line-through; }
@@ -202,7 +237,23 @@ interface SubjectMap { [id: string]: string; }
       </button>
     </div>
 
-    <div class="calendar-wrap">
+    <!-- Mini tabs dos 7 dias da semana — só mobile. Permite tocar pra
+         pular pra qualquer dia (sem precisar swipe múltiplas vezes). -->
+    <div class="mobile-day-tabs">
+      @for (day of weekDays(); track day.iso; let i = $index) {
+        <button class="mobile-day-tab"
+                [class.active]="i === mobileDayIdx()"
+                [class.today]="day.isToday"
+                (click)="mobileDayIdx.set(i)">
+          {{ day.weekday }}
+          <strong>{{ day.dayNumber }}</strong>
+        </button>
+      }
+    </div>
+
+    <div class="calendar-wrap"
+         (touchstart)="onTouchStart($event)"
+         (touchend)="onTouchEnd($event)">
       <div class="day-headers">
         <div class="corner-cell"></div>
         @for (day of weekDays(); track day.iso; let i = $index) {
@@ -448,6 +499,33 @@ export class AgendaPageComponent implements OnInit, OnDestroy {
       next: r => this.appointments.set(r.results || []),
       error: () => this.snack.open('Erro ao carregar agenda.', 'Fechar', { duration: 4000 })
     });
+  }
+
+  // Swipe horizontal no mobile pra trocar de dia. Threshold conservador
+  // (60px) pra não disparar em scroll vertical acidental.
+  private touchStartX: number | null = null;
+  private touchStartY: number | null = null;
+
+  onTouchStart(ev: TouchEvent): void {
+    if (window.innerWidth > 768 || !ev.touches?.[0]) return;
+    this.touchStartX = ev.touches[0].clientX;
+    this.touchStartY = ev.touches[0].clientY;
+  }
+
+  onTouchEnd(ev: TouchEvent): void {
+    if (window.innerWidth > 768 || this.touchStartX === null || this.touchStartY === null) {
+      this.touchStartX = null; this.touchStartY = null;
+      return;
+    }
+    const t = ev.changedTouches?.[0];
+    if (!t) { this.touchStartX = null; this.touchStartY = null; return; }
+    const dx = t.clientX - this.touchStartX;
+    const dy = t.clientY - this.touchStartY;
+    this.touchStartX = null; this.touchStartY = null;
+    // Ignora swipe vertical (scroll) — só trata se horizontal predominar
+    if (Math.abs(dy) > Math.abs(dx)) return;
+    if (dx <= -60) this.nextWeek();
+    else if (dx >= 60) this.prevWeek();
   }
 
   prevWeek() {

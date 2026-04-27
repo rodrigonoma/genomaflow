@@ -65,6 +65,15 @@ import { CounterpartContactDialogComponent } from './counterpart-contact-dialog.
       color: #7c7dff; flex-shrink: 0;
     }
     .info-btn mat-icon { font-size: 16px; width: 16px; height: 16px; }
+
+    /* Mobile: items levemente maiores pra touch + esconde info-btn que vira
+       redundante com a tela de contato dedicada */
+    @media (max-width: 639px) {
+      .item { padding: 1rem 1rem; min-height: 64px; }
+      .item .name { font-size: 0.9375rem; }
+      .item .preview { font-size: 0.8125rem; }
+      .info-btn { display: none; }
+    }
   `],
   template: `
     @if (conversations().length === 0) {

@@ -39,7 +39,16 @@ export type QuickCreateDialogResult = { created: true; subject_name?: string } |
     MatFormFieldModule, MatInputModule, MatSelectModule, MatAutocompleteModule, MatRadioModule,
   ],
   styles: [`
-    :host { display:flex; flex-direction:column; max-height:85vh; color:#dae2fd; min-width:420px; }
+    :host { display:flex; flex-direction:column; max-height:85vh; color:#dae2fd; width:100%; max-width:420px; }
+    @media (max-width: 639px) {
+      :host { max-width: none; max-height: 100vh; height: 100vh; }
+      .body { padding: 0.5rem 1rem 1rem; }
+      .header { padding: 0.875rem 1rem 0.5rem; }
+      .footer { padding: 0.625rem 1rem; flex-wrap: wrap; }
+      .submit-btn { flex: 1; }
+      .mode-row mat-radio-group { display: flex; flex-direction: column; gap: 0.25rem; }
+      .mode-row mat-radio-button { margin-left: 0 !important; }
+    }
     .header { padding:1rem 1.25rem 0.5rem; }
     h2 { font-family:'Space Grotesk',sans-serif; font-size:1rem; font-weight:700; margin:0; color:#c0c1ff; }
     .when { font-family:'JetBrains Mono',monospace; font-size:11px; color:#908fa0; margin-top:4px; letter-spacing:0.05em; }
