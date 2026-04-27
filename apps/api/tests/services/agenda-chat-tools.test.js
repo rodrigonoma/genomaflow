@@ -219,7 +219,9 @@ describe('update_appointment_status', () => {
     c.connectMock.mockResolvedValueOnce({
       query: jest.fn()
         .mockResolvedValueOnce({}) // BEGIN
-        .mockResolvedValueOnce({}) // set_config
+        .mockResolvedValueOnce({}) // set_config tenant_id
+        .mockResolvedValueOnce({}) // set_config user_id
+        .mockResolvedValueOnce({}) // set_config actor_channel
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({}), // COMMIT
       release: jest.fn(),
@@ -234,7 +236,9 @@ describe('update_appointment_status', () => {
     const c = ctx();
     const queryFn = jest.fn()
       .mockResolvedValueOnce({}) // BEGIN
-      .mockResolvedValueOnce({}) // set_config
+      .mockResolvedValueOnce({}) // set_config tenant_id
+      .mockResolvedValueOnce({}) // set_config user_id
+      .mockResolvedValueOnce({}) // set_config actor_channel
       .mockResolvedValueOnce({
         rows: [{ id: 'a1', status: 'scheduled', start_at: '2030-01-01T10:00:00Z', duration_minutes: 30 }],
       })
@@ -247,7 +251,8 @@ describe('update_appointment_status', () => {
     expect(r.result.status).toBe('scheduled');
 
     // SQL deve incluir cleanup de cancelled_at quando target != cancelled
-    const updateSql = queryFn.mock.calls[2][0];
+    // mock.calls index 4 = depois de BEGIN + 3 set_config (tenant/user/channel)
+    const updateSql = queryFn.mock.calls[4][0];
     expect(updateSql).toMatch(/cancelled_at = CASE/);
     // E excluir apenas blocked (não cancelled)
     expect(updateSql).toMatch(/status != 'blocked'/);
@@ -279,7 +284,9 @@ describe('update_appointment_status', () => {
       const c = ctx();
       const queryFn = jest.fn()
         .mockResolvedValueOnce({}) // BEGIN
-        .mockResolvedValueOnce({}) // set_config
+        .mockResolvedValueOnce({}) // set_config tenant_id
+        .mockResolvedValueOnce({}) // set_config user_id
+        .mockResolvedValueOnce({}) // set_config actor_channel
         .mockResolvedValueOnce({
           rows: [{ id: 'a1', status, start_at: '2030-01-01T10:00:00Z', duration_minutes: 30 }],
         })
@@ -292,7 +299,8 @@ describe('update_appointment_status', () => {
       expect(r.result.status).toBe(status);
 
       // UPDATE call (3rd query) recebe tenant + user do contexto
-      const updateCall = queryFn.mock.calls[2];
+      // index 4 = BEGIN + set_config tenant/user/channel + UPDATE
+      const updateCall = queryFn.mock.calls[4];
       expect(updateCall[1]).toEqual([status, 'a1', c.tenant_id, c.user_id]);
     }
   );
@@ -301,12 +309,14 @@ describe('update_appointment_status', () => {
     const c = ctx();
     c.connectMock.mockResolvedValueOnce({
       query: jest.fn()
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({}) // set_config tenant_id
+        .mockResolvedValueOnce({}) // set_config user_id
+        .mockResolvedValueOnce({}) // set_config actor_channel
         .mockResolvedValueOnce({
           rows: [{ id: 'a1', status: 'confirmed', start_at: '2030-01-01T10:00:00Z', duration_minutes: 30 }],
         })
-        .mockResolvedValueOnce({}),
+        .mockResolvedValueOnce({}), // COMMIT
       release: jest.fn(),
     });
     await executeTool('update_appointment_status', {
@@ -330,7 +340,9 @@ describe('cancel_appointment', () => {
     c.connectMock.mockResolvedValueOnce({
       query: jest.fn()
         .mockResolvedValueOnce({}) // BEGIN
-        .mockResolvedValueOnce({}) // set_config
+        .mockResolvedValueOnce({}) // set_config tenant_id
+        .mockResolvedValueOnce({}) // set_config user_id
+        .mockResolvedValueOnce({}) // set_config actor_channel
         .mockResolvedValueOnce({ rows: [] }) // UPDATE returning vazio
         .mockResolvedValueOnce({}), // COMMIT
       release: jest.fn(),
@@ -344,7 +356,9 @@ describe('cancel_appointment', () => {
     c.connectMock.mockResolvedValueOnce({
       query: jest.fn()
         .mockResolvedValueOnce({}) // BEGIN
-        .mockResolvedValueOnce({}) // set_config
+        .mockResolvedValueOnce({}) // set_config tenant_id
+        .mockResolvedValueOnce({}) // set_config user_id
+        .mockResolvedValueOnce({}) // set_config actor_channel
         .mockResolvedValueOnce({
           rows: [{ id: 'a1', status: 'cancelled', cancelled_at: '2030-01-01T10:00:00Z' }]
         })
