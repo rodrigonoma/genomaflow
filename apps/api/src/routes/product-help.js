@@ -3,17 +3,20 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { retrieveProductHelp } = require('../rag/product-help-retriever');
 const agendaTools = require('../services/agenda-chat-tools');
 const patientTools = require('../services/patient-chat-tools');
+const clinicalTools = require('../services/clinical-chat-tools');
 
-// Combina definitions dos dois módulos de tools. Dispatcher embaixo decide
+// Combina definitions dos módulos de tools. Dispatcher embaixo decide
 // qual executor chamar baseado no nome.
 const TOOL_DEFINITIONS = [
   ...agendaTools.TOOL_DEFINITIONS,
   ...patientTools.TOOL_DEFINITIONS,
+  ...clinicalTools.TOOL_DEFINITIONS,
 ];
 
 async function executeTool(name, input, context) {
   if (agendaTools.EXECUTORS[name]) return agendaTools.executeTool(name, input, context);
   if (patientTools.EXECUTORS[name]) return patientTools.executeTool(name, input, context);
+  if (clinicalTools.EXECUTORS[name]) return clinicalTools.executeTool(name, input, context);
   return { error: `Tool desconhecida: ${name}`, latency_ms: 0 };
 }
 
@@ -87,6 +90,28 @@ Quando o usuário pede uma ação que está nas suas tools (agenda OU pacientes)
 - "mostra dados completos da Maria" → list_patients(filter_name) + find_patient_full_details
 - "cadastra paciente Rodrigo Tavares" → create_patient (multi-turn pra coletar campos faltantes)
 - "novo animal: Rex, cachorro labrador" (vet) → create_patient (multi-turn pra coletar sex, etc.)
+
+### Ações de EXAMES (read-only — tools clínicas):
+- "qual o último exame da Maria?" → list_patients(filter) + list_recent_exams(subject_id) + get_exam_summary(exam_id) opcional
+- "exames pendentes da semana" → list_recent_exams(status='pending')
+- "como ficou a análise do exame X?" → get_exam_summary
+- "tenho exames com alertas críticos?" → list_recent_exams + get_exam_summary nos top 3
+- Quando o resultado tiver navigate_url, mencione opção de abrir: "Posso abrir a tela completa? Acesse **Pacientes → [nome] → Exames** ou clique aqui." Inclua actions block (formato abaixo).
+
+### Ações de RECEITAS / PRESCRIÇÕES (read-only):
+- "receitas recentes" → list_recent_prescriptions
+- "receitas terapêuticas da Maria" → list_patients + list_recent_prescriptions(subject_id, agent_type='therapeutic')
+- "detalhes da receita X" → get_prescription_details
+- Geração de receita via chat NÃO está disponível (V1 — exige decisão clínica + assinatura). Direcione: "Pra gerar nova receita, vá em **Pacientes → [nome] → Tratamentos**."
+
+### ACTIONS BLOCK (botões clicáveis na resposta):
+Quando uma tool retorna o campo navigate_url, você PODE incluir um bloco de actions ao FIM da resposta pra gerar botão clicável na UI:
+
+\`\`\`actions
+[{"label": "Abrir análise completa", "url": "/results/abc-123"}]
+\`\`\`
+
+Use no máximo 3 actions. Só inclua se o usuário se beneficia de navegar — não force.
 
 ### Workflow de cadastro de paciente (multi-turn):
 1. Usuário pede "cadastra X". Você verifica campos obrigatórios:
@@ -460,8 +485,24 @@ module.exports = async function (fastify) {
           reply.raw.write(`event: delta\ndata: ${JSON.stringify({ text: correction })}\n\n`);
         }
 
+        // Parse bloco de actions do texto final (mesma lógica do modo non-tools)
+        let actions = [];
+        const actionsMatch = fullAnswer.match(/```actions\s*(\[[\s\S]*?\])\s*```/);
+        if (actionsMatch) {
+          try {
+            const parsed = JSON.parse(actionsMatch[1]);
+            if (Array.isArray(parsed)) {
+              actions = parsed
+                .filter(a => a && typeof a.label === 'string' && typeof a.url === 'string' && a.url.startsWith('/'))
+                .slice(0, 3)
+                .map(a => ({ label: a.label.slice(0, 60), url: a.url.slice(0, 200) }));
+            }
+          } catch (_) { /* invalid JSON, ignora */ }
+        }
+
         reply.raw.write(`event: done\ndata: ${JSON.stringify({
           sources: docs.map(d => ({ source: d.source, title: d.title, score: Number(d.score.toFixed(3)) })),
+          actions,
           tool_calls_summary: toolCallsLog.map(t => t.tool_name),
           hallucinated_destruction: claimedDestruction && !calledDestructive,
         })}\n\n`);
