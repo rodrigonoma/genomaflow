@@ -1,7 +1,7 @@
 import { Component, inject, signal, computed, effect, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { DatePipe, DecimalPipe, JsonPipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { environment } from '../../../environments/environment';
@@ -37,7 +37,7 @@ interface Stats {
 @Component({
   selector: 'app-master',
   standalone: true,
-  imports: [FormsModule, DatePipe, DecimalPipe],
+  imports: [FormsModule, DatePipe, DecimalPipe, JsonPipe],
   styles: [`
     :host { display:block; position:fixed; inset:0; z-index:9999;
             background:#080e1c; color:#dae2fd; overflow:auto;
@@ -524,6 +524,130 @@ interface Stats {
         }
       }
 
+      @if (activeTab() === 'audit') {
+        <div class="section-title">Auditoria — quem fez o quê</div>
+        <p style="color:#908fa0;font-size:12px;margin:0 0 1rem">
+          Todas as mutações em agendamentos, pacientes, exames e receitas — UI manual e Copilot.
+          Filtros aplicam imediatamente.
+        </p>
+
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center;">
+          <select [value]="auditFilterValue('entity_type')"
+                  (change)="setAuditFilter('entity_type', $any($event.target).value)"
+                  style="background:#0b1326;color:#dae2fd;border:1px solid #2c2c44;padding:0.375rem 0.5rem;border-radius:4px;font-size:12px;">
+            <option value="">Todas as tabelas</option>
+            <option value="appointments">Agendamentos</option>
+            <option value="subjects">Pacientes</option>
+            <option value="prescriptions">Receitas</option>
+            <option value="exams">Exames</option>
+          </select>
+          <select [value]="auditFilterValue('actor_channel')"
+                  (change)="setAuditFilter('actor_channel', $any($event.target).value)"
+                  style="background:#0b1326;color:#dae2fd;border:1px solid #2c2c44;padding:0.375rem 0.5rem;border-radius:4px;font-size:12px;">
+            <option value="">Todos os canais</option>
+            <option value="ui">UI (manual)</option>
+            <option value="copilot">Copilot</option>
+            <option value="system">Sistema</option>
+            <option value="worker">Worker</option>
+          </select>
+          <select [value]="auditFilterValue('action')"
+                  (change)="setAuditFilter('action', $any($event.target).value)"
+                  style="background:#0b1326;color:#dae2fd;border:1px solid #2c2c44;padding:0.375rem 0.5rem;border-radius:4px;font-size:12px;">
+            <option value="">Todas ações</option>
+            <option value="insert">Criação</option>
+            <option value="update">Edição</option>
+            <option value="delete">Exclusão</option>
+          </select>
+          <button (click)="loadAudit()"
+                  style="background:#1a2540;color:#dae2fd;border:1px solid #2c2c44;padding:0.375rem 0.75rem;border-radius:4px;font-size:12px;cursor:pointer;">
+            ⟳ Recarregar
+          </button>
+        </div>
+
+        @if (auditLoading()) {
+          <div class="text-muted mono" style="font-size:12px">Carregando...</div>
+        } @else if (auditEntries().length === 0) {
+          <div class="text-muted mono" style="font-size:12px">Sem registros de auditoria pra esses filtros.</div>
+        } @else {
+          <table>
+            <thead>
+              <tr>
+                <th>Data/hora</th><th>Tenant</th><th>Quem</th><th>Canal</th>
+                <th>Tabela</th><th>Ação</th><th>Campos alterados</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (a of auditEntries(); track a.id) {
+                <tr>
+                  <td class="mono text-muted" style="font-size:11px;white-space:nowrap">{{ formatDateTime(a.created_at) }}</td>
+                  <td style="font-size:12px">{{ a.tenant_name || '—' }}</td>
+                  <td style="font-size:12px">{{ a.actor_email || '(sistema)' }}</td>
+                  <td>
+                    <span class="mono" style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;padding:2px 6px;border-radius:3px"
+                          [style.background]="a.actor_channel === 'copilot' ? 'rgba(192,193,255,0.15)' : a.actor_channel === 'ui' ? 'rgba(96,125,139,0.15)' : 'rgba(255,180,171,0.15)'"
+                          [style.color]="a.actor_channel === 'copilot' ? '#c0c1ff' : a.actor_channel === 'ui' ? '#90a4ae' : '#ffb4ab'">
+                      {{ a.actor_channel }}
+                    </span>
+                  </td>
+                  <td class="mono" style="font-size:11px">{{ a.entity_type }}</td>
+                  <td>
+                    <span class="mono" style="font-size:10px;text-transform:uppercase;padding:2px 6px;border-radius:3px"
+                          [style.background]="a.action === 'insert' ? 'rgba(16,185,129,0.15)' : a.action === 'update' ? 'rgba(99,102,241,0.15)' : 'rgba(255,180,171,0.15)'"
+                          [style.color]="a.action === 'insert' ? '#10b981' : a.action === 'update' ? '#818cf8' : '#ffb4ab'">
+                      {{ a.action }}
+                    </span>
+                  </td>
+                  <td class="mono text-muted" style="font-size:10px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                      [title]="(a.changed_fields || []).join(', ')">
+                    {{ a.changed_fields ? a.changed_fields.join(', ') : '—' }}
+                  </td>
+                  <td>
+                    <button (click)="openAuditDetail(a.id)"
+                            style="background:transparent;color:#c0c1ff;border:1px solid #2c2c44;padding:2px 8px;border-radius:3px;font-size:10px;cursor:pointer;">
+                      Diff
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+
+        @if (auditDetail(); as d) {
+          <div style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:2rem;"
+               (click)="closeAuditDetail()">
+            <div style="background:#0b1326;border:1px solid #2c2c44;border-radius:8px;padding:1.5rem;max-width:1000px;width:100%;max-height:80vh;overflow:auto;color:#dae2fd"
+                 (click)="$event.stopPropagation()">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+                <h3 style="margin:0;font-size:1rem">{{ d.entity_type }} · {{ d.action }} · {{ formatDateTime(d.created_at) }}</h3>
+                <button (click)="closeAuditDetail()" style="background:transparent;color:#dae2fd;border:none;font-size:1.5rem;cursor:pointer">×</button>
+              </div>
+              <p style="font-size:12px;color:#908fa0;margin:0 0 1rem">
+                <strong>Quem:</strong> {{ d.actor_email || '(sistema)' }} ·
+                <strong>Canal:</strong> {{ d.actor_channel }} ·
+                <strong>Tenant:</strong> {{ d.tenant_name || d.tenant_id }} ·
+                <strong>Entity ID:</strong> <span class="mono">{{ d.entity_id }}</span>
+              </p>
+              @if (d.changed_fields && d.changed_fields.length > 0) {
+                <p style="font-size:12px;color:#a09fb2;margin:0 0 0.5rem">
+                  <strong>Campos alterados:</strong> {{ d.changed_fields.join(', ') }}
+                </p>
+              }
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem">
+                <div>
+                  <h4 style="font-size:11px;color:#908fa0;text-transform:uppercase;margin:0 0 0.5rem">Antes (old_data)</h4>
+                  <pre style="background:#060d1a;padding:0.75rem;border-radius:4px;font-size:10px;line-height:1.45;color:#dae2fd;white-space:pre-wrap;overflow-x:auto;max-height:50vh;overflow-y:auto">{{ d.old_data ? (d.old_data | json) : '(novo registro)' }}</pre>
+                </div>
+                <div>
+                  <h4 style="font-size:11px;color:#908fa0;text-transform:uppercase;margin:0 0 0.5rem">Depois (new_data)</h4>
+                  <pre style="background:#060d1a;padding:0.75rem;border-radius:4px;font-size:10px;line-height:1.45;color:#dae2fd;white-space:pre-wrap;overflow-x:auto;max-height:50vh;overflow-y:auto">{{ d.new_data ? (d.new_data | json) : '(deletado)' }}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        }
+      }
+
     </div><!-- /content -->
   </div><!-- /layout -->
 </div>
@@ -540,6 +664,7 @@ export class MasterComponent implements OnInit {
     { id: 'feedback', label: 'Feedback',   icon: 'forum' },
     { id: 'credits',  label: 'Créditos',   icon: 'toll' },
     { id: 'help',     label: 'Ajuda',      icon: 'support_agent' },
+    { id: 'audit',    label: 'Auditoria',  icon: 'history' },
   ];
 
   activeTab = signal<string>('tenants');
@@ -576,6 +701,20 @@ export class MasterComponent implements OnInit {
   } | null>(null);
   helpAnalyticsLoading = signal(false);
 
+  // Auditoria — todas mutações UI + Copilot + sistema
+  auditEntries = signal<Array<{
+    id: string; tenant_id: string; entity_type: string; entity_id: string;
+    action: 'insert'|'update'|'delete';
+    actor_user_id: string|null; actor_channel: string;
+    changed_fields: string[]|null; created_at: string;
+    tenant_name: string|null; actor_email: string|null;
+  }>>([]);
+  auditLoading = signal(false);
+  auditFilter = signal<{
+    entity_type?: string; actor_channel?: string; action?: string; days: number;
+  }>({ days: 30 });
+  auditDetail = signal<any | null>(null);
+
   private api(path: string) { return `${environment.apiUrl}/master${path}`; }
 
   constructor() {
@@ -589,6 +728,52 @@ export class MasterComponent implements OnInit {
         error: () => this.helpAnalyticsLoading.set(false),
       });
     }, { allowSignalWrites: true });
+    effect(() => {
+      if (this.activeTab() !== 'audit') return;
+      this.loadAudit();
+    }, { allowSignalWrites: true });
+    // recarrega audit ao mudar filtros
+    effect(() => {
+      this.auditFilter();
+      if (this.activeTab() === 'audit') this.loadAudit();
+    }, { allowSignalWrites: true });
+  }
+
+  loadAudit(): void {
+    this.auditLoading.set(true);
+    const f = this.auditFilter();
+    const params: string[] = [`days=${f.days}`, 'limit=200'];
+    if (f.entity_type) params.push(`entity_type=${encodeURIComponent(f.entity_type)}`);
+    if (f.actor_channel) params.push(`actor_channel=${encodeURIComponent(f.actor_channel)}`);
+    if (f.action) params.push(`action=${encodeURIComponent(f.action)}`);
+    this.http.get<any>(this.api(`/audit-log?${params.join('&')}`)).subscribe({
+      next: (r) => { this.auditEntries.set(r.results || []); this.auditLoading.set(false); },
+      error: () => this.auditLoading.set(false),
+    });
+  }
+
+  openAuditDetail(id: string): void {
+    this.http.get<any>(this.api(`/audit-log/${id}`)).subscribe({
+      next: (r) => this.auditDetail.set(r),
+      error: () => {},
+    });
+  }
+  closeAuditDetail(): void { this.auditDetail.set(null); }
+
+  formatDateTime(iso: string): string {
+    return new Date(iso).toLocaleString('pt-BR');
+  }
+
+  setAuditFilter(key: 'entity_type' | 'actor_channel' | 'action' | 'days', value: string | number): void {
+    const cur = this.auditFilter();
+    const next: any = { ...cur };
+    if (value === '' || value === null || value === undefined) delete next[key];
+    else next[key] = value;
+    this.auditFilter.set(next);
+  }
+  auditFilterValue(key: 'entity_type' | 'actor_channel' | 'action'): string {
+    const f = this.auditFilter() as any;
+    return f[key] || '';
   }
 
   ngOnInit(): void {

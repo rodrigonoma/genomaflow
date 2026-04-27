@@ -227,4 +227,72 @@ module.exports = async function masterRoutes(fastify) {
     );
     return { top_routes: topRoutes, recent };
   });
+
+  // ── Audit log (todas mutações UI + Copilot + sistema) ─────────────────────
+  fastify.get('/audit-log', auth(), async (request, reply) => {
+    const q = request.query || {};
+    const limit = Math.min(200, Math.max(1, parseInt(q.limit) || 100));
+    const days = Math.min(180, Math.max(1, parseInt(q.days) || 30));
+
+    const params = [days];
+    const filters = [];
+    if (q.entity_type) {
+      params.push(String(q.entity_type));
+      filters.push(`a.entity_type = $${params.length}`);
+    }
+    if (q.entity_id) {
+      params.push(String(q.entity_id));
+      filters.push(`a.entity_id = $${params.length}`);
+    }
+    if (q.actor_user_id) {
+      params.push(String(q.actor_user_id));
+      filters.push(`a.actor_user_id = $${params.length}`);
+    }
+    if (q.actor_channel) {
+      params.push(String(q.actor_channel));
+      filters.push(`a.actor_channel = $${params.length}`);
+    }
+    if (q.tenant_id) {
+      params.push(String(q.tenant_id));
+      filters.push(`a.tenant_id = $${params.length}`);
+    }
+    if (q.action) {
+      params.push(String(q.action));
+      filters.push(`a.action = $${params.length}`);
+    }
+    const whereExtra = filters.length > 0 ? ` AND ${filters.join(' AND ')}` : '';
+
+    const { rows } = await fastify.pg.query(
+      `SELECT a.id, a.tenant_id, a.entity_type, a.entity_id, a.action,
+              a.actor_user_id, a.actor_channel, a.changed_fields, a.created_at,
+              t.name AS tenant_name,
+              u.email AS actor_email
+       FROM audit_log a
+       LEFT JOIN tenants t ON t.id = a.tenant_id
+       LEFT JOIN users u ON u.id = a.actor_user_id
+       WHERE a.created_at > NOW() - INTERVAL '1 day' * $1${whereExtra}
+       ORDER BY a.created_at DESC
+       LIMIT ${limit}`,
+      params
+    );
+    return { results: rows, filters: q, days, limit };
+  });
+
+  // GET /audit-log/:id — detalhes (old_data + new_data) pra drill-down
+  fastify.get('/audit-log/:id', auth(), async (request, reply) => {
+    const { id } = request.params;
+    const { rows } = await fastify.pg.query(
+      `SELECT a.id, a.tenant_id, a.entity_type, a.entity_id, a.action,
+              a.actor_user_id, a.actor_channel, a.old_data, a.new_data,
+              a.changed_fields, a.created_at,
+              t.name AS tenant_name, u.email AS actor_email
+       FROM audit_log a
+       LEFT JOIN tenants t ON t.id = a.tenant_id
+       LEFT JOIN users u ON u.id = a.actor_user_id
+       WHERE a.id = $1`,
+      [id]
+    );
+    if (rows.length === 0) return reply.status(404).send({ error: 'Audit entry not found' });
+    return rows[0];
+  });
 };
