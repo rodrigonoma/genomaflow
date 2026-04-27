@@ -25,7 +25,7 @@ module.exports = async function (fastify) {
          RETURNING id, tenant_id, subject_id, exam_id, agent_type, items, notes, pdf_url, created_at`,
         [tenant_id, subject_id, exam_id, user_id, agent_type, JSON.stringify(items), notes ?? null]
       );
-    });
+    }, { userId: user_id, channel: 'ui' });
 
     return reply.status(201).send(rows[0]);
   });
@@ -92,7 +92,7 @@ module.exports = async function (fastify) {
 
   // PUT /prescriptions/:id — atualizar receita (items, notes, pdf_url)
   fastify.put('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { tenant_id } = request.user;
+    const { tenant_id, user_id } = request.user;
     const { id } = request.params;
     const { items, notes, pdf_url } = request.body || {};
 
@@ -107,7 +107,7 @@ module.exports = async function (fastify) {
          RETURNING id, items, notes, pdf_url, updated_at`,
         [items ? JSON.stringify(items) : null, notes ?? null, pdf_url ?? null, id, tenant_id]
       );
-    });
+    }, { userId: user_id, channel: 'ui' });
 
     if (!rows.length) return reply.status(404).send({ error: 'Receita não encontrada' });
     return rows[0];
@@ -115,7 +115,7 @@ module.exports = async function (fastify) {
 
   // DELETE /prescriptions/:id
   fastify.delete('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { tenant_id } = request.user;
+    const { tenant_id, user_id } = request.user;
     const { id } = request.params;
 
     await withTenant(fastify.pg, tenant_id, async (client) => {
@@ -123,7 +123,7 @@ module.exports = async function (fastify) {
         'DELETE FROM prescriptions WHERE id = $1 AND tenant_id = $2',
         [id, tenant_id]
       );
-    });
+    }, { userId: user_id, channel: 'ui' });
 
     return reply.status(204).send();
   });

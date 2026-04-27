@@ -151,7 +151,9 @@ describe('create_patient — validação humano', () => {
     c.connectMock.mockResolvedValueOnce({
       query: jest.fn()
         .mockResolvedValueOnce({}) // BEGIN
-        .mockResolvedValueOnce({}) // set_config
+        .mockResolvedValueOnce({}) // set_config tenant_id
+        .mockResolvedValueOnce({}) // set_config user_id
+        .mockResolvedValueOnce({}) // set_config actor_channel
         .mockResolvedValueOnce({
           rows: [{ id: 'new1', name: 'Maria', subject_type: 'human', sex: 'F', birth_date: '1990-01-01' }],
         })
@@ -202,12 +204,14 @@ describe('create_patient — validação veterinário', () => {
     c.queryMock.mockResolvedValueOnce({ rows: [] }); // dup check
     c.connectMock.mockResolvedValueOnce({
       query: jest.fn()
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({}) // set_config tenant_id
+        .mockResolvedValueOnce({}) // set_config user_id
+        .mockResolvedValueOnce({}) // set_config actor_channel
         .mockResolvedValueOnce({
           rows: [{ id: 'a1', name: 'Rex', subject_type: 'animal', sex: 'M', species: 'dog' }],
         })
-        .mockResolvedValueOnce({}),
+        .mockResolvedValueOnce({}), // COMMIT
       release: jest.fn(),
     });
     const r = await executeTool('create_patient', {

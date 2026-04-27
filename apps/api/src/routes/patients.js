@@ -132,7 +132,7 @@ module.exports = async function (fastify) {
            consentAt, consentBy]
         );
         return rows[0];
-      });
+      }, { userId: user_id, channel: 'ui' });
       publishSubjectUpserted(fastify, tenant_id, subject.id);
       return reply.status(201).send(subject);
     }
@@ -163,7 +163,7 @@ module.exports = async function (fastify) {
          consentAt, consentBy]
       );
       return rows[0];
-    });
+    }, { userId: user_id, channel: 'ui' });
     publishSubjectUpserted(fastify, tenant_id, subject.id);
     return reply.status(201).send(subject);
   });
@@ -282,14 +282,14 @@ module.exports = async function (fastify) {
          id, tenant_id]
       );
       return rows[0] || null;
-    });
+    }, { userId: user_id, channel: 'ui' });
     if (!subject) return reply.status(404).send({ error: 'Patient not found' });
     publishSubjectUpserted(fastify, tenant_id, subject.id);
     return subject;
   });
 
   fastify.delete('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { tenant_id } = request.user;
+    const { tenant_id, user_id } = request.user;
     const { id } = request.params;
     const deleted = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
@@ -298,7 +298,7 @@ module.exports = async function (fastify) {
          RETURNING id`, [id, tenant_id]
       );
       return rows[0] || null;
-    });
+    }, { userId: user_id, channel: 'ui' });
     if (!deleted) return reply.status(404).send({ error: 'Patient not found' });
     return reply.status(204).send();
   });

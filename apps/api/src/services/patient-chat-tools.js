@@ -241,7 +241,7 @@ async function execCreatePatient(input, ctx) {
        typeof i.neutered === 'boolean' ? i.neutered : null, i.notes || null]
     );
     return rows[0];
-  });
+  }, { userId: ctx.user_id, channel: 'copilot' });
 
   // WS pub/sub pra refrescar lista no frontend (mesmo canal usado por
   // patients.js POST /, escutado pelo worker de RAG e pelo nosso WS)
