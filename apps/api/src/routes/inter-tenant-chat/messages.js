@@ -165,8 +165,17 @@ module.exports = async function (fastify) {
       return reply.status(400).send({ error: 'body ou attachment obrigatório' });
     }
 
-    // Suspensão por denúncias
-    if (await isTenantSuspended(fastify.pg, tenant_id)) {
+    // Detecta se a conversa é master_broadcast — replies pra master skipam
+    // suspensão (tenant suspenso ainda precisa poder falar com admin pra
+    // resolver). Reply em conversa tenant↔tenant mantém o gate normal.
+    const { rows: convKindRows } = await fastify.pg.query(
+      'SELECT kind FROM tenant_conversations WHERE id = $1',
+      [id]
+    );
+    const isMasterBroadcastConv = convKindRows[0]?.kind === 'master_broadcast';
+
+    // Suspensão por denúncias — só pra conversas peer-to-peer
+    if (!isMasterBroadcastConv && await isTenantSuspended(fastify.pg, tenant_id)) {
       return reply.status(403).send({
         error: 'Sua clínica está temporariamente suspensa no chat devido a denúncias recentes. Contate o suporte.'
       });

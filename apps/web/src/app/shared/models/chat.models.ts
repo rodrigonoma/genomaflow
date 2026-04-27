@@ -31,10 +31,14 @@ export interface InterTenantInvitation {
   responded_at: string | null;
 }
 
+export type ConversationKind = 'tenant_to_tenant' | 'master_broadcast';
+
 export interface InterTenantConversation {
   id: string;
   counterpart_tenant_id: string;
   counterpart_name: string;
+  /** 'master_broadcast' indica canal "Administrador GenomaFlow" — pinned na sidebar, sem block/sair, body em markdown sanitizado */
+  kind?: ConversationKind;
   module: 'human' | 'veterinary';
   last_message_at: string | null;
   created_at: string;
@@ -42,6 +46,9 @@ export interface InterTenantConversation {
   unread_count: number;
   archived: boolean;
 }
+
+/** UUID do master tenant (GenomaFlow) — populado em migration 031 */
+export const MASTER_TENANT_ID = '00000000-0000-0000-0000-000000000001';
 
 export interface AiAnalysisCardPayload {
   exam_source_tenant_id: string;

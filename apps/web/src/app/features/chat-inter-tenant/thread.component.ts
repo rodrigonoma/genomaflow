@@ -10,7 +10,8 @@ import { Subscription } from 'rxjs';
 import { ChatService } from './chat.service';
 import { WsService } from '../../core/ws/ws.service';
 import { AuthService } from '../../core/auth/auth.service';
-import { InterTenantMessage, InterTenantConversation, ChatSearchResult, CHAT_ALLOWED_EMOJIS } from '../../shared/models/chat.models';
+import { InterTenantMessage, InterTenantConversation, ChatSearchResult, CHAT_ALLOWED_EMOJIS, MASTER_TENANT_ID } from '../../shared/models/chat.models';
+import { MarkdownService } from './markdown.service';
 import { AiAnalysisCardComponent } from './ai-analysis-card.component';
 import { AiAnalysisPickerComponent } from './ai-analysis-picker.component';
 import { PdfAttachmentCardComponent } from './pdf-attachment-card.component';
@@ -182,6 +183,26 @@ type RedactPdfTextLayerResponse =
     }
     .bubble.incoming { background: #171f33; border-top-left-radius: 0; }
     .bubble.outgoing { background: #494bd6; border-top-right-radius: 0; color: #fff; }
+    .bubble.from-master {
+      background: linear-gradient(135deg, #1a2240, #232c52);
+      border-left: 3px solid #7c7dff;
+    }
+    .bubble.from-master .md-body :first-child { margin-top: 0; }
+    .bubble.from-master .md-body :last-child { margin-bottom: 0; }
+    .bubble.from-master .md-body p { margin: 0.4rem 0; }
+    .bubble.from-master .md-body ul,
+    .bubble.from-master .md-body ol { margin: 0.4rem 0; padding-left: 1.4rem; }
+    .bubble.from-master .md-body code {
+      background: rgba(0,0,0,0.3); padding: 0.1rem 0.35rem; border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem;
+    }
+    .bubble.from-master .md-body pre {
+      background: rgba(0,0,0,0.3); padding: 0.6rem; border-radius: 4px; overflow-x: auto;
+    }
+    .bubble.from-master .md-body a { color: #c0c1ff; text-decoration: underline; }
+    .bubble.from-master .md-body h2, .bubble.from-master .md-body h3 {
+      margin: 0.6rem 0 0.3rem; color: #c0c1ff;
+    }
     .attach-btn { color: #c0c1ff; }
     .bubble-date {
       display: block; margin-top: 0.25rem;
@@ -211,16 +232,22 @@ type RedactPdfTextLayerResponse =
         <button mat-icon-button class="back-btn" (click)="back.emit()" matTooltip="Voltar">
           <mat-icon>arrow_back</mat-icon>
         </button>
+        @if (isMasterConv()) {
+          <mat-icon style="color:#7c7dff;font-size:20px;width:20px;height:20px;margin-right:0.4rem">admin_panel_settings</mat-icon>
+        }
         <span class="header-title"
-              matTooltip="Ver contato da clínica"
-              (click)="openContact()">{{ conv()!.counterpart_name }}</span>
+              [matTooltip]="isMasterConv() ? '' : 'Ver contato da clínica'"
+              [style.cursor]="isMasterConv() ? 'default' : 'pointer'"
+              (click)="!isMasterConv() && openContact()">{{ conv()!.counterpart_name }}</span>
         <span class="header-module">{{ conv()!.module === 'veterinary' ? 'VET' : 'HUMAN' }}</span>
         <button mat-icon-button style="color:#c0c1ff" (click)="toggleSearch()" matTooltip="Buscar">
           <mat-icon>{{ searchOpen() ? 'close' : 'search' }}</mat-icon>
         </button>
-        <button mat-icon-button style="color:#ffb4ab" (click)="onReport()" matTooltip="Reportar clínica">
-          <mat-icon>flag</mat-icon>
-        </button>
+        @if (!isMasterConv()) {
+          <button mat-icon-button style="color:#ffb4ab" (click)="onReport()" matTooltip="Reportar clínica">
+            <mat-icon>flag</mat-icon>
+          </button>
+        }
       </div>
     }
     @if (searchOpen()) {
@@ -246,8 +273,17 @@ type RedactPdfTextLayerResponse =
       }
       @for (m of messages(); track m.id) {
         <div class="bubble-wrap" [class.own]="m.sender_tenant_id === ownTenantId" [attr.data-msg-id]="m.id">
-          <div class="bubble" [class.incoming]="m.sender_tenant_id !== ownTenantId" [class.outgoing]="m.sender_tenant_id === ownTenantId">
-            @if (m.body) { {{ m.body }} }
+          <div class="bubble"
+               [class.incoming]="m.sender_tenant_id !== ownTenantId"
+               [class.outgoing]="m.sender_tenant_id === ownTenantId"
+               [class.from-master]="isMasterMessage(m)">
+            @if (m.body) {
+              @if (isMasterMessage(m)) {
+                <div class="md-body" [innerHTML]="renderedBody(m)"></div>
+              } @else {
+                {{ m.body }}
+              }
+            }
             <span class="bubble-date">{{ m.created_at | date:'dd/MM HH:mm' }}</span>
           </div>
           @for (att of m.attachments ?? []; track att.id) {
@@ -320,6 +356,11 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
   private dialog = inject(MatDialog);
   private snack = inject(MatSnackBar);
   private http = inject(HttpClient);
+  private md = inject(MarkdownService);
+
+  // Cache de markdown rendering — evita re-render por change detection tick.
+  // Chave: msg.id; valor: SafeHtml.
+  private mdCache = new Map<string, any>();
 
   messages = signal<InterTenantMessage[]>([]);
   conv = signal<InterTenantConversation | null>(null);
@@ -340,6 +381,25 @@ export class ThreadComponent implements OnInit, OnChanges, OnDestroy, AfterViewC
   private userNearBottom = true;
 
   get ownTenantId() { return this.auth.currentUser?.tenant_id; }
+
+  /** True quando a conversa atual é o canal "Administrador GenomaFlow" */
+  isMasterConv(): boolean {
+    return this.conv()?.kind === 'master_broadcast';
+  }
+
+  /** True quando a mensagem foi enviada pelo master tenant (canal oficial) */
+  isMasterMessage(m: InterTenantMessage): boolean {
+    return this.isMasterConv() && m.sender_tenant_id === MASTER_TENANT_ID;
+  }
+
+  /** Render markdown sanitizado pra mensagem do master (cache por id) */
+  renderedBody(m: InterTenantMessage): any {
+    const cached = this.mdCache.get(m.id);
+    if (cached) return cached;
+    const html = this.md.render(m.body);
+    this.mdCache.set(m.id, html);
+    return html;
+  }
 
   canSend(): boolean { return !!this.draft.trim() && !this.sending; }
 

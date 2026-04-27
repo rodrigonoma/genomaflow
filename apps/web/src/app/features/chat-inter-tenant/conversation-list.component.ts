@@ -31,6 +31,14 @@ import { CounterpartContactDialogComponent } from './counterpart-contact-dialog.
     }
     .item:hover { background: #131b2e; }
     .item.selected { background: #171f33; border-left-color: #c0c1ff; }
+    .item.master {
+      background: linear-gradient(180deg, rgba(124,125,255,0.08), transparent);
+      border-left-color: #7c7dff;
+    }
+    .item.master:hover { background: linear-gradient(180deg, rgba(124,125,255,0.14), #131b2e); }
+    .item.master .name { color: #c0c1ff; display: flex; align-items: center; gap: 0.4rem; }
+    .item.master .admin-icon { font-size: 16px; width: 16px; height: 16px; color: #7c7dff; }
+    .pin-icon { font-size: 12px; width: 12px; height: 12px; color: #7c7dff; }
     .row-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
     .name {
       font-family: 'Space Grotesk', sans-serif; font-weight: 600;
@@ -63,14 +71,25 @@ import { CounterpartContactDialogComponent } from './counterpart-contact-dialog.
       <div class="empty">Nenhuma conversa ainda.<br>Clique em + pra começar uma nova.</div>
     }
     @for (c of conversations(); track c.id) {
-      <div class="item" [class.selected]="c.id === selectedId" (click)="select.emit(c.id)">
+      <div class="item"
+           [class.selected]="c.id === selectedId"
+           [class.master]="c.kind === 'master_broadcast'"
+           (click)="select.emit(c.id)">
         <div class="row-top">
-          <span class="name">{{ c.counterpart_name }}</span>
-          <button mat-icon-button class="info-btn"
-                  matTooltip="Ver contato da clínica"
-                  (click)="openContact($event, c)">
-            <mat-icon>info_outline</mat-icon>
-          </button>
+          <span class="name">
+            @if (c.kind === 'master_broadcast') {
+              <mat-icon class="admin-icon">admin_panel_settings</mat-icon>
+              <mat-icon class="pin-icon" matTooltip="Canal oficial — pinned">push_pin</mat-icon>
+            }
+            {{ c.counterpart_name }}
+          </span>
+          @if (c.kind !== 'master_broadcast') {
+            <button mat-icon-button class="info-btn"
+                    matTooltip="Ver contato da clínica"
+                    (click)="openContact($event, c)">
+              <mat-icon>info_outline</mat-icon>
+            </button>
+          }
           <span class="date">{{ c.last_message_at || c.created_at | date:'dd/MM HH:mm' }}</span>
         </div>
         <div class="row-bottom">

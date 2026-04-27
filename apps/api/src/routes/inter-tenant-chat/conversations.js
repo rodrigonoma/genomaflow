@@ -25,7 +25,12 @@ module.exports = async function (fastify) {
       const { rows: r } = await client.query(
         `SELECT c.id,
                 CASE WHEN c.tenant_a_id = $1 THEN c.tenant_b_id ELSE c.tenant_a_id END AS counterpart_tenant_id,
-                CASE WHEN c.tenant_a_id = $1 THEN tb.name ELSE ta.name END AS counterpart_name,
+                CASE
+                  WHEN c.kind = 'master_broadcast' THEN 'Administrador GenomaFlow'
+                  WHEN c.tenant_a_id = $1 THEN tb.name
+                  ELSE ta.name
+                END AS counterpart_name,
+                c.kind,
                 c.module,
                 c.last_message_at,
                 c.created_at,
@@ -46,7 +51,8 @@ module.exports = async function (fastify) {
          JOIN tenants ta ON ta.id = c.tenant_a_id
          JOIN tenants tb ON tb.id = c.tenant_b_id
          WHERE c.tenant_a_id = $1 OR c.tenant_b_id = $1
-         ORDER BY COALESCE(c.last_message_at, c.created_at) DESC
+         ORDER BY (c.kind = 'master_broadcast') DESC,
+                  COALESCE(c.last_message_at, c.created_at) DESC
          LIMIT 100`,
         [tenant_id]
       );
@@ -63,7 +69,7 @@ module.exports = async function (fastify) {
     try {
       const conv = await withConversationAccess(fastify.pg, id, tenant_id, async (client, c) => {
         const { rows } = await client.query(
-          `SELECT c.id, c.tenant_a_id, c.tenant_b_id, c.module,
+          `SELECT c.id, c.tenant_a_id, c.tenant_b_id, c.module, c.kind,
                   c.created_at, c.last_message_at,
                   c.archived_by_a, c.archived_by_b,
                   ta.name AS tenant_a_name, tb.name AS tenant_b_name

@@ -8,6 +8,11 @@ module.exports = {
       { tsconfig: '<rootDir>/tsconfig.spec.json', stringifyContentPathRegex: '\\.html$' }
     ]
   },
+  // marked v18+ é ESM-only; precisa ser transformado pelo jest-preset-angular
+  // (default ignora node_modules).
+  transformIgnorePatterns: [
+    'node_modules/(?!(?:.pnpm/)?(marked|@anthropic-ai|@angular)/)'
+  ],
   moduleFileExtensions: ['ts', 'html', 'js', 'json'],
   testMatch: ['**/*.spec.ts'],
   globals: {
