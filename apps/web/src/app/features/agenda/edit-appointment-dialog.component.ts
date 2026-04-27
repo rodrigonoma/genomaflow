@@ -34,7 +34,17 @@ export type EditAppointmentDialogResult =
     MatFormFieldModule, MatInputModule, MatSelectModule,
   ],
   styles: [`
-    :host { display:flex; flex-direction:column; max-height:85vh; color:#dae2fd; min-width:480px; }
+    :host { display:flex; flex-direction:column; max-height:85vh; color:#dae2fd; width:100%; max-width:480px; }
+    @media (max-width: 639px) {
+      :host { max-width: none; max-height: 100vh; height: 100vh; }
+      .body { padding: 0 1rem 1rem; }
+      .header { padding: 0.875rem 1rem 0.5rem; }
+      .meta { padding: 0 1rem 0.625rem; }
+      .footer { padding: 0.625rem 1rem; flex-wrap: wrap; gap: 0.5rem; }
+      /* Action buttons em grid 2 colunas pra encaixar bem */
+      .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.375rem; }
+      .actions .action-btn { padding: 0.5rem 0.625rem; }
+    }
     .header { padding:1rem 1.25rem 0.5rem; display:flex; justify-content:space-between; align-items:center; }
     h2 { font-family:'Space Grotesk',sans-serif; font-size:1rem; font-weight:700; margin:0; color:#c0c1ff; }
     .meta { padding:0 1.25rem 0.75rem; font-family:'JetBrains Mono',monospace; font-size:11px; color:#908fa0; letter-spacing:0.05em; }

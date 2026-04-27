@@ -68,12 +68,23 @@ type RedactPdfTextLayerResponse =
     .header-title:hover { color: #c0c1ff; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
     @media (max-width: 639px) {
       .back-btn { display: inline-flex; }
-      .header { padding: 0.75rem 1rem; }
+      .header { padding: 0.75rem 0.875rem; gap: 0.375rem; }
+      .header-title { font-size: 0.9375rem; }
+      .header-module { font-size: 9px; padding: 1px 5px; }
       .messages { padding: 0.75rem 1rem; }
-      .bubble-wrap { max-width: 85%; }
+      .bubble-wrap { max-width: 88%; }
       .bubble-wrap .react-btn { display: none; }
       .input-row { padding: 0.625rem 0.75rem; gap: 0.25rem; }
+      /* Textarea ganha mais altura mínima pra teclado mobile não cortar tudo */
+      .input-row textarea { min-height: 44px; padding: 0.625rem 0.75rem; }
+      /* Send button maior pra touch (Apple HIG 44px) */
+      .input-row .send-btn { min-width: 44px; min-height: 44px; }
       .search-row { padding: 0.5rem 1rem; }
+      /* Search dropdown ocupa tela toda em mobile pra não confundir */
+      .search-results { max-height: 50vh; }
+      /* Banner read-only do canal master fica mais compacto */
+      .master-readonly-banner { padding: 0.875rem 1rem; gap: 0.625rem; }
+      .master-readonly-banner .banner-text { font-size: 0.75rem; }
     }
     .header-module {
       font-family: 'JetBrains Mono', monospace; font-size: 10px;

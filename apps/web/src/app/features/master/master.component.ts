@@ -170,6 +170,34 @@ interface Stats {
       .stats-row { grid-template-columns:1fr 1fr; }
       .sidebar { display:none; }
     }
+
+    /* Modais inline (Comunicados detail + conversation viewer) */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+      padding: 1.5rem;
+    }
+    .modal {
+      background: #0b1326;
+      border: 1px solid rgba(192,193,255,0.15);
+      border-radius: 8px;
+      padding: 1.25rem;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    @media (max-width: 639px) {
+      .modal-overlay { padding: 0; align-items: stretch; }
+      .modal {
+        max-width: none !important;
+        max-height: none !important;
+        height: 100vh !important;
+        border-radius: 0;
+        border: none;
+        padding: 1rem;
+      }
+    }
   `],
   template: `
 <div>
