@@ -308,7 +308,7 @@ async function execCreateAppointment(input, ctx) {
          i.duration_minutes, i.status, i.reason || null, i.notes || null]
       );
       return rows[0];
-    });
+    }, { userId: ctx.user_id, channel: 'copilot' });
 
     // Notify WS (best-effort)
     try {
@@ -350,7 +350,7 @@ async function execCancelAppointment(input, ctx) {
       [input.appointment_id, ctx.tenant_id, ctx.user_id]
     );
     return rows[0];
-  });
+  }, { userId: ctx.user_id, channel: 'copilot' });
 
   if (!result) {
     return { error: 'not_found', message: 'Agendamento não encontrado ou não pertence a você.' };
@@ -398,7 +398,7 @@ async function execUpdateAppointmentStatus(input, ctx) {
         [input.status, input.appointment_id, ctx.tenant_id, ctx.user_id]
       );
       return rows[0];
-    });
+    }, { userId: ctx.user_id, channel: 'copilot' });
 
     if (!result) {
       return {

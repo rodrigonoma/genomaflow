@@ -144,7 +144,7 @@ module.exports = async function (fastify) {
         [user_id, tenant_id, default_slot_minutes, JSON.stringify(business_hours)]
       );
       return rows[0];
-    });
+    }, { userId: user_id, channel: 'ui' });
 
     return { ...result, is_default: false };
   });
@@ -225,7 +225,7 @@ module.exports = async function (fastify) {
            reason || null, notes || null, user_id]
         );
         return rows[0];
-      });
+      }, { userId: user_id, channel: 'ui' });
 
       // Notifica via Redis pub/sub (best-effort)
       try {
@@ -308,7 +308,7 @@ module.exports = async function (fastify) {
           values
         );
         return rows[0];
-      });
+      }, { userId: user_id, channel: 'ui' });
 
       try {
         if (fastify.redis) {
@@ -347,7 +347,7 @@ module.exports = async function (fastify) {
         [id, tenant_id, user_id]
       );
       return rows[0];
-    });
+    }, { userId: user_id, channel: 'ui' });
 
     if (!result) return reply.status(404).send({ error: 'Agendamento não encontrado.' });
 
@@ -382,7 +382,7 @@ module.exports = async function (fastify) {
         [id, tenant_id]
       );
       return { deleted: true };
-    });
+    }, { userId: user_id, channel: 'ui' });
 
     if (result.notFound) return reply.status(404).send({ error: 'Agendamento não encontrado.' });
     if (result.notBlocked) {
