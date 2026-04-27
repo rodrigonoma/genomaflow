@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const { withTenant } = require('../db/tenant');
 const {
   resolveTargetTenants,
@@ -8,8 +9,15 @@ const {
   VALID_MODULES,
   MASTER_TENANT_ID,
 } = require('../services/master-broadcasts');
+const { uploadFile } = require('../storage/s3');
 
 const BROADCAST_BODY_MAX = 2000;
+const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024; // 10MB
+const ATTACHMENT_KIND_MIME = {
+  image: ['image/jpeg', 'image/png'],
+  pdf: ['application/pdf'],
+};
+const MAX_ATTACHMENTS = 5;
 
 function masterOnly(fastify) {
   return async (request, reply) => {
@@ -310,10 +318,15 @@ module.exports = async function masterRoutes(fastify) {
   // ── Master broadcasts (canal "Administrador GenomaFlow" → tenants) ───────
   fastify.post('/broadcasts', {
     ...auth(),
+    // Body limit alto pra acomodar até 5 anexos de 10MB cada em base64
+    // (inflate ~33% = ~67MB em pior caso). Sem isso Fastify rejeita com 413
+    // ANTES da nossa validação, perdendo o erro 400 informativo.
+    bodyLimit: 80 * 1024 * 1024,
     config: { rateLimit: { max: 20, timeWindow: '1 day' } },
   }, async (request, reply) => {
     const body = (request.body && typeof request.body.body === 'string') ? request.body.body.trim() : '';
     const segment = request.body?.segment;
+    const attachmentsInput = Array.isArray(request.body?.attachments) ? request.body.attachments : [];
 
     // Validação de body
     if (!body) {
@@ -337,6 +350,47 @@ module.exports = async function masterRoutes(fastify) {
       return reply.status(400).send({ error: 'segment.value obrigatório pra kind=tenant' });
     }
 
+    // Validação de attachments — antes de qualquer query DB ou upload S3
+    if (attachmentsInput.length > MAX_ATTACHMENTS) {
+      return reply.status(400).send({ error: `máximo ${MAX_ATTACHMENTS} anexos por broadcast` });
+    }
+
+    const stagedAttachments = [];
+    for (const a of attachmentsInput) {
+      if (!a || typeof a !== 'object') {
+        return reply.status(400).send({ error: 'anexo inválido' });
+      }
+      if (!ATTACHMENT_KIND_MIME[a.kind]) {
+        return reply.status(400).send({ error: `anexo.kind inválido: ${a.kind}` });
+      }
+      if (!a.filename || typeof a.filename !== 'string') {
+        return reply.status(400).send({ error: 'anexo.filename obrigatório' });
+      }
+      if (!a.mime_type || !ATTACHMENT_KIND_MIME[a.kind].includes(a.mime_type)) {
+        return reply.status(400).send({
+          error: `anexo.mime_type inválido pra kind=${a.kind}`,
+          allowed: ATTACHMENT_KIND_MIME[a.kind],
+        });
+      }
+      if (!a.data_base64 || typeof a.data_base64 !== 'string') {
+        return reply.status(400).send({ error: 'anexo.data_base64 obrigatório' });
+      }
+      let buf;
+      try { buf = Buffer.from(a.data_base64, 'base64'); }
+      catch (_) { return reply.status(400).send({ error: 'anexo.data_base64 inválido' }); }
+      if (buf.length === 0) return reply.status(400).send({ error: 'anexo vazio' });
+      if (buf.length > ATTACHMENT_MAX_BYTES) {
+        return reply.status(400).send({ error: `anexo excede 10MB (${a.filename})` });
+      }
+      stagedAttachments.push({
+        kind: a.kind,
+        filename: a.filename,
+        mime_type: a.mime_type,
+        buffer: buf,
+        size_bytes: buf.length,
+      });
+    }
+
     // Resolve targets (sem tenant_id setado — master vê tudo)
     const targets = await resolveTargetTenants(fastify.pg, segment);
     if (targets.length === 0) {
@@ -350,6 +404,27 @@ module.exports = async function masterRoutes(fastify) {
        RETURNING id, created_at`,
       [request.user.user_id, body, segment.kind, segment.value || null]
     );
+
+    // Upload attachments to S3 once + INSERT canonical rows (compartilhados
+    // entre tenants — 1 S3 obj p/ N entregas)
+    const uploadedAttachments = [];
+    for (const sa of stagedAttachments) {
+      const ext = sa.filename.split('.').pop() || (sa.kind === 'pdf' ? 'pdf' : 'jpg');
+      const safeName = `${crypto.randomUUID()}.${ext}`;
+      const s3Key = `master-broadcasts/${bc.id}/${safeName}`;
+      try {
+        await uploadFile(s3Key, sa.buffer, sa.mime_type);
+      } catch (err) {
+        request.log.error({ err, broadcast_id: bc.id, filename: sa.filename }, 'master broadcast s3 upload failed');
+        return reply.status(500).send({ error: 'Falha ao subir anexo para storage' });
+      }
+      const { rows: [att] } = await fastify.pg.query(
+        `INSERT INTO master_broadcast_attachments (broadcast_id, kind, filename, s3_key, size_bytes, mime_type)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [bc.id, sa.kind, sa.filename, s3Key, sa.size_bytes, sa.mime_type]
+      );
+      uploadedAttachments.push({ id: att.id, kind: sa.kind, filename: sa.filename, s3_key: s3Key, size_bytes: sa.size_bytes });
+    }
 
     // Fan-out síncrono — pra cada tenant, withTenant cria conv+msg+delivery.
     // RLS context = MASTER_TENANT_ID porque master é o sender em tenant_messages
@@ -366,6 +441,7 @@ module.exports = async function masterRoutes(fastify) {
             masterUserId: request.user.user_id,
             recipientTenant: t,
             body,
+            attachments: uploadedAttachments,
           }),
           { userId: request.user.user_id, channel: 'system' }
         );

@@ -158,6 +158,84 @@ describe('POST /master/broadcasts — validation gates', () => {
     expect(res.json().error).toMatch(/Nenhum tenant/);
     await app.close();
   });
+
+  test('attachments > 5 → 400', async () => {
+    const { app } = await withApp({});
+    const big = Array.from({ length: 6 }, (_, i) => ({
+      kind: 'image', filename: `f${i}.jpg`, mime_type: 'image/jpeg',
+      data_base64: Buffer.from('x').toString('base64'),
+    }));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/master/broadcasts',
+      payload: { body: 'x', segment: { kind: 'all' }, attachments: big },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/máximo 5 anexos/);
+    await app.close();
+  });
+
+  test('attachment.kind inválido → 400', async () => {
+    const { app } = await withApp({});
+    const res = await app.inject({
+      method: 'POST',
+      url: '/master/broadcasts',
+      payload: {
+        body: 'x', segment: { kind: 'all' },
+        attachments: [{ kind: 'video', filename: 'v.mp4', mime_type: 'video/mp4', data_base64: 'aGVsbG8=' }],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/anexo\.kind inválido/);
+    await app.close();
+  });
+
+  test('attachment image com mime PDF → 400', async () => {
+    const { app } = await withApp({});
+    const res = await app.inject({
+      method: 'POST',
+      url: '/master/broadcasts',
+      payload: {
+        body: 'x', segment: { kind: 'all' },
+        attachments: [{ kind: 'image', filename: 'fake.jpg', mime_type: 'application/pdf', data_base64: 'aGVsbG8=' }],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/mime_type inválido/);
+    await app.close();
+  });
+
+  test('attachment data_base64 ausente → 400', async () => {
+    const { app } = await withApp({});
+    const res = await app.inject({
+      method: 'POST',
+      url: '/master/broadcasts',
+      payload: {
+        body: 'x', segment: { kind: 'all' },
+        attachments: [{ kind: 'image', filename: 'a.jpg', mime_type: 'image/jpeg' }],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/data_base64 obrigatório/);
+    await app.close();
+  });
+
+  test('attachment > 10MB → 400', async () => {
+    const { app } = await withApp({});
+    // 11MB de zeros em base64
+    const big = Buffer.alloc(11 * 1024 * 1024).toString('base64');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/master/broadcasts',
+      payload: {
+        body: 'x', segment: { kind: 'all' },
+        attachments: [{ kind: 'pdf', filename: 'big.pdf', mime_type: 'application/pdf', data_base64: big }],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/excede 10MB/);
+    await app.close();
+  });
 });
 
 describe('POST /master/broadcasts — happy path', () => {
