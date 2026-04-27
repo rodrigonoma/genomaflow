@@ -89,7 +89,7 @@ module.exports = async function (fastify) {
           [tenant_id, subject_id, user_id, s3Path, file_type]
         );
         return rows[0];
-      });
+      }, { userId: user_id, channel: 'ui' });
 
       await examQueue.add('process-exam', {
         exam_id: exam.id,
