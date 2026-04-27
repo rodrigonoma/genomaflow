@@ -321,12 +321,16 @@ export class EcsStack extends cdk.Stack {
 
     // Routing host-based (após split landing × app — 2026-04-27):
     //   priority  5: app.genomaflow.com.br + /api/*  → API target group
-    //   priority 10: app.genomaflow.com.br + qualquer → Web TG (Angular SPA)
+    //   priority 11: app.genomaflow.com.br + qualquer → Web TG (Angular SPA)
     //   default     : genomaflow.com.br / www.* → Web TG (nginx serve só landing)
+    //
+    // Priority 11 (e não 10) evita colisão durante CFN deploy quando regra
+    // antiga `ApiRoute` (path-only, priority 10) ainda existe — CFN cria as
+    // novas antes de deletar as velhas, e priority precisa ser único.
     //
     // O nginx do Web TG distingue por server_name: apex/www serve landing,
     // app.* serve Angular. Bookmarks antigos no apex (ex: /clinic/dashboard)
-    // pegam redirect 301 pra app.genomaflow.com.br pelo nginx.
+    // pegam redirect 308 pra app.genomaflow.com.br pelo nginx.
     httpsListener.addAction('ApiRouteOnApp', {
       priority: 5,
       conditions: [
@@ -336,7 +340,7 @@ export class EcsStack extends cdk.Stack {
       action: elbv2.ListenerAction.forward([apiTg]),
     });
     httpsListener.addAction('AppHost', {
-      priority: 10,
+      priority: 11,
       conditions: [elbv2.ListenerCondition.hostHeaders(['app.genomaflow.com.br'])],
       action:     elbv2.ListenerAction.forward([webTg]),
     });
