@@ -69,14 +69,17 @@ Em toda análise, brainstorm, desenvolvimento, arquitetura, modelagem de dados, 
 
 ## Roteamento de URLs (OBRIGATÓRIO)
 
-- `www.genomaflow.com.br` e `genomaflow.com.br` → sempre exibem a **landing page**
-- Na landing, o botão **Entrar** redireciona para:
-  - Se já estiver logado → aplicação (`/doctor/patients`, `/clinic/dashboard`, etc. conforme role)
-  - Se não estiver logado → tela de login (`/login`)
-- Na landing, o botão **Registrar** redireciona para:
-  - Se já estiver logado → aplicação
-  - Se não estiver logado → onboarding (`/onboarding`)
-- A aplicação Angular (`app.genomaflow.com.br` ou subpath) nunca deve ser acessível diretamente em `www` ou no domínio raiz
+**Split de subdomínios desde 2026-04-27:**
+
+- `genomaflow.com.br` e `www.genomaflow.com.br` → **somente landing page** (nginx server block dedicado, não serve Angular)
+- `app.genomaflow.com.br` → aplicação Angular (login, onboarding, doctor/clinic/master)
+- Botão **Entrar** na landing → `https://app.genomaflow.com.br/login` (ou rota da role se já logado)
+- Botão **Registrar** na landing → `https://app.genomaflow.com.br/onboarding`
+- **Bookmarks antigos** no apex/www (ex: `genomaflow.com.br/clinic/dashboard`) recebem **301 → app.genomaflow.com.br$request_uri** pelo nginx — nenhuma URL antiga quebra
+- Cert ACM é wildcard `*.genomaflow.com.br` (cobre `app.` automaticamente)
+- ALB rules: priority 5 = `app.` + `/api/*` → API TG; priority 10 = `app.` + qualquer → Web TG; default = apex/www → Web TG (que serve só landing)
+- Email links (verificação, reset de senha) usam `FRONTEND_URL=https://app.genomaflow.com.br` no task def ECS — **sempre** apontar pra `app.` em emails, nunca pro apex
+- localStorage NÃO atravessa subdomínios — qualquer migração futura entre apex e app desloga todos os usuários (não foi problema porque cutover aconteceu sem usuários ativos)
 
 ---
 

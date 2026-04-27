@@ -126,6 +126,11 @@ export class EcsStack extends cdk.Stack {
       REDIS_URL:                    redisUrl,
       API_PREFIX:                   '/api',
       NODE_TLS_REJECT_UNAUTHORIZED: '0',
+      // Domínio do app — usado em emails (verificação, reset de senha) e
+      // redirects. Trocado de genomaflow.com.br pra app.genomaflow.com.br
+      // após split de subdomínios (apex agora serve só landing).
+      FRONTEND_URL:                 'https://app.genomaflow.com.br',
+      SES_FROM_EMAIL:               'noreply@genomaflow.com.br',
     };
 
     const backendSecrets = {
@@ -314,11 +319,26 @@ export class EcsStack extends cdk.Stack {
       defaultAction: elbv2.ListenerAction.forward([webTg]),
     });
 
-    // Routing: /api/* → API, default → Web
-    httpsListener.addAction('ApiRoute', {
+    // Routing host-based (após split landing × app — 2026-04-27):
+    //   priority  5: app.genomaflow.com.br + /api/*  → API target group
+    //   priority 10: app.genomaflow.com.br + qualquer → Web TG (Angular SPA)
+    //   default     : genomaflow.com.br / www.* → Web TG (nginx serve só landing)
+    //
+    // O nginx do Web TG distingue por server_name: apex/www serve landing,
+    // app.* serve Angular. Bookmarks antigos no apex (ex: /clinic/dashboard)
+    // pegam redirect 301 pra app.genomaflow.com.br pelo nginx.
+    httpsListener.addAction('ApiRouteOnApp', {
+      priority: 5,
+      conditions: [
+        elbv2.ListenerCondition.hostHeaders(['app.genomaflow.com.br']),
+        elbv2.ListenerCondition.pathPatterns(['/api', '/api/*']),
+      ],
+      action: elbv2.ListenerAction.forward([apiTg]),
+    });
+    httpsListener.addAction('AppHost', {
       priority: 10,
-      conditions: [elbv2.ListenerCondition.pathPatterns(['/api', '/api/*'])],
-      action:     elbv2.ListenerAction.forward([apiTg]),
+      conditions: [elbv2.ListenerCondition.hostHeaders(['app.genomaflow.com.br'])],
+      action:     elbv2.ListenerAction.forward([webTg]),
     });
 
     // ── ECS Services ──
@@ -367,6 +387,11 @@ export class EcsStack extends cdk.Stack {
     new route53.ARecord(this, 'ARecordWww', {
       zone:       hostedZone,
       recordName: 'www',
+      target:     route53.RecordTarget.fromAlias(albTarget),
+    });
+    new route53.ARecord(this, 'ARecordApp', {
+      zone:       hostedZone,
+      recordName: 'app',
       target:     route53.RecordTarget.fromAlias(albTarget),
     });
     new route53.ARecord(this, 'ARecordApi', {
