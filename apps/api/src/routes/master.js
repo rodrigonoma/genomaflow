@@ -474,4 +474,186 @@ module.exports = async function masterRoutes(fastify) {
       created_at: bc.created_at,
     };
   });
+
+  // GET /master/broadcasts — histórico paginado com métricas (lidos/total)
+  fastify.get('/broadcasts', auth(), async (request, reply) => {
+    const days = Math.min(180, Math.max(1, parseInt(request.query?.days) || 90));
+    const limit = Math.min(200, Math.max(1, parseInt(request.query?.limit) || 50));
+
+    const { rows } = await fastify.pg.query(
+      `SELECT
+         mb.id, mb.body, mb.segment_kind, mb.segment_value, mb.recipient_count,
+         mb.created_at, u.email AS sender_email,
+         COUNT(DISTINCT mbd.tenant_id) FILTER (
+           WHERE tcr.last_read_at >= mbd.delivered_at
+         )::int AS read_count,
+         (SELECT COUNT(*)::int FROM master_broadcast_attachments mba
+           WHERE mba.broadcast_id = mb.id) AS attachment_count
+       FROM master_broadcasts mb
+       JOIN users u ON u.id = mb.sender_user_id
+       LEFT JOIN master_broadcast_deliveries mbd ON mbd.broadcast_id = mb.id
+       LEFT JOIN tenant_conversation_reads tcr
+         ON tcr.conversation_id = mbd.conversation_id AND tcr.tenant_id = mbd.tenant_id
+       WHERE mb.created_at > NOW() - INTERVAL '1 day' * $1
+       GROUP BY mb.id, u.email
+       ORDER BY mb.created_at DESC
+       LIMIT $2`,
+      [days, limit]
+    );
+    return { results: rows, days, limit };
+  });
+
+  // GET /master/broadcasts/:id — detalhe + lista de tenants e flag lido
+  fastify.get('/broadcasts/:id', auth(), async (request, reply) => {
+    const { id } = request.params;
+    const { rows: broadcast } = await fastify.pg.query(
+      `SELECT mb.id, mb.body, mb.segment_kind, mb.segment_value, mb.recipient_count,
+              mb.created_at, u.email AS sender_email
+       FROM master_broadcasts mb
+       JOIN users u ON u.id = mb.sender_user_id
+       WHERE mb.id = $1`,
+      [id]
+    );
+    if (broadcast.length === 0) return reply.status(404).send({ error: 'Broadcast não encontrado' });
+
+    const { rows: deliveries } = await fastify.pg.query(
+      `SELECT mbd.tenant_id, t.name AS tenant_name, t.module,
+              mbd.conversation_id, mbd.message_id, mbd.delivered_at,
+              (tcr.last_read_at >= mbd.delivered_at) AS read_by_tenant,
+              tcr.last_read_at
+       FROM master_broadcast_deliveries mbd
+       JOIN tenants t ON t.id = mbd.tenant_id
+       LEFT JOIN tenant_conversation_reads tcr
+         ON tcr.conversation_id = mbd.conversation_id AND tcr.tenant_id = mbd.tenant_id
+       WHERE mbd.broadcast_id = $1
+       ORDER BY t.name`,
+      [id]
+    );
+
+    const { rows: attachments } = await fastify.pg.query(
+      `SELECT id, kind, filename, mime_type, size_bytes, created_at
+       FROM master_broadcast_attachments WHERE broadcast_id = $1
+       ORDER BY created_at`,
+      [id]
+    );
+
+    return { ...broadcast[0], deliveries, attachments };
+  });
+
+  // GET /master/conversations — inbox de master_broadcast conversations com unread reply count
+  fastify.get('/conversations', auth(), async (request, reply) => {
+    const { rows } = await fastify.pg.query(
+      `SELECT c.id AS conversation_id,
+              c.tenant_b_id AS tenant_id,
+              t.name AS tenant_name, t.module,
+              c.last_message_at, c.created_at,
+              (SELECT body FROM tenant_messages
+                WHERE conversation_id = c.id AND deleted_at IS NULL
+                ORDER BY created_at DESC LIMIT 1) AS last_message_preview,
+              (SELECT sender_tenant_id FROM tenant_messages
+                WHERE conversation_id = c.id AND deleted_at IS NULL
+                ORDER BY created_at DESC LIMIT 1) AS last_sender_tenant_id,
+              (SELECT count(*)::int FROM tenant_messages tm
+                WHERE tm.conversation_id = c.id
+                  AND tm.sender_tenant_id <> $1
+                  AND tm.deleted_at IS NULL
+                  AND tm.created_at > COALESCE(
+                    (SELECT last_read_at FROM tenant_conversation_reads
+                       WHERE conversation_id = c.id AND tenant_id = $1),
+                    '1970-01-01'::timestamptz
+                  )
+              ) AS unread_count
+       FROM tenant_conversations c
+       JOIN tenants t ON t.id = c.tenant_b_id
+       WHERE c.kind = 'master_broadcast' AND c.tenant_a_id = $1
+       ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
+       LIMIT 200`,
+      [MASTER_TENANT_ID]
+    );
+    return { results: rows };
+  });
+
+  // GET /master/conversations/:id/messages — thread completa pra master visualizar
+  fastify.get('/conversations/:id/messages', auth(), async (request, reply) => {
+    const { id } = request.params;
+    const limit = Math.min(200, Math.max(1, parseInt(request.query?.limit) || 100));
+
+    // Confirma que a conversa é master_broadcast antes de devolver
+    const { rows: conv } = await fastify.pg.query(
+      `SELECT id, kind FROM tenant_conversations WHERE id = $1 AND kind = 'master_broadcast'`,
+      [id]
+    );
+    if (conv.length === 0) return reply.status(404).send({ error: 'Conversa master não encontrada' });
+
+    const { rows } = await fastify.pg.query(
+      `SELECT m.id, m.conversation_id, m.sender_tenant_id, m.sender_user_id,
+              m.body, m.has_attachment, m.created_at,
+              COALESCE(
+                (SELECT jsonb_agg(jsonb_build_object(
+                  'id', a.id, 'kind', a.kind, 's3_key', a.s3_key,
+                  'original_size_bytes', a.original_size_bytes
+                ))
+                 FROM tenant_message_attachments a WHERE a.message_id = m.id),
+                '[]'::jsonb
+              ) AS attachments
+       FROM tenant_messages m
+       WHERE m.conversation_id = $1 AND m.deleted_at IS NULL
+       ORDER BY m.created_at ASC
+       LIMIT $2`,
+      [id, limit]
+    );
+    return { results: rows };
+  });
+
+  // POST /master/conversations/:id/reply — master responde diretamente em uma
+  // conversation existente (sem criar broadcast canonical row). Útil pra
+  // responder solicitações de melhoria de tenants individuais.
+  fastify.post('/conversations/:id/reply', {
+    ...auth(),
+    config: { rateLimit: { max: 100, timeWindow: '1 day' } },
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const body = (request.body && typeof request.body.body === 'string') ? request.body.body.trim() : '';
+    if (!body) return reply.status(400).send({ error: 'body é obrigatório' });
+    if (body.length > BROADCAST_BODY_MAX) {
+      return reply.status(400).send({ error: `body excede ${BROADCAST_BODY_MAX} caracteres` });
+    }
+
+    const { rows: conv } = await fastify.pg.query(
+      `SELECT id, tenant_b_id FROM tenant_conversations
+       WHERE id = $1 AND kind = 'master_broadcast' AND tenant_a_id = $2`,
+      [id, MASTER_TENANT_ID]
+    );
+    if (conv.length === 0) return reply.status(404).send({ error: 'Conversa master não encontrada' });
+    const recipientTenantId = conv[0].tenant_b_id;
+
+    const result = await withTenant(
+      fastify.pg, MASTER_TENANT_ID,
+      async (client) => {
+        const msgRes = await client.query(
+          `INSERT INTO tenant_messages (conversation_id, sender_tenant_id, sender_user_id, body)
+           VALUES ($1, $2, $3, $4) RETURNING id, created_at`,
+          [id, MASTER_TENANT_ID, request.user.user_id, body]
+        );
+        await client.query(
+          'UPDATE tenant_conversations SET last_message_at = NOW() WHERE id = $1',
+          [id]
+        );
+        return msgRes.rows[0];
+      },
+      { userId: request.user.user_id, channel: 'system' }
+    );
+
+    // WS notify pro recipient
+    await fastify.redis.publish(
+      `chat:event:${recipientTenantId}`,
+      JSON.stringify({
+        event: 'master_broadcast_received',
+        conversation_id: id,
+        message_id: result.id,
+      })
+    );
+
+    return { message_id: result.id, created_at: result.created_at };
+  });
 };
