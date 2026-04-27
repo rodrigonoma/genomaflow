@@ -110,7 +110,7 @@ describe('deliverToTenant', () => {
     };
   }
 
-  test('happy path: INSERT conv UPSERT → INSERT msg → UPDATE conv → INSERT delivery', async () => {
+  test('happy path sem anexos: INSERT conv UPSERT → INSERT msg (has_attachment=false) → UPDATE conv → INSERT delivery', async () => {
     const client = buildClient();
     client.query
       .mockResolvedValueOnce({ rows: [{ id: 'conv-1' }] }) // INSERT tenant_conversations
@@ -127,6 +127,46 @@ describe('deliverToTenant', () => {
 
     expect(result).toEqual({ conversationId: 'conv-1', messageId: 'msg-1' });
     expect(client.query).toHaveBeenCalledTimes(4);
+
+    // INSERT tenant_messages: has_attachment=false (5o param)
+    const msgInsert = client.query.mock.calls[1];
+    expect(msgInsert[0]).toMatch(/INSERT INTO tenant_messages/);
+    expect(msgInsert[1]).toEqual(['conv-1', MASTER_TENANT_ID, 'master-user', 'Olá mundo', false]);
+  });
+
+  test('com anexos: INSERT msg (has_attachment=true) → INSERT tenant_message_attachments por anexo', async () => {
+    const client = buildClient();
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 'conv-1' }] }) // INSERT conv
+      .mockResolvedValueOnce({ rows: [{ id: 'msg-1' }] })  // INSERT msg
+      .mockResolvedValueOnce({})                            // INSERT attachment 1
+      .mockResolvedValueOnce({})                            // INSERT attachment 2
+      .mockResolvedValueOnce({})                            // UPDATE conv
+      .mockResolvedValueOnce({});                           // INSERT delivery
+
+    await deliverToTenant(client, {
+      broadcastId: 'bc-1',
+      masterUserId: 'master-user',
+      recipientTenant: { id: 'tenant-x', module: 'human' },
+      body: 'Com anexo',
+      attachments: [
+        { kind: 'image', filename: 'foo.jpg', s3_key: 'master-broadcasts/bc-1/abc.jpg', size_bytes: 1024 },
+        { kind: 'pdf',   filename: 'doc.pdf', s3_key: 'master-broadcasts/bc-1/def.pdf', size_bytes: 2048 },
+      ],
+    });
+
+    expect(client.query).toHaveBeenCalledTimes(6);
+
+    // has_attachment=true
+    const msgInsert = client.query.mock.calls[1];
+    expect(msgInsert[1][4]).toBe(true);
+
+    // INSERT attachments — kind, s3_key, size_bytes
+    const att1 = client.query.mock.calls[2];
+    expect(att1[0]).toMatch(/INSERT INTO tenant_message_attachments/);
+    expect(att1[1]).toEqual(['msg-1', 'image', 'master-broadcasts/bc-1/abc.jpg', 1024]);
+    const att2 = client.query.mock.calls[3];
+    expect(att2[1]).toEqual(['msg-1', 'pdf', 'master-broadcasts/bc-1/def.pdf', 2048]);
   });
 
   test('UPSERT conversation: master sempre é tenant_a (menor UUID), kind=master_broadcast', async () => {
@@ -152,7 +192,7 @@ describe('deliverToTenant', () => {
     expect(params).toEqual([MASTER_TENANT_ID, 'tenant-x', 'veterinary']);
   });
 
-  test('INSERT message: sender_tenant=master, sender_user=masterUserId, body literal', async () => {
+  test('INSERT message: sender_tenant=master, sender_user=masterUserId, body literal, has_attachment=false sem anexos', async () => {
     const client = buildClient();
     client.query
       .mockResolvedValueOnce({ rows: [{ id: 'conv-1' }] })
@@ -169,16 +209,16 @@ describe('deliverToTenant', () => {
 
     const [sql, params] = client.query.mock.calls[1];
     expect(sql).toMatch(/INSERT INTO tenant_messages/);
-    expect(params).toEqual(['conv-1', MASTER_TENANT_ID, 'master-user-uuid', 'mensagem completa']);
+    expect(params).toEqual(['conv-1', MASTER_TENANT_ID, 'master-user-uuid', 'mensagem completa', false]);
   });
 
-  test('INSERT delivery: broadcast_id, tenant_id, conversation_id, message_id corretos', async () => {
+  test('INSERT delivery: broadcast_id, tenant_id, conversation_id, message_id corretos (sem anexos = call 3)', async () => {
     const client = buildClient();
     client.query
       .mockResolvedValueOnce({ rows: [{ id: 'conv-99' }] })
       .mockResolvedValueOnce({ rows: [{ id: 'msg-99' }] })
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({});
+      .mockResolvedValueOnce({})  // UPDATE conv
+      .mockResolvedValueOnce({}); // INSERT delivery
 
     await deliverToTenant(client, {
       broadcastId: 'bc-42',

@@ -76,10 +76,14 @@ async function resolveTargetTenants(pg, segment) {
  * @param {string} args.masterUserId
  * @param {{id: string, module: string}} args.recipientTenant
  * @param {string} args.body
+ * @param {Array<{kind: string, filename: string, s3_key: string, size_bytes: number}>} [args.attachments]
+ *   Lista de anexos canonicais já no S3 — clonados em tenant_message_attachments
+ *   pra cada entrega. S3 obj é compartilhado, só os metadados duplicam.
  * @returns {Promise<{conversationId: string, messageId: string}>}
  */
 async function deliverToTenant(client, args) {
-  const { broadcastId, masterUserId, recipientTenant, body } = args;
+  const { broadcastId, masterUserId, recipientTenant, body, attachments = [] } = args;
+  const hasAttachment = attachments.length > 0;
 
   // 1. UPSERT conversação master ↔ tenant.
   // Master é tenant_a (menor UUID). module é o do recipient.
@@ -95,20 +99,32 @@ async function deliverToTenant(client, args) {
 
   // 2. INSERT message (sender = master)
   const msgRes = await client.query(
-    `INSERT INTO tenant_messages (conversation_id, sender_tenant_id, sender_user_id, body)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO tenant_messages (conversation_id, sender_tenant_id, sender_user_id, body, has_attachment)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING id`,
-    [conversationId, MASTER_TENANT_ID, masterUserId, body]
+    [conversationId, MASTER_TENANT_ID, masterUserId, body, hasAttachment]
   );
   const messageId = msgRes.rows[0].id;
 
-  // 3. UPDATE last_message_at na conversation (sempre — UPSERT acima só faz no conflict)
+  // 3. INSERT tenant_message_attachments — clones por entrega usando o MESMO
+  // s3_key que o master_broadcast_attachment canônico. Tenant vê normalmente
+  // pelo signed URL; deletar o broadcast canônico sai do S3 só uma vez.
+  for (const a of attachments) {
+    await client.query(
+      `INSERT INTO tenant_message_attachments
+         (message_id, kind, s3_key, original_size_bytes)
+       VALUES ($1, $2, $3, $4)`,
+      [messageId, a.kind, a.s3_key, a.size_bytes]
+    );
+  }
+
+  // 4. UPDATE last_message_at na conversation (sempre — UPSERT acima só faz no conflict)
   await client.query(
     'UPDATE tenant_conversations SET last_message_at = NOW() WHERE id = $1',
     [conversationId]
   );
 
-  // 4. INSERT delivery tracking
+  // 5. INSERT delivery tracking
   await client.query(
     `INSERT INTO master_broadcast_deliveries (broadcast_id, tenant_id, conversation_id, message_id)
      VALUES ($1, $2, $3, $4)`,
