@@ -24,3 +24,4 @@
 - [Audit log (Option B)](project_audit_log.md) — Postgres triggers em appointments/subjects/prescriptions/exams + withTenant({userId, channel}) + master panel /audit-log (entregue 2026-04-27)
 - [Master Broadcasts (Comunicados)](project_master_broadcasts.md) — Canal "Administrador GenomaFlow" → tenants com markdown + anexos + segmentação + read receipts; reaproveita inter-tenant chat com kind=master_broadcast (entregue 2026-04-27)
 - [CDK drift — config out-of-band](feedback_cdk_drift.md) — cdk deploy regenera task def e zera tudo setado via console; DATABASE_URL ?sslmode=require + S3_BUCKET + AWS_REGION estavam out-of-band, perdidos no split landing×app (incidente 2026-04-27)
+- [Session Checkpoint 2026-04-28](session_checkpoint_2026_04_28.md) — Estado ao fim da sessão. Último HEAD bc05983f. Como retomar, processo, entregas. Sem WIP — tudo em prod.
