@@ -1,7 +1,26 @@
 ---
 name: GenomaFlow Project Context
-description: Frontend + backend em produção — stack, arquitetura, estado atual (atualizado 2026-04-27 — pós audit log Option B)
+description: Frontend + backend em produção — stack, arquitetura, estado atual (atualizado 2026-04-28 — pós split landing×app, master broadcasts read-only, mobile responsive)
 type: project
+---
+
+## Domínios em produção (desde 2026-04-27)
+
+- `genomaflow.com.br` / `www.*` → **somente landing**. Outros paths → 308 redirect pra `app.genomaflow.com.br`
+- `app.genomaflow.com.br` → Angular SPA + `/api/*`
+- Cert wildcard `*.genomaflow.com.br`. nginx em `apps/web/nginx.conf` (NÃO `docker/nginx.conf` que era órfão)
+- ALB rules host-based: prio 5 (app + /api/*) → API TG, prio 11 (app) → Web TG, default → Web TG
+- Email `FRONTEND_URL=https://app.genomaflow.com.br` no task def CDK
+- Detalhes em `project_url_routing.md`
+
+## Master Broadcasts read-only
+
+Canal master é puramente informativo desde 2026-04-27. Tenants NÃO podem responder — devem usar "Reportar erro" / "Sugerir melhoria" (já existentes em `app.component.ts`). Backend retorna 403 com hint apontando os menus. Frontend substitui input row por banner informativo. Detalhes em `project_master_broadcasts.md`.
+
+## Mobile responsive (2026-04-27)
+
+Chat thread + agenda + master comunicados com touch targets Apple HIG (44px). Dialogs da agenda (quick-create, settings, edit-appointment) viram fullscreen em <640px. Agenda ganhou mini tabs dos 7 dias (mobile-only) + swipe horizontal entre dias. Master Comunicados modais ganharam CSS faltante (`.modal-overlay`/`.modal`) com fullscreen mobile.
+
 ---
 
 GenomaFlow é uma plataforma SaaS multi-tenant de inteligência clínica (Brasil). Exames laboratoriais (PDF) e imagens médicas (DICOM, JPG, PNG) são enviados, processados de forma assíncrona por agentes de IA (Claude + RAG) e os resultados exibidos em dashboard em tempo real.
