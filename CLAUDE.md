@@ -422,38 +422,21 @@ Histórico de incidentes que originaram cada regra + protocolo de higienização
 
 ## Comportamentos NÃO Esperados (Red Flags)
 
-- Query em tabela com FORCE RLS **fora** de `withTenant` → resultado vazio ou erro de policy (não é bug do banco, é falta de contexto)
-- `trustProxy: false` com rate limiting atrás de load balancer → todos os clientes no mesmo bucket
-- Endpoint sem `preHandler` que aceita body com dados de outro tenant → vazamento cross-tenant
-- SQL com template literal (``` `SELECT ... WHERE id = ${req.params.id}` ```) → SQL Injection
-- Hash de senha hardcoded em migration → credencial exposta no git history
-- `rag_documents` com RLS → quebra o chatbot para todos os tenants (tabela é propositalmente global)
-- Email salvo com case misto + login com comparação exata → usuário não consegue autenticar mesmo com credenciais corretas
-- Worker lendo arquivo de `/tmp` → `ENOENT` em produção porque containers ECS não compartilham filesystem
-- `.github/workflows/deploy.yml` não commitado → push para main não dispara CI/CD, produção nunca atualiza
-- Assumir que código em produção é o mais recente sem verificar imagem da task definition → debug em código errado
-- Usar `force-new-deployment` sem registrar nova task definition → ECS reinicia com imagem antiga, mudanças nunca chegam a produção
-- Remover `ARG CACHEBUST` dos Dockerfiles → Docker reutiliza camadas antigas silenciosamente, bundle deployado não reflete o código do commit
-- Mergar branch para main sem aprovação explícita do usuário → viola o fluxo de desenvolvimento obrigatório do projeto
-- Afirmar que código "nunca existiu" ou "não há stash" sem verificar o histórico completo → mentira que causa perda de código
-- Fazer correções em cadeia sem diagnóstico completo (vibe coding) → regressões acumuladas e raiz do problema não resolvida
-- Propriedade comum (string/boolean/object) lida dentro de `computed()` Angular → computed nunca reavalia ao mudar o valor, UI mostra cache da primeira execução (bug 2026-04-23 na busca rápida)
-- Query em tabela tenant-scoped sem filtro explícito `AND tenant_id = $X` → se RLS falhar (BYPASSRLS, policy quebrada), vazamento cross-tenant silencioso (auditoria 2026-04-23)
-- `SET LOCAL app.tenant_id = '${tenant_id}'` com template literal → SQL Injection + potencial bypass de RLS via payload malicioso no tenant_id. Sempre `SELECT set_config('app.tenant_id', $1, true)` parametrizado
-- ACL master usando `role !== 'admin'` → todo admin de clínica tem role `'admin'`, portanto qualquer admin vê dados cross-tenant. Correto é `role !== 'master'` (bug 2026-04-23 em `feedback.js` e `error-log.js`)
-- UI sem indicador visível de tenant_name atual → usuário confunde contas e reporta falso vazamento; JWT antigo em localStorage após registro de novo tenant só piora a confusão
-- WebSocket conectando sem prefixo `/api` em prod → ALB só roteia `/api/*` pra API, resto vai pro nginx do Angular → 404 silencioso, nenhum evento real-time chega. Validar WS em prod (não só dev) quando adicionar feature real-time
-- Emitir evento WS via `fastify.notifyTenant()` direto na rota em vez de `fastify.redis.publish('canal:${tenant}')` → quebra em multi-instância ECS e foge do padrão estabelecido pelo `exam:done`
-- `angular.json` sem `fileReplacements` em `production` → `environment.production` fica `false` em runtime de prod → WS URL sem `/api/` + botões de debug (`Simular pagamento`) vazam pra produção (incidente 2026-04-24)
-- Código correto no repo mas prod não reflete o comportamento esperado → antes de refazer deploy, auditar o bundle minificado em `apps/web/dist/.../chunk-*.js` pra confirmar o que foi compilado (ex: `grep -oE 'production:![01]'`)
-- HTTP call em construtor de service injetado no root + UI que depende de `BehaviorSubject` populado por esse HTTP → flicker/sumiço no F5 porque o subject começa `null` a cada bootstrap. Persistir o shape mínimo da UI em `localStorage` e hidratar no construtor antes de fetch
-- Rasterizar PDF digital (com text layer) pra rodar OCR e redigir PII → ~100x mais lento que extrair texto + posições via `pdfjs-dist` e desenhar retângulos com `pd-lib`. Resultado vira imagem (perde text layer, infla tamanho). Sempre tentar text-layer primeiro; rasterização só vale a pena pra PDFs escaneados — e mesmo nesses, hoje a estratégia é modal LGPD com checkbox de responsabilidade do usuário em vez de OCR (incidente 2026-04-25 com V1.5 do anexo PDF)
-- Canvas exportando como `image/png` em fluxo de upload de exame anonimizado → 5–10x mais bytes que `image/jpeg` quality 0.85 sem ganho visível pra texto preto sobre fundo claro. JPEG q=0.85 é o default; PNG só pra screenshots de UI ou imagens com transparência crítica
-- Indexar `docs/superpowers/{plans,specs}/` no RAG do Copilot de Ajuda → vazamento de detalhes de implementação interna (rotas, tabelas, código) pro usuário final. Indexador em `apps/worker/src/rag/indexer-product-help.js` lista explicitamente apenas `docs/claude-memory/`, `docs/user-help/` e `CLAUDE.md` — qualquer mudança nessa lista exige revisão de segurança (incidente 2026-04-24)
-- Remover step `test` do `.github/workflows/deploy.yml` (ou seu `needs: test` no `deploy`) → CI deixa de bloquear regressões e qualquer falha de teste vai pra produção silenciosamente. Único filtro automatizado entre commit e prod
-- Adicionar arquivo de teste novo no path do `test:unit` (api) que precisa de Postgres → CI gate quebra na primeira execução. Testes DB-dependent ficam no `test` completo (rodam só localmente com docker compose ativo)
-- Deletar (ou silenciar com `xdescribe`) teste que quebrou por refatoração em vez de `describe.skip` + comentário `TODO(test-debt):` → dívida some do radar. Sempre marcar com TODO claro explicando causa e quando reabilitar
-- PR de feature em área crítica (auth, RLS, billing, PII, anonimização, ACL master) sem teste novo no mesmo PR → questionar antes de aprovar. Ver `feedback_testing_standards.md` pra lista do que **deve** ter teste
+Sintomas de armadilhas únicas que **não saltam aos olhos** ao ler as seções acima — quando bater algum, suspeitar primeiro:
+
+- **`rag_documents` com RLS** → quebra chatbot pra TODOS os tenants. Tabela é propositalmente global (sem `tenant_id`)
+- **Indexar `docs/superpowers/{plans,specs}/` no RAG do Copilot de Ajuda** → vazamento de detalhes internos pro usuário final. Indexador em `apps/worker/src/rag/indexer-product-help.js` lista APENAS `docs/claude-memory/`, `docs/user-help/`, `CLAUDE.md` — mudar essa lista exige revisão de segurança (incidente 2026-04-24)
+- **Worker lendo arquivo de `/tmp`** → `ENOENT` em prod. Containers ECS não compartilham filesystem — passar pelo S3
+- **Email salvo com case misto + login com comparação exata** → usuário existe no banco mas falha silenciosamente no login. Sempre `.toLowerCase().trim()` no INSERT/UPDATE e `LOWER(email)` no SELECT
+- **`force-new-deployment` sem registrar nova task definition** → ECS reinicia com imagem antiga, código novo nunca sobe
+- **Remover `ARG CACHEBUST` dos Dockerfiles** → Docker reutiliza camada antiga silenciosamente, bundle não reflete o commit
+- **Código correto no repo mas prod não reflete** → auditar bundle minificado ANTES de refazer deploy (`grep production:! chunk-*.js`); pode ser `fileReplacements` faltando, task def antiga, CACHEBUST sumido
+- **Rasterizar PDF digital pra OCR/redigir PII** → ~100x mais lento e perde text layer. Sempre `pdfjs+pdf-lib` primeiro; rasterização só pra escaneados (e hoje resolvido com modal LGPD)
+- **Canvas exportando como `image/png` em upload anonimizado** → 5–10x mais bytes sem ganho visível. Default JPEG q=0.85
+- **HTTP em construtor + UI dependente de `BehaviorSubject(null)`** → flicker/sumiço no F5. Persistir shape mínimo em `localStorage`, hidratar no construtor antes do fetch
+- **Sintoma de WS quebrado:** badge/notificação real-time com latência ~60s ou exigindo F5 → suspeitar de WS URL sem `/api/` ou `notifyTenant()` direto
+
+Outros red flags estão no corpo das seções correspondentes (Multi-tenant, Segurança da API, Infraestrutura de Produção, Regras de Edição, Testes).
 
 ---
 
