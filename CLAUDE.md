@@ -241,34 +241,16 @@ Detalhes do incidente 2026-04-24 + commits de referência: `docs/claude-memory/f
 
 ### Angular: build de produção (OBRIGATÓRIO)
 
-- O `apps/web/angular.json` **DEVE** ter `fileReplacements` na configuração `production` do `architect.build`:
-  ```json
-  "production": {
-    "fileReplacements": [
-      { "replace": "src/environments/environment.ts",
-        "with": "src/environments/environment.prod.ts" }
-    ],
-    ...
-  }
-  ```
-- Sem isso, `ng build --configuration=production` usa `environment.ts` (que tem `production: false`). Tudo que depende de `environment.production` cai no ramo "dev" silenciosamente em prod:
-  - WS URL fica sem `/api/` prefix (ver seção anterior)
-  - Flags de debug como `isProd()` em `onboarding.component.ts` retornam `false` em prod → botões de "Simular pagamento" vazam pra produção
-- **Validação obrigatória:** após build de produção, conferir no bundle minificado que `production:!0` (true) e `apiUrl:"/api"` aparecem:
-  ```bash
-  grep -oE 'production:![01]|apiUrl:"[^"]*"' apps/web/dist/genomaflow-web/browser/chunk-*.js
-  ```
-- **Red flag:** "código está correto mas prod não reflete" → antes de refazer deploy, auditar bundle minificado pra confirmar `environment.production` está `true`.
-- **Ao adicionar nova flag em `environment.ts`**: obrigatório replicar em `environment.prod.ts` com o valor de produção. Os dois arquivos devem estar sempre sincronizados em shape (não em valor).
-- **Incidente 2026-04-24 (causa raiz definitiva):** fix anterior `5c979165` (WS URL) não funcionou em prod porque `fileReplacements` nunca foi adicionado. Fomos achar só auditando o bundle minificado. Commit do fix: `7559b82e`.
+- `apps/web/angular.json` **DEVE** ter `fileReplacements` no `production` de `architect.build` substituindo `src/environments/environment.ts` por `environment.prod.ts`. Sem isso, `environment.production` fica `false` em runtime de prod e tudo que ramifica nesse flag cai no ramo dev (WS sem `/api/`, botões de debug vazando)
+- **Toda flag nova em `environment.ts` deve ter equivalente em `environment.prod.ts`** — shapes sempre sincronizados
+- **Validação obrigatória após build:** `grep -oE 'production:![01]|apiUrl:"[^"]*"' apps/web/dist/genomaflow-web/browser/chunk-*.js` → deve sair `production:!0` e `apiUrl:"/api"`
+- **Red flag:** "código no repo correto mas prod não reflete" → antes de refazer deploy, auditar bundle minificado
+
+Incidente 2026-04-24 (causa raiz definitiva): `docs/claude-memory/feedback_angular_prod_build.md`.
 
 ### Angular: AuthService e hidratação de profile (OBRIGATÓRIO)
 
-- `currentProfile$` (tenant_name, módulo) é `null` na inicialização até `/auth/me` responder.
-- **Sem cache:** após F5, o chip do tenant no topbar fica invisível até o fetch completar (ou para sempre se falhar silenciosamente) — usuário vê "flicker" ou some permanente.
-- **Fix (OBRIGATÓRIO):** `AuthService` deve **persistir o profile em `localStorage`** sob a chave `profile` junto com o token. No construtor, hidratar `currentProfileSubject` a partir do cache antes de disparar `/auth/me`. `resetSession()` e catch de token inválido limpam o cache.
-- **Padrão:** qualquer state do usuário crítico pra UI no topbar (nome, módulo, tenant) deve ser cacheado. Fetch em background apenas atualiza.
-- **Incidente 2026-04-24**: reportado como "chip do tenant some ao dar F5". Fix: commit `86e833ce`.
+`AuthService` deve **persistir profile em `localStorage`** sob chave `profile` e hidratar `currentProfileSubject` no construtor antes do fetch `/auth/me`. Sem cache, chip do tenant no topbar some/flicka no F5. `resetSession()` + catch de token inválido limpam o cache. Detalhes em `docs/claude-memory/feedback_auth_profile_hydration.md`.
 
 ---
 
