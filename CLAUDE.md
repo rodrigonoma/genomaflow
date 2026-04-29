@@ -446,17 +446,19 @@ Módulos com `await import('...mjs')` (pdfjs-dist, deps em pipeline DICOM) preci
 
 ## Regras de Edição de Código (OBRIGATÓRIO)
 
-- **`Write` é proibido em arquivos existentes** — usar sempre `Edit` cirúrgico. `Write` apaga conteúdo que não foi lido, causando regressões silenciosas
-- **`git stash` é proibido** — qualquer trabalho em progresso vira commit `WIP:` na branch e é empurrado. Stash não tem histórico, não vai para o remoto, é código perdido esperando acontecer
-- **Uma concern por branch** — branch de routing não toca em auth; branch de auth não toca em UI. Se duas coisas precisam mudar, dois PRs separados e aprovados separadamente
-- **Smoke test obrigatório antes de pedir aprovação** — testar localmente as rotas críticas (login admin → dashboard, login master → painel master, telas principais carregam) antes de apresentar resultado para aprovação. Se não for possível testar algo, declarar explicitamente o que não foi testado
-- **Verificar migrations pendentes antes de mergear** — comparar arquivos em `migrations/` com `_migrations` table. Migration inesperadamente pendente em produção = parar e investigar antes de prosseguir
-- **Ler o arquivo completo antes de qualquer `Edit`** — nunca editar sem ter lido o estado atual. `Edit` em conteúdo desatualizado causa regressões silenciosas
-- **Nunca fazer afirmações categóricas sem verificar com ferramentas** — "nunca existiu", "não há stash", "não há branch" só podem ser ditas após `git log --all`, `git stash list` e leitura efetiva do histórico. Dizer sem verificar = mentira
-- **Verificar stash e histórico WIP antes de qualquer sessão de trabalho** — rodar `git stash list` e `git log --all --oneline | grep -i "wip\|stash"` no início de cada sessão para detectar código perdido
-- **Vibe coding é proibido** — nunca fazer múltiplas correções sequenciais pequenas sem diagnóstico completo primeiro. O fluxo obrigatório é: ler todos os arquivos relevantes → diagnosticar a causa raiz → propor solução → executar de uma vez
-- **Angular `computed()` só reage a signals lidos** — se um valor é consumido dentro de `computed()` ou `effect()`, ele **precisa** ser `signal()`. Propriedades string/boolean/object comuns NÃO invalidam o cache do computed. Para `[(ngModel)]` sobre signals, usar `[ngModel]="x()"` + `(ngModelChange)="x.set($event)"`. Bug real de 2026-04-23: busca rápida retornava sempre `[]` porque `query` era string enquanto `filtered` era computed — só saiu em produção
-- **Toda query tenant-scoped precisa de `AND tenant_id = $X` explícito** — RLS é a última camada, nunca a única. Confiar só em RLS = vazamento quando role tem BYPASSRLS por engano, policy quebra, ou query escapa de `withTenant`. Incidente 2026-04-23 motivou auditoria completa; regra detalhada em `## Arquitetura Multi-tenant` acima
+- **`Write` proibido em arquivo existente** — usar `Edit` cirúrgico. `Write` apaga conteúdo não lido = regressão silenciosa
+- **`git stash` proibido** — WIP vira commit `WIP:` na branch e é empurrado; stash não tem histórico, não vai pro remoto
+- **Uma concern por branch** — routing não toca em auth, auth não toca em UI. Duas coisas mudando → dois PRs
+- **Ler o arquivo completo antes de qualquer `Edit`** — Edit em conteúdo desatualizado = regressão silenciosa
+- **Smoke test antes de pedir aprovação** — login admin/master, telas principais. O que não testar deve ser declarado explicitamente
+- **Verificar migrations pendentes antes de mergear** — comparar `migrations/` com `_migrations` table. Pendente inesperada em prod = parar e investigar
+- **Verificar stash + WIP no início de toda sessão** — `git stash list` e `git log --all --oneline | grep -i "wip\|stash"`
+- **Nunca afirmações categóricas sem verificar** — "nunca existiu", "não há stash" só após rodar as ferramentas. Sem verificar = mentira
+- **Vibe coding proibido** — nunca correções em cadeia sem diagnóstico completo primeiro. Fluxo: ler todos os arquivos relevantes → causa raiz → propor → executar de uma vez
+- **Angular `computed()` só reage a signals lidos** — propriedades string/boolean/object comuns NÃO invalidam o cache. Pra `[(ngModel)]` sobre signal: `[ngModel]="x()"` + `(ngModelChange)="x.set($event)"`
+- **Toda query tenant-scoped precisa de `AND tenant_id = $X` explícito** — RLS é última camada, nunca única (regra detalhada em `## Arquitetura Multi-tenant`)
+
+Histórico de incidentes que originaram cada regra + protocolo de higienização: `docs/claude-memory/feedback_code_editing_rules.md`.
 
 ---
 
