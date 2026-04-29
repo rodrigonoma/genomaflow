@@ -374,39 +374,14 @@ docker run --rm <image:tag> grep -rl "termo_do_novo_código" /usr/share/nginx/ht
 
 ## Auditoria (audit_log) — OBRIGATÓRIO
 
-Trail de toda mutação em tabelas críticas pra compliance LGPD + investigação de incidentes. Migrations 055 (foundation), 056 (appointments), 057 (subjects, prescriptions, exams).
+Trail append-only via trigger Postgres genérico em tabelas críticas (LGPD + forense). Tabelas com trigger hoje: `appointments`, `subjects`, `prescriptions`, `exams`. Master panel em `/master/audit-log`.
 
-### Arquitetura
+- **`withTenant(pg, tid, fn, { userId, channel })` é OBRIGATÓRIO** em toda rota de mutação em tabela com trigger — sem `userId`+`channel`, `actor_user_id` fica NULL e perde rastreabilidade
+- **`channel` whitelist:** `ui` (HTTP de UI) · `copilot` (tool calls) · `system` (jobs internos) · `worker` (BullMQ). Tools do Copilot DEVEM passar `'copilot'` — diferenciar UI de IA é o ponto da feature
+- **Append-only:** GRANT só `SELECT`/`INSERT` em `audit_log`. Nunca expor UPDATE/DELETE
+- **Nova tabela com PII/billing/compliance** → criar trigger `AFTER INSERT OR UPDATE OR DELETE ... EXECUTE FUNCTION audit_trigger_fn()` em migration nova
 
-- Tabela `audit_log` (append-only): `tenant_id`, `entity_type`, `entity_id`, `action` (insert/update/delete), `actor_user_id`, `actor_channel`, `old_data` JSONB, `new_data` JSONB, `changed_fields` TEXT[], `created_at`. RLS com NULLIF (master vê tudo, tenant só o próprio).
-- Trigger genérico `audit_trigger_fn()` em SECURITY DEFINER lê `current_setting('app.tenant_id', true)`, `current_setting('app.user_id', true)`, `current_setting('app.actor_channel', true)` e calcula diff via `jsonb_each`. Idempotente.
-- **Append-only:** GRANT só `SELECT`/`INSERT`. Nenhum endpoint expõe UPDATE/DELETE da tabela.
-- **Habilitar em nova tabela:** criar trigger `AFTER INSERT OR UPDATE OR DELETE ... FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn()` em migration nova.
-
-### `withTenant` — assinatura estendida
-
-`withTenant(pg, tenantId, fn, opts)` aceita 4º arg `{ userId, channel }`:
-```js
-await withTenant(fastify.pg, tenant_id, async (client) => {
-  await client.query('INSERT INTO appointments ...', [...]);
-}, { userId: user_id, channel: 'ui' }); // ou 'copilot' | 'system' | 'worker'
-```
-- **`channel` whitelist:** `ui` (HTTP de UI), `copilot` (tool calls), `system` (jobs internos), `worker` (BullMQ)
-- **Toda rota de mutação** em tabela com trigger de audit DEVE passar `userId` + `channel` — sem isso, `actor_user_id` fica `NULL` no log e perde rastreabilidade
-- **Tools do Copilot** (`*-chat-tools.js`) DEVEM passar `channel: 'copilot'` — diferenciar UI de IA é o ponto de Option B
-
-### Master panel `/master/audit-log`
-
-- `GET /master/audit-log?days=30&limit=100&entity_type=&actor_channel=&action=&entity_id=&actor_user_id=&tenant_id=` — lista paginada com filtros
-- `GET /master/audit-log/:id` — drill-down com `old_data` + `new_data` + `changed_fields` pra diff visual
-- Clamps: `days` 1..180 (default 30), `limit` 1..200 (default 100). Valor 0 ou inválido cai no default por causa do `|| <default>`
-- ACL master-only — coberto em `tests/security/master-acl.test.js`
-
-### Red flags
-
-- INSERT/UPDATE/DELETE em tabela com trigger de audit fora de `withTenant({ userId, channel })` → `actor_user_id`/`actor_channel` ficam NULL/'ui' (default), perde atribuição de Copilot vs UI
-- Nova tabela crítica (PII, billing, compliance) sem trigger de audit → mutação invisível ao master
-- Endpoint que faz UPDATE direto em `audit_log` → quebra append-only, perde valor forense
+Detalhes (schema, RLS NULLIF, master endpoints, tests): `docs/claude-memory/project_audit_log.md`.
 
 ---
 
