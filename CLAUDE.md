@@ -226,50 +226,31 @@ A UI deve sempre mostrar tenant_name + módulo em local visível (topbar). Confu
 
 ### WebSocket URL: incluir API_PREFIX em produção (OBRIGATÓRIO)
 
-A ALB de produção tem **apenas uma rule**: `/api/*` → API target. **Todo path fora de `/api/*` vai pro nginx do Angular**, que não tem `location` para WebSocket. URLs WS sem o prefixo falham silenciosamente com 404.
+ALB de prod tem **apenas a rule** `/api/*` → API target. URL WS sem prefix vai pro nginx do Angular (sem location WS) e cai em 404 silencioso.
 
-- **Frontend:** `WsService` e qualquer novo WebSocket **deve** prepender `environment.apiUrl` em produção:
+- **Frontend:** `WsService` e qualquer WS novo deve prepender `environment.apiUrl` em prod:
   ```ts
   const basePath = environment.production ? environment.apiUrl : '';
   const url = `${protocol}//${location.host}${basePath}/exams/subscribe?token=…`;
   ```
-- **Dev:** `proxy.conf.json` intercepta `/exams/subscribe` com `ws: true` antes do request sair do dev server — então mantém path raw sem prefix. Ao adicionar novos endpoints WS em dev, atualizar o proxy também.
-- **Produção:** o ALB só conhece `/api/*`. Qualquer endpoint WS novo deve estar sob `/api/` no URL do cliente.
-- **Eventos via Redis pub/sub, nunca direto:** rotas da API devem publicar em canais Redis (`fastify.redis.publish('chat:event:' + tenantId, JSON.stringify(...))`), não chamar `fastify.notifyTenant()` direto. O plugin `pubsub.js` já faz psubscribe e re-broadcast para conexões WS locais. Isso mantém forward-compat com multi-instância ECS.
-- **Red flag:** se badge/notificação em tempo real demorar ~60s ou exigir F5, suspeitar de WS URL errado. Log do nginx do web + log do API servem pra triar.
-- **Incidente 2026-04-24**: WS do chat entre tenants nunca conectou em prod por esse motivo — URL era `/exams/subscribe` sem prefix. Fix: commit `5c979165` / merge `48a64b36`. Review queue badge passava por polling fallback (60s) e ninguém percebeu.
-- **Retrospectiva 2026-04-24 (parte 2):** o fix `5c979165` sozinho **não resolveu** — o bundle em prod continuou com a URL errada porque `angular.json` estava sem `fileReplacements` (ver seção "Angular: build de produção" abaixo). Sem isso, `environment.production === false` em runtime e o ternário da URL caía no ramo dev. Fix completo: commit `7559b82e` (fileReplacements no angular.json).
+- **Dev:** `proxy.conf.json` com `ws: true` intercepta antes — manter path raw sem prefix. Novo endpoint WS em dev exige atualizar o proxy também.
+- **Eventos via Redis pub/sub, nunca direto:** rotas publicam em `fastify.redis.publish('chat:event:' + tenantId, ...)`. `notifyTenant()` direto quebra multi-instância ECS — `pubsub.js` já faz psubscribe + re-broadcast.
+- **Red flag:** badge/notificação real-time com latência ~60s ou exigindo F5 → suspeitar de WS URL errado.
+
+Detalhes do incidente 2026-04-24 + commits de referência: `docs/claude-memory/feedback_websocket_prod.md`.
 
 ### Angular: build de produção (OBRIGATÓRIO)
 
-- O `apps/web/angular.json` **DEVE** ter `fileReplacements` na configuração `production` do `architect.build`:
-  ```json
-  "production": {
-    "fileReplacements": [
-      { "replace": "src/environments/environment.ts",
-        "with": "src/environments/environment.prod.ts" }
-    ],
-    ...
-  }
-  ```
-- Sem isso, `ng build --configuration=production` usa `environment.ts` (que tem `production: false`). Tudo que depende de `environment.production` cai no ramo "dev" silenciosamente em prod:
-  - WS URL fica sem `/api/` prefix (ver seção anterior)
-  - Flags de debug como `isProd()` em `onboarding.component.ts` retornam `false` em prod → botões de "Simular pagamento" vazam pra produção
-- **Validação obrigatória:** após build de produção, conferir no bundle minificado que `production:!0` (true) e `apiUrl:"/api"` aparecem:
-  ```bash
-  grep -oE 'production:![01]|apiUrl:"[^"]*"' apps/web/dist/genomaflow-web/browser/chunk-*.js
-  ```
-- **Red flag:** "código está correto mas prod não reflete" → antes de refazer deploy, auditar bundle minificado pra confirmar `environment.production` está `true`.
-- **Ao adicionar nova flag em `environment.ts`**: obrigatório replicar em `environment.prod.ts` com o valor de produção. Os dois arquivos devem estar sempre sincronizados em shape (não em valor).
-- **Incidente 2026-04-24 (causa raiz definitiva):** fix anterior `5c979165` (WS URL) não funcionou em prod porque `fileReplacements` nunca foi adicionado. Fomos achar só auditando o bundle minificado. Commit do fix: `7559b82e`.
+- `apps/web/angular.json` **DEVE** ter `fileReplacements` no `production` de `architect.build` substituindo `src/environments/environment.ts` por `environment.prod.ts`. Sem isso, `environment.production` fica `false` em runtime de prod e tudo que ramifica nesse flag cai no ramo dev (WS sem `/api/`, botões de debug vazando)
+- **Toda flag nova em `environment.ts` deve ter equivalente em `environment.prod.ts`** — shapes sempre sincronizados
+- **Validação obrigatória após build:** `grep -oE 'production:![01]|apiUrl:"[^"]*"' apps/web/dist/genomaflow-web/browser/chunk-*.js` → deve sair `production:!0` e `apiUrl:"/api"`
+- **Red flag:** "código no repo correto mas prod não reflete" → antes de refazer deploy, auditar bundle minificado
+
+Incidente 2026-04-24 (causa raiz definitiva): `docs/claude-memory/feedback_angular_prod_build.md`.
 
 ### Angular: AuthService e hidratação de profile (OBRIGATÓRIO)
 
-- `currentProfile$` (tenant_name, módulo) é `null` na inicialização até `/auth/me` responder.
-- **Sem cache:** após F5, o chip do tenant no topbar fica invisível até o fetch completar (ou para sempre se falhar silenciosamente) — usuário vê "flicker" ou some permanente.
-- **Fix (OBRIGATÓRIO):** `AuthService` deve **persistir o profile em `localStorage`** sob a chave `profile` junto com o token. No construtor, hidratar `currentProfileSubject` a partir do cache antes de disparar `/auth/me`. `resetSession()` e catch de token inválido limpam o cache.
-- **Padrão:** qualquer state do usuário crítico pra UI no topbar (nome, módulo, tenant) deve ser cacheado. Fetch em background apenas atualiza.
-- **Incidente 2026-04-24**: reportado como "chip do tenant some ao dar F5". Fix: commit `86e833ce`.
+`AuthService` deve **persistir profile em `localStorage`** sob chave `profile` e hidratar `currentProfileSubject` no construtor antes do fetch `/auth/me`. Sem cache, chip do tenant no topbar some/flicka no F5. `resetSession()` + catch de token inválido limpam o cache. Detalhes em `docs/claude-memory/feedback_auth_profile_hydration.md`.
 
 ---
 
@@ -374,218 +355,88 @@ docker run --rm <image:tag> grep -rl "termo_do_novo_código" /usr/share/nginx/ht
 
 ## Auditoria (audit_log) — OBRIGATÓRIO
 
-Trail de toda mutação em tabelas críticas pra compliance LGPD + investigação de incidentes. Migrations 055 (foundation), 056 (appointments), 057 (subjects, prescriptions, exams).
+Trail append-only via trigger Postgres genérico em tabelas críticas (LGPD + forense). Tabelas com trigger hoje: `appointments`, `subjects`, `prescriptions`, `exams`. Master panel em `/master/audit-log`.
 
-### Arquitetura
+- **`withTenant(pg, tid, fn, { userId, channel })` é OBRIGATÓRIO** em toda rota de mutação em tabela com trigger — sem `userId`+`channel`, `actor_user_id` fica NULL e perde rastreabilidade
+- **`channel` whitelist:** `ui` (HTTP de UI) · `copilot` (tool calls) · `system` (jobs internos) · `worker` (BullMQ). Tools do Copilot DEVEM passar `'copilot'` — diferenciar UI de IA é o ponto da feature
+- **Append-only:** GRANT só `SELECT`/`INSERT` em `audit_log`. Nunca expor UPDATE/DELETE
+- **Nova tabela com PII/billing/compliance** → criar trigger `AFTER INSERT OR UPDATE OR DELETE ... EXECUTE FUNCTION audit_trigger_fn()` em migration nova
 
-- Tabela `audit_log` (append-only): `tenant_id`, `entity_type`, `entity_id`, `action` (insert/update/delete), `actor_user_id`, `actor_channel`, `old_data` JSONB, `new_data` JSONB, `changed_fields` TEXT[], `created_at`. RLS com NULLIF (master vê tudo, tenant só o próprio).
-- Trigger genérico `audit_trigger_fn()` em SECURITY DEFINER lê `current_setting('app.tenant_id', true)`, `current_setting('app.user_id', true)`, `current_setting('app.actor_channel', true)` e calcula diff via `jsonb_each`. Idempotente.
-- **Append-only:** GRANT só `SELECT`/`INSERT`. Nenhum endpoint expõe UPDATE/DELETE da tabela.
-- **Habilitar em nova tabela:** criar trigger `AFTER INSERT OR UPDATE OR DELETE ... FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn()` em migration nova.
-
-### `withTenant` — assinatura estendida
-
-`withTenant(pg, tenantId, fn, opts)` aceita 4º arg `{ userId, channel }`:
-```js
-await withTenant(fastify.pg, tenant_id, async (client) => {
-  await client.query('INSERT INTO appointments ...', [...]);
-}, { userId: user_id, channel: 'ui' }); // ou 'copilot' | 'system' | 'worker'
-```
-- **`channel` whitelist:** `ui` (HTTP de UI), `copilot` (tool calls), `system` (jobs internos), `worker` (BullMQ)
-- **Toda rota de mutação** em tabela com trigger de audit DEVE passar `userId` + `channel` — sem isso, `actor_user_id` fica `NULL` no log e perde rastreabilidade
-- **Tools do Copilot** (`*-chat-tools.js`) DEVEM passar `channel: 'copilot'` — diferenciar UI de IA é o ponto de Option B
-
-### Master panel `/master/audit-log`
-
-- `GET /master/audit-log?days=30&limit=100&entity_type=&actor_channel=&action=&entity_id=&actor_user_id=&tenant_id=` — lista paginada com filtros
-- `GET /master/audit-log/:id` — drill-down com `old_data` + `new_data` + `changed_fields` pra diff visual
-- Clamps: `days` 1..180 (default 30), `limit` 1..200 (default 100). Valor 0 ou inválido cai no default por causa do `|| <default>`
-- ACL master-only — coberto em `tests/security/master-acl.test.js`
-
-### Red flags
-
-- INSERT/UPDATE/DELETE em tabela com trigger de audit fora de `withTenant({ userId, channel })` → `actor_user_id`/`actor_channel` ficam NULL/'ui' (default), perde atribuição de Copilot vs UI
-- Nova tabela crítica (PII, billing, compliance) sem trigger de audit → mutação invisível ao master
-- Endpoint que faz UPDATE direto em `audit_log` → quebra append-only, perde valor forense
+Detalhes (schema, RLS NULLIF, master endpoints, tests): `docs/claude-memory/project_audit_log.md`.
 
 ---
 
 ## Comunicados (Master Broadcasts) — OBRIGATÓRIO
 
-Canal oficial "Administrador do GenomaFlow" → tenants. Master envia mensagem (texto markdown + anexos imagem/PDF) com segmentação (all / module / tenant). Tenants veem como conversa pinned no chat. Replies do tenant vão pra inbox master. Migrations 058–061.
+Canal "Administrador do GenomaFlow" → tenants reusando inter-tenant chat com `kind='master_broadcast'`. Migrations 058–061. Tenants veem conversa pinned + replies vão pra inbox master.
 
-### Arquitetura
+- **Fan-out usa MASTER_TENANT_ID, não target:** `withTenant(fastify.pg, MASTER_TENANT_ID, fn, { userId, channel: 'system' })`. `tm_insert` exige `sender_tenant_id = app.tenant_id` — context tem que ser master, NUNCA `withTenant(target.id)`
+- **Markdown render só pra mensagem do master:** checar `sender_tenant_id === MASTER_TENANT_ID` antes de invocar `MarkdownService`. Render em mensagem de tenant = XSS aberto
+- **Trigger compartilhado com tabela sem coluna `kind`** (ex: `tenant_invitations`) deve usar `to_jsonb(NEW) ->> 'kind'`, nunca `NEW.kind` direto — quebra com "record NEW has no field"
+- **RLS extendida com NULLIF** em `tc/tcr/tm/tma/mb/mba/mbd` pra master ler/escrever sem contexto OU em contexto master
+- **Replies do tenant em master_broadcast pulam suspension gate** (intencional — tenant suspenso precisa poder responder ao admin); conversas tenant↔tenant mantêm gate normal
+- **WS event:** `master_broadcast_received` via `fastify.redis.publish('chat:event:{tenant}', ...)`
+- **Rate limits:** `POST /master/broadcasts` 20/dia · `POST /master/conversations/:id/reply` 100/dia
+- **IAM S3:** task role precisa cobrir prefix `master-broadcasts/*` em `genomaflow-uploads-prod` (CDK em `infra/lib/ecs-stack.ts`)
 
-- **Reaproveita** `tenant_conversations` + `tenant_messages` com nova coluna `kind` (default `'tenant_to_tenant'` preserva existente). `kind='master_broadcast'` sinaliza canal master.
-- Master tenant `00000000-0000-0000-0000-000000000001` é sempre `tenant_a_id` (menor UUID — CHECK constraint do 047 satisfeito).
-- Tabelas master-only: `master_broadcasts` (canonical), `master_broadcast_attachments`, `master_broadcast_deliveries`.
-
-### Triggers e RLS — exceções por kind='master_broadcast'
-
-- `enforce_chat_same_module` skipa quando kind=master_broadcast (master é human, broadcasta pra vet também). Trigger usa `to_jsonb(NEW)->>'kind'` pra ser safe em `tenant_invitations` (que não tem coluna kind).
-- `mb/mba/mbd_master_only` policies aceitam: contexto vazio (rotas master sem set_config) **OU** contexto = master_tenant_id (fan-out via withTenant).
-- `tc/tcr/tm/tma_select` extendidas com NULLIF: master sem contexto vê todas as conversações/leituras/mensagens; tenant com contexto continua isolado.
-
-### Fan-out: `withTenant(MASTER_TENANT_ID, ..., { channel: 'system' })`
-
-- Master é sempre o sender em `tenant_messages` — `tm_insert` exige `sender_tenant_id = app.tenant_id`, então context tem que ser master.
-- Cada entrega: UPSERT conversation → INSERT message → INSERT attachments (s3_key compartilhado entre tenants) → INSERT delivery.
-- WS via `fastify.redis.publish('chat:event:{tenant}', ...)` com event `master_broadcast_received`.
-- Sync até ~500 tenants. Acima disso, mover pra BullMQ.
-
-### Flags que tenants e replies preservam (NÃO quebrar)
-
-- Reply do tenant em master_broadcast pula gate de suspensão (`isTenantSuspended`) — tenant suspenso ainda precisa poder responder ao admin pra resolver. **Replies em conversas tenant↔tenant mantêm o gate normal.**
-- `tenant_blocks` é checado só em `POST /invitations` (não em messages) — replies em master_broadcast nem entram nesse fluxo.
-- PII checks em anexos do tenant em reply continuam aplicando — só master skipa PII (envia marketing/feature notes, não dado clínico).
-
-### Frontend — tenant UI
-
-- Sidebar: conversas com `kind='master_broadcast'` são pinned no topo (ORDER BY (kind='master_broadcast') DESC), counterpart_name vira "Administrador GenomaFlow", ícone `admin_panel_settings` + `push_pin`. Sem botão "ver contato"/"reportar".
-- Thread: mensagens onde `sender_tenant_id = MASTER_TENANT_ID` rendem markdown via `MarkdownService` (marked + DOMPurify, whitelist conservadora p/strong/em/h2-h4/ul/ol/li/a/code/pre/blockquote/hr; links forçam target=_blank rel=noopener noreferrer). Mensagens normais ficam texto puro.
-- Cache de markdown render por msg.id pra performance.
-
-### Frontend — master UI (tab Comunicados)
-
-- Composer: segment selector (all/module/tenant), textarea markdown, attachment picker (max 5 × 10MB JPG/PNG/PDF)
-- Histórico: tabela com X / Y leram, contagem de anexos, drill-down modal
-- Inbox: lista de conversações com unread badge, indicador "↗ você" / "↙ tenant"
-- Conversation viewer: thread + reply box
-
-### Endpoints
-
-- `POST /master/broadcasts` — bodyLimit 80MB pra suportar 5 anexos × 10MB em base64. Rate limit 20/dia. Validação: body 1..2000 chars, segment kind/value whitelist, anexo kind+mime+size.
-- `GET /master/broadcasts?days=&limit=` — clamps 1..180 / 1..200, default 90/50. JOIN tcr pra read_count.
-- `GET /master/broadcasts/:id` — detalhe com deliveries + flag read_by_tenant + anexos.
-- `GET /master/conversations` — inbox de master_broadcast convs com unread_count.
-- `GET /master/conversations/:id/messages` — thread (read-only no master view).
-- `POST /master/conversations/:id/reply` — master responde direto (sem novo broadcast canonical). Rate limit 100/dia.
-
-### IAM S3
-
-Task role do ECS precisa de PutObject/GetObject/DeleteObject em `master-broadcasts/*` do bucket `genomaflow-uploads-prod`. Configurado em `infra/lib/ecs-stack.ts` junto com os outros prefixes (`uploads/*`, `inter-tenant-chat/*`). Sem isso, anexos retornam 500 silencioso na prod (incidente 2026-04-25).
-
-### Red flags
-
-- Esquecer de migrar `mb/mba/mbd_master_only` quando o fan-out usar `withTenant(MASTER_TENANT_ID)` → INSERT canonical bloqueado por RLS
-- Acessar `NEW.kind` direto numa função de trigger compartilhada com tabela sem essa coluna → PG erro "record NEW has no field". Usar `to_jsonb(NEW)->>'kind'`.
-- Master inserindo via `withTenant(target.id)` → `tm_insert` falha (sender ≠ app.tenant_id). Sempre `withTenant(MASTER_TENANT_ID)` no fan-out.
-- Master broadcast sem rate limit → spam acidental pra todos os tenants
-- Markdown render em mensagem que NÃO é do master → injeção XSS de tenants (sempre checar `sender_tenant_id === MASTER_TENANT_ID` antes de render)
+Arquitetura completa (schema, fan-out, frontend, endpoints, RLS detalhada): `docs/claude-memory/project_master_broadcasts.md`.
 
 ---
 
 ## Testes e CI gate (OBRIGATÓRIO)
 
-### CI gate
-
-- `.github/workflows/deploy.yml` tem job `test` que **precede o deploy** (`needs: test`). Falha de teste bloqueia build/push/update de ECS
-- Steps do gate:
-  - `apps/api` → `npm run test:unit` (subset declarado em `package.json` — sem DB)
+- **CI gate em `.github/workflows/deploy.yml`** roda job `test` antes do `deploy` (`needs: test`). Falha bloqueia build/push/update de ECS:
+  - `apps/api` → `npm run test:unit` (subset sem DB declarado em `package.json`)
   - `apps/worker` → `npm test` (suite completa)
   - `apps/web` → `npm test` (Jest + jsdom)
-- **Nunca remover esse gate** — único filtro automatizado entre commit e produção
+- **Nunca remover o gate** — único filtro automatizado entre commit e prod
+- **`test:unit` vs `test` na API:** `test` = completa DB-dependent (dev local). `test:unit` = lista explícita sem DB (CI). Teste novo sem DB → appendar em `test:unit`. Com DB → vai pro `test`, não bloqueia CI
+- **Áreas que DEVEM ter teste novo no mesmo PR:**
+  - Rota com auth/role gate → teste de ACL (modelo: `master-acl.test.js`)
+  - Flag de segurança LGPD/consent/suspended → strict equality (`=== true`)
+  - Pattern PII / validação → matriz match/noMatch
+  - Função de anonimização → allowlist de chaves do output (pega field novo esquecido)
+  - Whitelist de valor (gateway, agent_type, package) → válidos aceitos + inválidos rejeitados
+- **Skip honesto, nunca silencioso:** teste quebrado por refator → `describe.skip` + `// TODO(test-debt): <causa>. Reabilitar quando <condição>.`. Nunca deletar — dívida tem que ficar visível
+- **Padrão Fastify isolado** (route handler sem Postgres): `fastify.decorate('authenticate', stub)` + `fastify.decorate('pg', { query: jest.fn() })` + `app.inject()`. Stub deve jogar erro se chamado em request rejeitada — detecta regressão do gate
 
-### `test:unit` vs `test` na API
-
-- `test` = suite completa (DB-dependent, dev local com Postgres rodando)
-- `test:unit` = lista explícita de paths sem dependência de DB (CI gate)
-- Ao adicionar arquivo de teste novo: se NÃO precisa de DB → appendar em `test:unit`. Se precisa → vai pro `test` mas não bloqueia CI
-
-### Padrão de teste de validação Fastify isolado
-
-Pra testar route handler sem precisar de Postgres real:
-
-```js
-const app = Fastify({ logger: false });
-app.decorate('authenticate', async (request) => {
-  request.user = { role: request.headers['x-test-role'], tenant_id: '...', user_id: '...' };
-});
-app.decorate('pg', { query: jest.fn(async () => ({ rows: [{}] })) });
-await app.register(require('../../src/routes/x'));
-await app.inject({ method: 'POST', url: '/x', payload: {...} });
-```
-
-- Stub `pg.query` deve **jogar erro** se chamado em request rejeitada — detecta regressão silenciosa do gate
-- Modelos vivos: `tests/security/master-acl.test.js`, `tests/routes/billing-validation.test.js`, `tests/routes/inter-tenant-chat/messages-validation.test.js`
-
-### Áreas que **devem** ter teste no PR de feature
-
-- Rotas com auth/role gate → teste de ACL (ex: `master-acl.test.js`)
-- Flag de segurança nova (LGPD, consent, suspended) → teste de strict equality (`=== true`, não truthy)
-- Pattern PII / regra de validação → matriz match/noMatch
-- Função de anonimização / sanitização → allowlist de chaves do output (catch field-add esquecido)
-- Whitelist de valor (gateway, agent_type, package size) → todos válidos aceitos + alguns inválidos rejeitados
-
-### Skip honesto, nunca silencioso
-
-Quando teste legado quebra por refatoração e reescrever está fora de escopo:
-```js
-// TODO(test-debt): <causa>. Reabilitar quando <condição>.
-describe.skip(...)
-```
-Nunca deletar testes quebrados — visibilidade da dívida importa. Listar atual em `docs/claude-memory/feedback_testing_standards.md`.
-
-### Mocks de SDKs externos
-
-- `@anthropic-ai/sdk`: alguns módulos importam direto (`require('@anthropic-ai/sdk')`), outros via `.default`. Cobrir os dois shapes via `jest.mock`. Modelos: `pdf-text-redactor.test.js` (direto), agentes do worker (`.default`)
-- `openai`: similar — `jest.setup.js` no worker seta env vars dummy pra módulos que instanciam o cliente em top-level conseguirem carregar
-- Sempre mockar antes do `require` do módulo sob teste
-
-### ESM no Jest é teto baixo
-
-Módulos com `await import('...mjs')` (pdfjs-dist, deps em pipeline DICOM) precisam `NODE_OPTIONS=--experimental-vm-modules`. Por ora: skip com TODO. Habilitar global apenas se ficar bloqueador real
+Modelos vivos, mocks de SDKs externos, ESM/Jest, cobertura snapshot: `docs/claude-memory/feedback_testing_standards.md`.
 
 ## Regras de Edição de Código (OBRIGATÓRIO)
 
-- **`Write` é proibido em arquivos existentes** — usar sempre `Edit` cirúrgico. `Write` apaga conteúdo que não foi lido, causando regressões silenciosas
-- **`git stash` é proibido** — qualquer trabalho em progresso vira commit `WIP:` na branch e é empurrado. Stash não tem histórico, não vai para o remoto, é código perdido esperando acontecer
-- **Uma concern por branch** — branch de routing não toca em auth; branch de auth não toca em UI. Se duas coisas precisam mudar, dois PRs separados e aprovados separadamente
-- **Smoke test obrigatório antes de pedir aprovação** — testar localmente as rotas críticas (login admin → dashboard, login master → painel master, telas principais carregam) antes de apresentar resultado para aprovação. Se não for possível testar algo, declarar explicitamente o que não foi testado
-- **Verificar migrations pendentes antes de mergear** — comparar arquivos em `migrations/` com `_migrations` table. Migration inesperadamente pendente em produção = parar e investigar antes de prosseguir
-- **Ler o arquivo completo antes de qualquer `Edit`** — nunca editar sem ter lido o estado atual. `Edit` em conteúdo desatualizado causa regressões silenciosas
-- **Nunca fazer afirmações categóricas sem verificar com ferramentas** — "nunca existiu", "não há stash", "não há branch" só podem ser ditas após `git log --all`, `git stash list` e leitura efetiva do histórico. Dizer sem verificar = mentira
-- **Verificar stash e histórico WIP antes de qualquer sessão de trabalho** — rodar `git stash list` e `git log --all --oneline | grep -i "wip\|stash"` no início de cada sessão para detectar código perdido
-- **Vibe coding é proibido** — nunca fazer múltiplas correções sequenciais pequenas sem diagnóstico completo primeiro. O fluxo obrigatório é: ler todos os arquivos relevantes → diagnosticar a causa raiz → propor solução → executar de uma vez
-- **Angular `computed()` só reage a signals lidos** — se um valor é consumido dentro de `computed()` ou `effect()`, ele **precisa** ser `signal()`. Propriedades string/boolean/object comuns NÃO invalidam o cache do computed. Para `[(ngModel)]` sobre signals, usar `[ngModel]="x()"` + `(ngModelChange)="x.set($event)"`. Bug real de 2026-04-23: busca rápida retornava sempre `[]` porque `query` era string enquanto `filtered` era computed — só saiu em produção
-- **Toda query tenant-scoped precisa de `AND tenant_id = $X` explícito** — RLS é a última camada, nunca a única. Confiar só em RLS = vazamento quando role tem BYPASSRLS por engano, policy quebra, ou query escapa de `withTenant`. Incidente 2026-04-23 motivou auditoria completa; regra detalhada em `## Arquitetura Multi-tenant` acima
+- **`Write` proibido em arquivo existente** — usar `Edit` cirúrgico. `Write` apaga conteúdo não lido = regressão silenciosa
+- **`git stash` proibido** — WIP vira commit `WIP:` na branch e é empurrado; stash não tem histórico, não vai pro remoto
+- **Uma concern por branch** — routing não toca em auth, auth não toca em UI. Duas coisas mudando → dois PRs
+- **Ler o arquivo completo antes de qualquer `Edit`** — Edit em conteúdo desatualizado = regressão silenciosa
+- **Smoke test antes de pedir aprovação** — login admin/master, telas principais. O que não testar deve ser declarado explicitamente
+- **Verificar migrations pendentes antes de mergear** — comparar `migrations/` com `_migrations` table. Pendente inesperada em prod = parar e investigar
+- **Verificar stash + WIP no início de toda sessão** — `git stash list` e `git log --all --oneline | grep -i "wip\|stash"`
+- **Nunca afirmações categóricas sem verificar** — "nunca existiu", "não há stash" só após rodar as ferramentas. Sem verificar = mentira
+- **Vibe coding proibido** — nunca correções em cadeia sem diagnóstico completo primeiro. Fluxo: ler todos os arquivos relevantes → causa raiz → propor → executar de uma vez
+- **Angular `computed()` só reage a signals lidos** — propriedades string/boolean/object comuns NÃO invalidam o cache. Pra `[(ngModel)]` sobre signal: `[ngModel]="x()"` + `(ngModelChange)="x.set($event)"`
+- **Toda query tenant-scoped precisa de `AND tenant_id = $X` explícito** — RLS é última camada, nunca única (regra detalhada em `## Arquitetura Multi-tenant`)
+
+Histórico de incidentes que originaram cada regra + protocolo de higienização: `docs/claude-memory/feedback_code_editing_rules.md`.
 
 ---
 
 ## Comportamentos NÃO Esperados (Red Flags)
 
-- Query em tabela com FORCE RLS **fora** de `withTenant` → resultado vazio ou erro de policy (não é bug do banco, é falta de contexto)
-- `trustProxy: false` com rate limiting atrás de load balancer → todos os clientes no mesmo bucket
-- Endpoint sem `preHandler` que aceita body com dados de outro tenant → vazamento cross-tenant
-- SQL com template literal (``` `SELECT ... WHERE id = ${req.params.id}` ```) → SQL Injection
-- Hash de senha hardcoded em migration → credencial exposta no git history
-- `rag_documents` com RLS → quebra o chatbot para todos os tenants (tabela é propositalmente global)
-- Email salvo com case misto + login com comparação exata → usuário não consegue autenticar mesmo com credenciais corretas
-- Worker lendo arquivo de `/tmp` → `ENOENT` em produção porque containers ECS não compartilham filesystem
-- `.github/workflows/deploy.yml` não commitado → push para main não dispara CI/CD, produção nunca atualiza
-- Assumir que código em produção é o mais recente sem verificar imagem da task definition → debug em código errado
-- Usar `force-new-deployment` sem registrar nova task definition → ECS reinicia com imagem antiga, mudanças nunca chegam a produção
-- Remover `ARG CACHEBUST` dos Dockerfiles → Docker reutiliza camadas antigas silenciosamente, bundle deployado não reflete o código do commit
-- Mergar branch para main sem aprovação explícita do usuário → viola o fluxo de desenvolvimento obrigatório do projeto
-- Afirmar que código "nunca existiu" ou "não há stash" sem verificar o histórico completo → mentira que causa perda de código
-- Fazer correções em cadeia sem diagnóstico completo (vibe coding) → regressões acumuladas e raiz do problema não resolvida
-- Propriedade comum (string/boolean/object) lida dentro de `computed()` Angular → computed nunca reavalia ao mudar o valor, UI mostra cache da primeira execução (bug 2026-04-23 na busca rápida)
-- Query em tabela tenant-scoped sem filtro explícito `AND tenant_id = $X` → se RLS falhar (BYPASSRLS, policy quebrada), vazamento cross-tenant silencioso (auditoria 2026-04-23)
-- `SET LOCAL app.tenant_id = '${tenant_id}'` com template literal → SQL Injection + potencial bypass de RLS via payload malicioso no tenant_id. Sempre `SELECT set_config('app.tenant_id', $1, true)` parametrizado
-- ACL master usando `role !== 'admin'` → todo admin de clínica tem role `'admin'`, portanto qualquer admin vê dados cross-tenant. Correto é `role !== 'master'` (bug 2026-04-23 em `feedback.js` e `error-log.js`)
-- UI sem indicador visível de tenant_name atual → usuário confunde contas e reporta falso vazamento; JWT antigo em localStorage após registro de novo tenant só piora a confusão
-- WebSocket conectando sem prefixo `/api` em prod → ALB só roteia `/api/*` pra API, resto vai pro nginx do Angular → 404 silencioso, nenhum evento real-time chega. Validar WS em prod (não só dev) quando adicionar feature real-time
-- Emitir evento WS via `fastify.notifyTenant()` direto na rota em vez de `fastify.redis.publish('canal:${tenant}')` → quebra em multi-instância ECS e foge do padrão estabelecido pelo `exam:done`
-- `angular.json` sem `fileReplacements` em `production` → `environment.production` fica `false` em runtime de prod → WS URL sem `/api/` + botões de debug (`Simular pagamento`) vazam pra produção (incidente 2026-04-24)
-- Código correto no repo mas prod não reflete o comportamento esperado → antes de refazer deploy, auditar o bundle minificado em `apps/web/dist/.../chunk-*.js` pra confirmar o que foi compilado (ex: `grep -oE 'production:![01]'`)
-- HTTP call em construtor de service injetado no root + UI que depende de `BehaviorSubject` populado por esse HTTP → flicker/sumiço no F5 porque o subject começa `null` a cada bootstrap. Persistir o shape mínimo da UI em `localStorage` e hidratar no construtor antes de fetch
-- Rasterizar PDF digital (com text layer) pra rodar OCR e redigir PII → ~100x mais lento que extrair texto + posições via `pdfjs-dist` e desenhar retângulos com `pd-lib`. Resultado vira imagem (perde text layer, infla tamanho). Sempre tentar text-layer primeiro; rasterização só vale a pena pra PDFs escaneados — e mesmo nesses, hoje a estratégia é modal LGPD com checkbox de responsabilidade do usuário em vez de OCR (incidente 2026-04-25 com V1.5 do anexo PDF)
-- Canvas exportando como `image/png` em fluxo de upload de exame anonimizado → 5–10x mais bytes que `image/jpeg` quality 0.85 sem ganho visível pra texto preto sobre fundo claro. JPEG q=0.85 é o default; PNG só pra screenshots de UI ou imagens com transparência crítica
-- Indexar `docs/superpowers/{plans,specs}/` no RAG do Copilot de Ajuda → vazamento de detalhes de implementação interna (rotas, tabelas, código) pro usuário final. Indexador em `apps/worker/src/rag/indexer-product-help.js` lista explicitamente apenas `docs/claude-memory/`, `docs/user-help/` e `CLAUDE.md` — qualquer mudança nessa lista exige revisão de segurança (incidente 2026-04-24)
-- Remover step `test` do `.github/workflows/deploy.yml` (ou seu `needs: test` no `deploy`) → CI deixa de bloquear regressões e qualquer falha de teste vai pra produção silenciosamente. Único filtro automatizado entre commit e prod
-- Adicionar arquivo de teste novo no path do `test:unit` (api) que precisa de Postgres → CI gate quebra na primeira execução. Testes DB-dependent ficam no `test` completo (rodam só localmente com docker compose ativo)
-- Deletar (ou silenciar com `xdescribe`) teste que quebrou por refatoração em vez de `describe.skip` + comentário `TODO(test-debt):` → dívida some do radar. Sempre marcar com TODO claro explicando causa e quando reabilitar
-- PR de feature em área crítica (auth, RLS, billing, PII, anonimização, ACL master) sem teste novo no mesmo PR → questionar antes de aprovar. Ver `feedback_testing_standards.md` pra lista do que **deve** ter teste
+Sintomas de armadilhas únicas que **não saltam aos olhos** ao ler as seções acima — quando bater algum, suspeitar primeiro:
+
+- **`rag_documents` com RLS** → quebra chatbot pra TODOS os tenants. Tabela é propositalmente global (sem `tenant_id`)
+- **Indexar `docs/superpowers/{plans,specs}/` no RAG do Copilot de Ajuda** → vazamento de detalhes internos pro usuário final. Indexador em `apps/worker/src/rag/indexer-product-help.js` lista APENAS `docs/claude-memory/`, `docs/user-help/`, `CLAUDE.md` — mudar essa lista exige revisão de segurança (incidente 2026-04-24)
+- **Worker lendo arquivo de `/tmp`** → `ENOENT` em prod. Containers ECS não compartilham filesystem — passar pelo S3
+- **Email salvo com case misto + login com comparação exata** → usuário existe no banco mas falha silenciosamente no login. Sempre `.toLowerCase().trim()` no INSERT/UPDATE e `LOWER(email)` no SELECT
+- **`force-new-deployment` sem registrar nova task definition** → ECS reinicia com imagem antiga, código novo nunca sobe
+- **Remover `ARG CACHEBUST` dos Dockerfiles** → Docker reutiliza camada antiga silenciosamente, bundle não reflete o commit
+- **Código correto no repo mas prod não reflete** → auditar bundle minificado ANTES de refazer deploy (`grep production:! chunk-*.js`); pode ser `fileReplacements` faltando, task def antiga, CACHEBUST sumido
+- **Rasterizar PDF digital pra OCR/redigir PII** → ~100x mais lento e perde text layer. Sempre `pdfjs+pdf-lib` primeiro; rasterização só pra escaneados (e hoje resolvido com modal LGPD)
+- **Canvas exportando como `image/png` em upload anonimizado** → 5–10x mais bytes sem ganho visível. Default JPEG q=0.85
+- **HTTP em construtor + UI dependente de `BehaviorSubject(null)`** → flicker/sumiço no F5. Persistir shape mínimo em `localStorage`, hidratar no construtor antes do fetch
+- **Sintoma de WS quebrado:** badge/notificação real-time com latência ~60s ou exigindo F5 → suspeitar de WS URL sem `/api/` ou `notifyTenant()` direto
+
+Outros red flags estão no corpo das seções correspondentes (Multi-tenant, Segurança da API, Infraestrutura de Produção, Regras de Edição, Testes).
 
 ---
 
