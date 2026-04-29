@@ -226,19 +226,18 @@ A UI deve sempre mostrar tenant_name + módulo em local visível (topbar). Confu
 
 ### WebSocket URL: incluir API_PREFIX em produção (OBRIGATÓRIO)
 
-A ALB de produção tem **apenas uma rule**: `/api/*` → API target. **Todo path fora de `/api/*` vai pro nginx do Angular**, que não tem `location` para WebSocket. URLs WS sem o prefixo falham silenciosamente com 404.
+ALB de prod tem **apenas a rule** `/api/*` → API target. URL WS sem prefix vai pro nginx do Angular (sem location WS) e cai em 404 silencioso.
 
-- **Frontend:** `WsService` e qualquer novo WebSocket **deve** prepender `environment.apiUrl` em produção:
+- **Frontend:** `WsService` e qualquer WS novo deve prepender `environment.apiUrl` em prod:
   ```ts
   const basePath = environment.production ? environment.apiUrl : '';
   const url = `${protocol}//${location.host}${basePath}/exams/subscribe?token=…`;
   ```
-- **Dev:** `proxy.conf.json` intercepta `/exams/subscribe` com `ws: true` antes do request sair do dev server — então mantém path raw sem prefix. Ao adicionar novos endpoints WS em dev, atualizar o proxy também.
-- **Produção:** o ALB só conhece `/api/*`. Qualquer endpoint WS novo deve estar sob `/api/` no URL do cliente.
-- **Eventos via Redis pub/sub, nunca direto:** rotas da API devem publicar em canais Redis (`fastify.redis.publish('chat:event:' + tenantId, JSON.stringify(...))`), não chamar `fastify.notifyTenant()` direto. O plugin `pubsub.js` já faz psubscribe e re-broadcast para conexões WS locais. Isso mantém forward-compat com multi-instância ECS.
-- **Red flag:** se badge/notificação em tempo real demorar ~60s ou exigir F5, suspeitar de WS URL errado. Log do nginx do web + log do API servem pra triar.
-- **Incidente 2026-04-24**: WS do chat entre tenants nunca conectou em prod por esse motivo — URL era `/exams/subscribe` sem prefix. Fix: commit `5c979165` / merge `48a64b36`. Review queue badge passava por polling fallback (60s) e ninguém percebeu.
-- **Retrospectiva 2026-04-24 (parte 2):** o fix `5c979165` sozinho **não resolveu** — o bundle em prod continuou com a URL errada porque `angular.json` estava sem `fileReplacements` (ver seção "Angular: build de produção" abaixo). Sem isso, `environment.production === false` em runtime e o ternário da URL caía no ramo dev. Fix completo: commit `7559b82e` (fileReplacements no angular.json).
+- **Dev:** `proxy.conf.json` com `ws: true` intercepta antes — manter path raw sem prefix. Novo endpoint WS em dev exige atualizar o proxy também.
+- **Eventos via Redis pub/sub, nunca direto:** rotas publicam em `fastify.redis.publish('chat:event:' + tenantId, ...)`. `notifyTenant()` direto quebra multi-instância ECS — `pubsub.js` já faz psubscribe + re-broadcast.
+- **Red flag:** badge/notificação real-time com latência ~60s ou exigindo F5 → suspeitar de WS URL errado.
+
+Detalhes do incidente 2026-04-24 + commits de referência: `docs/claude-memory/feedback_websocket_prod.md`.
 
 ### Angular: build de produção (OBRIGATÓRIO)
 
