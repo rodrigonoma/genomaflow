@@ -385,64 +385,22 @@ Arquitetura completa (schema, fan-out, frontend, endpoints, RLS detalhada): `doc
 
 ## Testes e CI gate (OBRIGATÓRIO)
 
-### CI gate
-
-- `.github/workflows/deploy.yml` tem job `test` que **precede o deploy** (`needs: test`). Falha de teste bloqueia build/push/update de ECS
-- Steps do gate:
-  - `apps/api` → `npm run test:unit` (subset declarado em `package.json` — sem DB)
+- **CI gate em `.github/workflows/deploy.yml`** roda job `test` antes do `deploy` (`needs: test`). Falha bloqueia build/push/update de ECS:
+  - `apps/api` → `npm run test:unit` (subset sem DB declarado em `package.json`)
   - `apps/worker` → `npm test` (suite completa)
   - `apps/web` → `npm test` (Jest + jsdom)
-- **Nunca remover esse gate** — único filtro automatizado entre commit e produção
+- **Nunca remover o gate** — único filtro automatizado entre commit e prod
+- **`test:unit` vs `test` na API:** `test` = completa DB-dependent (dev local). `test:unit` = lista explícita sem DB (CI). Teste novo sem DB → appendar em `test:unit`. Com DB → vai pro `test`, não bloqueia CI
+- **Áreas que DEVEM ter teste novo no mesmo PR:**
+  - Rota com auth/role gate → teste de ACL (modelo: `master-acl.test.js`)
+  - Flag de segurança LGPD/consent/suspended → strict equality (`=== true`)
+  - Pattern PII / validação → matriz match/noMatch
+  - Função de anonimização → allowlist de chaves do output (pega field novo esquecido)
+  - Whitelist de valor (gateway, agent_type, package) → válidos aceitos + inválidos rejeitados
+- **Skip honesto, nunca silencioso:** teste quebrado por refator → `describe.skip` + `// TODO(test-debt): <causa>. Reabilitar quando <condição>.`. Nunca deletar — dívida tem que ficar visível
+- **Padrão Fastify isolado** (route handler sem Postgres): `fastify.decorate('authenticate', stub)` + `fastify.decorate('pg', { query: jest.fn() })` + `app.inject()`. Stub deve jogar erro se chamado em request rejeitada — detecta regressão do gate
 
-### `test:unit` vs `test` na API
-
-- `test` = suite completa (DB-dependent, dev local com Postgres rodando)
-- `test:unit` = lista explícita de paths sem dependência de DB (CI gate)
-- Ao adicionar arquivo de teste novo: se NÃO precisa de DB → appendar em `test:unit`. Se precisa → vai pro `test` mas não bloqueia CI
-
-### Padrão de teste de validação Fastify isolado
-
-Pra testar route handler sem precisar de Postgres real:
-
-```js
-const app = Fastify({ logger: false });
-app.decorate('authenticate', async (request) => {
-  request.user = { role: request.headers['x-test-role'], tenant_id: '...', user_id: '...' };
-});
-app.decorate('pg', { query: jest.fn(async () => ({ rows: [{}] })) });
-await app.register(require('../../src/routes/x'));
-await app.inject({ method: 'POST', url: '/x', payload: {...} });
-```
-
-- Stub `pg.query` deve **jogar erro** se chamado em request rejeitada — detecta regressão silenciosa do gate
-- Modelos vivos: `tests/security/master-acl.test.js`, `tests/routes/billing-validation.test.js`, `tests/routes/inter-tenant-chat/messages-validation.test.js`
-
-### Áreas que **devem** ter teste no PR de feature
-
-- Rotas com auth/role gate → teste de ACL (ex: `master-acl.test.js`)
-- Flag de segurança nova (LGPD, consent, suspended) → teste de strict equality (`=== true`, não truthy)
-- Pattern PII / regra de validação → matriz match/noMatch
-- Função de anonimização / sanitização → allowlist de chaves do output (catch field-add esquecido)
-- Whitelist de valor (gateway, agent_type, package size) → todos válidos aceitos + alguns inválidos rejeitados
-
-### Skip honesto, nunca silencioso
-
-Quando teste legado quebra por refatoração e reescrever está fora de escopo:
-```js
-// TODO(test-debt): <causa>. Reabilitar quando <condição>.
-describe.skip(...)
-```
-Nunca deletar testes quebrados — visibilidade da dívida importa. Listar atual em `docs/claude-memory/feedback_testing_standards.md`.
-
-### Mocks de SDKs externos
-
-- `@anthropic-ai/sdk`: alguns módulos importam direto (`require('@anthropic-ai/sdk')`), outros via `.default`. Cobrir os dois shapes via `jest.mock`. Modelos: `pdf-text-redactor.test.js` (direto), agentes do worker (`.default`)
-- `openai`: similar — `jest.setup.js` no worker seta env vars dummy pra módulos que instanciam o cliente em top-level conseguirem carregar
-- Sempre mockar antes do `require` do módulo sob teste
-
-### ESM no Jest é teto baixo
-
-Módulos com `await import('...mjs')` (pdfjs-dist, deps em pipeline DICOM) precisam `NODE_OPTIONS=--experimental-vm-modules`. Por ora: skip com TODO. Habilitar global apenas se ficar bloqueador real
+Modelos vivos, mocks de SDKs externos, ESM/Jest, cobertura snapshot: `docs/claude-memory/feedback_testing_standards.md`.
 
 ## Regras de Edição de Código (OBRIGATÓRIO)
 
