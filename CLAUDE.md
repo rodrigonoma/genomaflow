@@ -387,66 +387,18 @@ Detalhes (schema, RLS NULLIF, master endpoints, tests): `docs/claude-memory/proj
 
 ## Comunicados (Master Broadcasts) — OBRIGATÓRIO
 
-Canal oficial "Administrador do GenomaFlow" → tenants. Master envia mensagem (texto markdown + anexos imagem/PDF) com segmentação (all / module / tenant). Tenants veem como conversa pinned no chat. Replies do tenant vão pra inbox master. Migrations 058–061.
+Canal "Administrador do GenomaFlow" → tenants reusando inter-tenant chat com `kind='master_broadcast'`. Migrations 058–061. Tenants veem conversa pinned + replies vão pra inbox master.
 
-### Arquitetura
+- **Fan-out usa MASTER_TENANT_ID, não target:** `withTenant(fastify.pg, MASTER_TENANT_ID, fn, { userId, channel: 'system' })`. `tm_insert` exige `sender_tenant_id = app.tenant_id` — context tem que ser master, NUNCA `withTenant(target.id)`
+- **Markdown render só pra mensagem do master:** checar `sender_tenant_id === MASTER_TENANT_ID` antes de invocar `MarkdownService`. Render em mensagem de tenant = XSS aberto
+- **Trigger compartilhado com tabela sem coluna `kind`** (ex: `tenant_invitations`) deve usar `to_jsonb(NEW) ->> 'kind'`, nunca `NEW.kind` direto — quebra com "record NEW has no field"
+- **RLS extendida com NULLIF** em `tc/tcr/tm/tma/mb/mba/mbd` pra master ler/escrever sem contexto OU em contexto master
+- **Replies do tenant em master_broadcast pulam suspension gate** (intencional — tenant suspenso precisa poder responder ao admin); conversas tenant↔tenant mantêm gate normal
+- **WS event:** `master_broadcast_received` via `fastify.redis.publish('chat:event:{tenant}', ...)`
+- **Rate limits:** `POST /master/broadcasts` 20/dia · `POST /master/conversations/:id/reply` 100/dia
+- **IAM S3:** task role precisa cobrir prefix `master-broadcasts/*` em `genomaflow-uploads-prod` (CDK em `infra/lib/ecs-stack.ts`)
 
-- **Reaproveita** `tenant_conversations` + `tenant_messages` com nova coluna `kind` (default `'tenant_to_tenant'` preserva existente). `kind='master_broadcast'` sinaliza canal master.
-- Master tenant `00000000-0000-0000-0000-000000000001` é sempre `tenant_a_id` (menor UUID — CHECK constraint do 047 satisfeito).
-- Tabelas master-only: `master_broadcasts` (canonical), `master_broadcast_attachments`, `master_broadcast_deliveries`.
-
-### Triggers e RLS — exceções por kind='master_broadcast'
-
-- `enforce_chat_same_module` skipa quando kind=master_broadcast (master é human, broadcasta pra vet também). Trigger usa `to_jsonb(NEW)->>'kind'` pra ser safe em `tenant_invitations` (que não tem coluna kind).
-- `mb/mba/mbd_master_only` policies aceitam: contexto vazio (rotas master sem set_config) **OU** contexto = master_tenant_id (fan-out via withTenant).
-- `tc/tcr/tm/tma_select` extendidas com NULLIF: master sem contexto vê todas as conversações/leituras/mensagens; tenant com contexto continua isolado.
-
-### Fan-out: `withTenant(MASTER_TENANT_ID, ..., { channel: 'system' })`
-
-- Master é sempre o sender em `tenant_messages` — `tm_insert` exige `sender_tenant_id = app.tenant_id`, então context tem que ser master.
-- Cada entrega: UPSERT conversation → INSERT message → INSERT attachments (s3_key compartilhado entre tenants) → INSERT delivery.
-- WS via `fastify.redis.publish('chat:event:{tenant}', ...)` com event `master_broadcast_received`.
-- Sync até ~500 tenants. Acima disso, mover pra BullMQ.
-
-### Flags que tenants e replies preservam (NÃO quebrar)
-
-- Reply do tenant em master_broadcast pula gate de suspensão (`isTenantSuspended`) — tenant suspenso ainda precisa poder responder ao admin pra resolver. **Replies em conversas tenant↔tenant mantêm o gate normal.**
-- `tenant_blocks` é checado só em `POST /invitations` (não em messages) — replies em master_broadcast nem entram nesse fluxo.
-- PII checks em anexos do tenant em reply continuam aplicando — só master skipa PII (envia marketing/feature notes, não dado clínico).
-
-### Frontend — tenant UI
-
-- Sidebar: conversas com `kind='master_broadcast'` são pinned no topo (ORDER BY (kind='master_broadcast') DESC), counterpart_name vira "Administrador GenomaFlow", ícone `admin_panel_settings` + `push_pin`. Sem botão "ver contato"/"reportar".
-- Thread: mensagens onde `sender_tenant_id = MASTER_TENANT_ID` rendem markdown via `MarkdownService` (marked + DOMPurify, whitelist conservadora p/strong/em/h2-h4/ul/ol/li/a/code/pre/blockquote/hr; links forçam target=_blank rel=noopener noreferrer). Mensagens normais ficam texto puro.
-- Cache de markdown render por msg.id pra performance.
-
-### Frontend — master UI (tab Comunicados)
-
-- Composer: segment selector (all/module/tenant), textarea markdown, attachment picker (max 5 × 10MB JPG/PNG/PDF)
-- Histórico: tabela com X / Y leram, contagem de anexos, drill-down modal
-- Inbox: lista de conversações com unread badge, indicador "↗ você" / "↙ tenant"
-- Conversation viewer: thread + reply box
-
-### Endpoints
-
-- `POST /master/broadcasts` — bodyLimit 80MB pra suportar 5 anexos × 10MB em base64. Rate limit 20/dia. Validação: body 1..2000 chars, segment kind/value whitelist, anexo kind+mime+size.
-- `GET /master/broadcasts?days=&limit=` — clamps 1..180 / 1..200, default 90/50. JOIN tcr pra read_count.
-- `GET /master/broadcasts/:id` — detalhe com deliveries + flag read_by_tenant + anexos.
-- `GET /master/conversations` — inbox de master_broadcast convs com unread_count.
-- `GET /master/conversations/:id/messages` — thread (read-only no master view).
-- `POST /master/conversations/:id/reply` — master responde direto (sem novo broadcast canonical). Rate limit 100/dia.
-
-### IAM S3
-
-Task role do ECS precisa de PutObject/GetObject/DeleteObject em `master-broadcasts/*` do bucket `genomaflow-uploads-prod`. Configurado em `infra/lib/ecs-stack.ts` junto com os outros prefixes (`uploads/*`, `inter-tenant-chat/*`). Sem isso, anexos retornam 500 silencioso na prod (incidente 2026-04-25).
-
-### Red flags
-
-- Esquecer de migrar `mb/mba/mbd_master_only` quando o fan-out usar `withTenant(MASTER_TENANT_ID)` → INSERT canonical bloqueado por RLS
-- Acessar `NEW.kind` direto numa função de trigger compartilhada com tabela sem essa coluna → PG erro "record NEW has no field". Usar `to_jsonb(NEW)->>'kind'`.
-- Master inserindo via `withTenant(target.id)` → `tm_insert` falha (sender ≠ app.tenant_id). Sempre `withTenant(MASTER_TENANT_ID)` no fan-out.
-- Master broadcast sem rate limit → spam acidental pra todos os tenants
-- Markdown render em mensagem que NÃO é do master → injeção XSS de tenants (sempre checar `sender_tenant_id === MASTER_TENANT_ID` antes de render)
+Arquitetura completa (schema, fan-out, frontend, endpoints, RLS detalhada): `docs/claude-memory/project_master_broadcasts.md`.
 
 ---
 
