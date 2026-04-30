@@ -498,6 +498,20 @@
       line-height: 1.5;
     }
 
+    /* Persona toggle reactivity */
+    body.persona--human #modulos .split-col:nth-child(2) { opacity: 0.5; }
+    body.persona--human #modulos .split-col:nth-child(1) {
+      border-color: var(--cross);
+    }
+    body.persona--veterinary #modulos .split-col:nth-child(1) { opacity: 0.5; }
+    body.persona--veterinary #modulos .split-col:nth-child(2) {
+      border-color: var(--cross);
+    }
+    body.persona--both #modulos .split-col { opacity: 1; }
+    #modulos .split-col {
+      transition: opacity 0.3s, border-color 0.3s;
+    }
+
     /* ── PRODUCT SHOWCASE ── */
     .showcase {
       padding: 80px 48px;
@@ -2050,33 +2064,54 @@
     <div class="section-label">Human modules</div>
     <div class="split-heading">HUMANO</div>
     <p class="split-sub">Suporte à decisão clínica para vias metabólicas, cardiovasculares e hematológicas complexas.</p>
-    <div class="module-list">
-      <div class="module-card">
-        <span class="module-code">CARDIO-3</span>
-        <div>
-          <div class="module-name">Risco Cardiovascular</div>
-          <div class="module-desc">Escores Framingham, SCORE2, ASCVD. Correlação com painel lipídico e glicêmico.</div>
-        </div>
-      </div>
+    <div class="module-list" style="display:grid;grid-template-columns:1fr 1fr;gap:0">
       <div class="module-card">
         <span class="module-code">METAB-1</span>
         <div>
           <div class="module-name">Vias Metabólicas</div>
-          <div class="module-desc">Resistência insulínica, dislipidemias hereditárias, distúrbios tireoidianos.</div>
+          <div class="module-desc">Glicemia, lipídios, função hepática e renal.</div>
         </div>
       </div>
       <div class="module-card">
-        <span class="module-code">HEMA-2</span>
+        <span class="module-code">CARDIO-1</span>
         <div>
-          <div class="module-name">Hematologia Profunda</div>
-          <div class="module-desc">Análise de coagulograma, hemograma e marcadores inflamatórios.</div>
+          <div class="module-name">Risco Cardiovascular</div>
+          <div class="module-desc">Perfil lipídico + correlações longitudinais.</div>
         </div>
       </div>
       <div class="module-card">
-        <span class="module-code">ONCO-4</span>
+        <span class="module-code">HEMA-1</span>
         <div>
-          <div class="module-name">Marcadores Oncológicos</div>
-          <div class="module-desc">PSA, CA-125, CEA com contexto longitudinal e alertas de delta.</div>
+          <div class="module-name">Hematologia</div>
+          <div class="module-desc">Hemograma, coagulograma e marcadores inflamatórios.</div>
+        </div>
+      </div>
+      <div class="module-card">
+        <span class="module-code">THERAP-1</span>
+        <div>
+          <div class="module-name">Terapêutica</div>
+          <div class="module-desc">Sugestão de conduta com base em diretrizes.</div>
+        </div>
+      </div>
+      <div class="module-card">
+        <span class="module-code">NUTRI-1</span>
+        <div>
+          <div class="module-name">Nutrição clínica</div>
+          <div class="module-desc">Plano nutricional ajustado ao perfil clínico.</div>
+        </div>
+      </div>
+      <div class="module-card">
+        <span class="module-code">CORREL-1</span>
+        <div>
+          <div class="module-name">Correlação Multi-marcador</div>
+          <div class="module-desc">Detecta relações ocultas entre marcadores.</div>
+        </div>
+      </div>
+      <div class="module-card" style="grid-column:span 2">
+        <span class="module-code">IMG-1</span>
+        <div>
+          <div class="module-name">Imagens médicas</div>
+          <div class="module-desc">RX, ECG, ultrassom, ressonância e DICOM com bounding boxes.</div>
         </div>
       </div>
     </div>
@@ -2085,33 +2120,47 @@
     <div class="section-label">Veterinary modules</div>
     <div class="split-heading">VETERINÁRIO</div>
     <p class="split-sub">Pipelines de IA específicos por espécie para nutrição, terapêutica e automação diagnóstica.</p>
-    <div class="module-list">
+    <div class="module-list" style="display:grid;grid-template-columns:1fr 1fr;gap:0">
       <div class="module-card">
-        <span class="module-code">CANIS-2</span>
+        <span class="module-code">SMALL-1</span>
         <div>
-          <div class="module-name">Canídeos</div>
-          <div class="module-desc">Nefrologia, hepatologia e nutrição clínica para caninos de todos os portes.</div>
-        </div>
-      </div>
-      <div class="module-card">
-        <span class="module-code">FELIS-3</span>
-        <div>
-          <div class="module-name">Felinos</div>
-          <div class="module-desc">Hipertireoidismo, CKD felino, marcadores renais ajustados por faixa etária.</div>
+          <div class="module-name">Pequenos animais</div>
+          <div class="module-desc">Canídeos e felinos — perfil clínico por porte.</div>
         </div>
       </div>
       <div class="module-card">
         <span class="module-code">EQUUS-1</span>
         <div>
           <div class="module-name">Equinos</div>
-          <div class="module-desc">Performance atlética, ortopedia e marcadores de esforço.</div>
+          <div class="module-desc">Performance, ortopedia e marcadores de esforço.</div>
         </div>
       </div>
       <div class="module-card">
-        <span class="module-code">EXOTIC-1</span>
+        <span class="module-code">BOVINE-1</span>
         <div>
-          <div class="module-name">Exóticos</div>
-          <div class="module-desc">Pipelines específicos para aves, répteis e pequenos mamíferos.</div>
+          <div class="module-name">Bovinos</div>
+          <div class="module-desc">Saúde do rebanho, reprodução e nutrição.</div>
+        </div>
+      </div>
+      <div class="module-card">
+        <span class="module-code">THERAP-1</span>
+        <div>
+          <div class="module-name">Terapêutica veterinária</div>
+          <div class="module-desc">Conduta por espécie, peso e contexto clínico.</div>
+        </div>
+      </div>
+      <div class="module-card">
+        <span class="module-code">NUTRI-1</span>
+        <div>
+          <div class="module-name">Nutrição animal</div>
+          <div class="module-desc">Plano por espécie, peso e fase de vida.</div>
+        </div>
+      </div>
+      <div class="module-card">
+        <span class="module-code">IMG-1</span>
+        <div>
+          <div class="module-name">Imagens veterinárias</div>
+          <div class="module-desc">RX, US, ECG e modalidades adaptadas por espécie.</div>
         </div>
       </div>
     </div>
