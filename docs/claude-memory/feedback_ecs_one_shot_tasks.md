@@ -25,7 +25,12 @@ const myJobTask = new ecs.FargateTaskDefinition(this, 'MyJobTask', {
 myJobTask.addContainer('myjob', {
   // Usar apiRepo pra jobs de DB (tem migrations); workerRepo pra jobs que precisam de docs/
   image:       ecs.ContainerImage.fromEcrRepository(apiRepo, 'latest'),
-  environment: { NODE_ENV: 'production' },
+  // ⚠️ SEMPRE spreadar backendEnv. Carrega NODE_TLS_REJECT_UNAUTHORIZED=0
+  // que é necessário pra pg aceitar a cert chain do RDS via ?sslmode=require.
+  // Sem isso, o job falha com SELF_SIGNED_CERT_IN_CHAIN ao conectar no banco
+  // (incidente 2026-04-30: migrate/reindex tinham só { NODE_ENV: 'production' }).
+  // Pra adicionar env vars específicas do job: { ...backendEnv, MINHA_VAR: 'x' }
+  environment: backendEnv,
   secrets:     backendSecrets,
   command: [
     'sh', '-c',
