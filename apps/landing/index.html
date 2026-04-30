@@ -498,18 +498,30 @@
       line-height: 1.5;
     }
 
-    /* Persona toggle reactivity */
-    body.persona--human #modulos .split-col:nth-child(2) { opacity: 0.5; }
-    body.persona--human #modulos .split-col:nth-child(1) {
-      border-color: var(--cross);
+    /* ── PERSONA FILTER ──
+       Default (persona--both): mostra .persona-*-only (ambos lados visíveis,
+         ex: módulos Human + Vet juntos), esconde .persona-*-exclusive
+       persona--human: esconde elementos com .persona-vet-only e .persona-vet-exclusive
+       persona--veterinary: esconde .persona-human-only e .persona-human-exclusive
+       Use .persona-*-exclusive pra mocks/exemplos onde mostrar ambos
+       em 'both' mode polui visualmente (ex: dois risk cards lado a lado). */
+    body.persona--human .persona-vet-only,
+    body.persona--human .persona-vet-exclusive { display: none !important; }
+    body.persona--veterinary .persona-human-only,
+    body.persona--veterinary .persona-human-exclusive { display: none !important; }
+    body.persona--both .persona-vet-exclusive,
+    body.persona--both .persona-human-exclusive { display: none !important; }
+
+    /* Módulos: quando uma persona é selecionada, a coluna ativa expande pra full width
+       (a outra coluna some via persona-*-only acima) */
+    #modulos.split { transition: grid-template-columns 0.3s; }
+    body.persona--human #modulos.split,
+    body.persona--veterinary #modulos.split {
+      grid-template-columns: 1fr;
     }
-    body.persona--veterinary #modulos .split-col:nth-child(1) { opacity: 0.5; }
-    body.persona--veterinary #modulos .split-col:nth-child(2) {
-      border-color: var(--cross);
-    }
-    body.persona--both #modulos .split-col { opacity: 1; }
-    #modulos .split-col {
-      transition: opacity 0.3s, border-color 0.3s;
+    body.persona--human #modulos .split-col:first-child,
+    body.persona--veterinary #modulos .split-col {
+      border-right: none;
     }
 
     /* ── PRODUCT SHOWCASE ── */
@@ -2150,7 +2162,7 @@
     </div>
     <p class="hero-sub">
       Da agenda à análise de exames, do laudo à prescrição, <em class="hero-italic">uma só plataforma</em>. Inteligência artificial assistiva pra suas decisões clínicas — auditável, multi-tenant e em conformidade com a LGPD.
-      <br/><em class="hero-italic">Para humanos e animais.</em>
+      <br/><em class="hero-italic" data-human="Para clínicas médicas." data-vet="Para clínicas veterinárias.">Para humanos e animais.</em>
     </p>
     <div class="hero-actions">
       <a class="btn-primary" data-cta="/onboarding">Criar conta gratuita →</a>
@@ -2300,7 +2312,7 @@
 
 <!-- MÓDULOS -->
 <section id="modulos" class="split">
-  <div class="split-col">
+  <div class="split-col persona-human-only">
     <div class="section-label">Human modules</div>
     <div class="split-heading">HUMANO</div>
     <p class="split-sub">Suporte à decisão clínica para vias metabólicas, cardiovasculares e hematológicas complexas.</p>
@@ -2356,7 +2368,7 @@
       </div>
     </div>
   </div>
-  <div class="split-col">
+  <div class="split-col persona-vet-only">
     <div class="section-label">Veterinary modules</div>
     <div class="split-heading">VETERINÁRIO</div>
     <p class="split-sub">Pipelines de IA específicos por espécie para nutrição, terapêutica e automação diagnóstica.</p>
@@ -2414,8 +2426,8 @@
     <div class="showcase-heading">Insight clínico<br/>auditável.</div>
   </div>
   <div class="showcase-body">
-    <!-- Risk card -->
-    <div class="risk-card">
+    <!-- Risk card — versão Humano -->
+    <div class="risk-card persona-human-only">
       <div class="risk-head">
         <span class="risk-tag">CARDIO-1 · Risco Cardiovascular</span>
         <span class="risk-live"><span class="dot-red"></span> análise ativa</span>
@@ -2435,6 +2447,30 @@
       <div class="risk-source">
         <span>fonte: laudo #GF-84213</span>
         <span>confiança: 0.947</span>
+      </div>
+    </div>
+
+    <!-- Risk card — versão Vet (só aparece quando persona=veterinary) -->
+    <div class="risk-card persona-vet-exclusive">
+      <div class="risk-head">
+        <span class="risk-tag">SMALL-1 · Função Renal Felino</span>
+        <span class="risk-live"><span class="dot-red"></span> análise ativa</span>
+      </div>
+      <div class="risk-num">CKD-2</div>
+      <div class="risk-sub">estágio IRIS · função renal felina</div>
+      <div class="risk-bar">
+        <div class="risk-bar-marker" style="left:48%"></div>
+      </div>
+      <div class="risk-scale">
+        <span>I</span><span>II</span><span>III</span>
+      </div>
+      <div class="risk-insight">
+        <div class="risk-insight-title">Insight clínico</div>
+        <div class="risk-insight-body">Creatinina 2.4 + SDMA 18 + densidade urinária 1.020. Compatível com IRIS estágio 2. Recomendação: dieta renal + monitorar fósforo trimestral. Reavaliar em 30 dias.</div>
+      </div>
+      <div class="risk-source">
+        <span>fonte: laudo #GF-87901</span>
+        <span>confiança: 0.928</span>
       </div>
     </div>
 
@@ -2622,8 +2658,9 @@
       <div class="feat-num">02</div>
       <div class="feat-tag">Multi-agentes especializados</div>
       <h3 class="feat-heading">Um agente<br/>para cada<br/><span class="feat-highlight">especialidade.</span></h3>
-<p class="feat-body">Cada patologia tem seu próprio agente de IA — CARDIO-1, METAB-1, HEMA-1, THERAP-1, NUTRI-1 para humanos; SMALL-1, EQUUS-1, BOVINE-1 para veterinários. Rodam em paralelo. Sem configuração manual. <strong>Cada inferência expõe fonte, confiança e cadeia de raciocínio.</strong></p>
-<div class="feat-agent-list">
+<p class="feat-body">Cada patologia tem seu próprio agente de IA. Rodam em paralelo. Sem configuração manual. <strong>Cada inferência expõe fonte, confiança e cadeia de raciocínio.</strong></p>
+<!-- Agentes Humano (default + persona=human) -->
+<div class="feat-agent-list persona-human-only">
   <div class="feat-agent">
     <span class="feat-agent-code">CARDIO-1</span>
     <span class="feat-agent-desc">Risco cardiovascular e correlações lipídicas</span>
@@ -2633,12 +2670,31 @@
     <span class="feat-agent-desc">Vias metabólicas, glicemia, função hepática/renal</span>
   </div>
   <div class="feat-agent">
+    <span class="feat-agent-code">HEMA-1</span>
+    <span class="feat-agent-desc">Hematologia, coagulograma, marcadores inflamatórios</span>
+  </div>
+  <div class="feat-agent">
+    <span class="feat-agent-code">+4</span>
+    <span class="feat-agent-desc">terapêutica, nutrição, correlação, imagem</span>
+  </div>
+</div>
+<!-- Agentes Vet (apenas persona=veterinary) -->
+<div class="feat-agent-list persona-vet-exclusive">
+  <div class="feat-agent">
     <span class="feat-agent-code">SMALL-1</span>
     <span class="feat-agent-desc">Pequenos animais — canídeos e felinos</span>
   </div>
   <div class="feat-agent">
-    <span class="feat-agent-code">+5</span>
-    <span class="feat-agent-desc">outros agentes especializados</span>
+    <span class="feat-agent-code">EQUUS-1</span>
+    <span class="feat-agent-desc">Equinos — performance, ortopedia, marcadores de esforço</span>
+  </div>
+  <div class="feat-agent">
+    <span class="feat-agent-code">BOVINE-1</span>
+    <span class="feat-agent-desc">Bovinos — saúde do rebanho, reprodução, nutrição</span>
+  </div>
+  <div class="feat-agent">
+    <span class="feat-agent-code">+3</span>
+    <span class="feat-agent-desc">terapêutica, nutrição, imagem veterinária</span>
   </div>
 </div>
 <div class="feat-economy">
@@ -2958,7 +3014,8 @@
         <div class="monitor-frame">
           <div class="monitor-bezel">
             <div class="monitor-screen">
-              <div class="op-mock">
+              <!-- Versão Humano (default + persona=human) -->
+              <div class="op-mock persona-human-only">
                 <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3);letter-spacing:0.1em">
                   <span>RECEITUÁRIO · PR-A8F2C1</span>
                   <span style="color:var(--cross)">● TEMPLATE: PADRÃO</span>
@@ -2973,6 +3030,25 @@
                   <div style="margin-top:auto;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-3);letter-spacing:0.1em;display:flex;justify-content:space-between">
                     <span>SUGERIDO POR THERAP-1</span>
                     <span style="color:var(--cross)">REVISADO PELO MÉDICO ✓</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Versão Vet (apenas persona=veterinary) -->
+              <div class="op-mock persona-vet-exclusive">
+                <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3);letter-spacing:0.1em">
+                  <span>RECEITUÁRIO · PR-B3E1F9</span>
+                  <span style="color:var(--cross)">● TEMPLATE: PEQUENO PORTE</span>
+                </div>
+                <div style="background:#0a0a0e;border:1px solid var(--line);border-radius:3px;padding:18px;flex:1;display:flex;flex-direction:column;gap:10px">
+                  <div style="font-family:'Fraunces',serif;font-style:italic;font-size:14px;color:var(--text)">Paciente: Rex · Labrador, 8 anos · 32 kg</div>
+                  <div style="border-top:1px dashed var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--text-2)">
+                    <div>1. <strong style="color:var(--text)">Benazepril 5mg</strong> — 1cp/dia, jejum, contínuo</div>
+                    <div>2. <strong style="color:var(--text)">Dieta renal úmida</strong> — 240g/dia, 2 refeições</div>
+                    <div>3. <strong style="color:var(--text)">Ômega-3 EPA/DHA</strong> — 1ml/dia com a comida</div>
+                  </div>
+                  <div style="margin-top:auto;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-3);letter-spacing:0.1em;display:flex;justify-content:space-between">
+                    <span>SUGERIDO POR THERAP-1 (vet)</span>
+                    <span style="color:var(--cross)">REVISADO PELO VETERINÁRIO ✓</span>
                   </div>
                 </div>
               </div>
@@ -3002,7 +3078,8 @@
         <div class="monitor-frame">
           <div class="monitor-bezel">
             <div class="monitor-screen">
-              <div class="op-mock">
+              <!-- Versão Humano (default + persona=human) -->
+              <div class="op-mock persona-human-only">
                 <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3);letter-spacing:0.1em">
                   <span>CLÍNICA SÃO RAFAEL ↔ DRA. PAULA</span>
                   <span style="color:var(--ok)">● ONLINE</span>
@@ -3014,6 +3091,21 @@
                     <div>RX-tórax-anonimizado.pdf · 1.2MB<br/><span style="font-size:10px;color:var(--text-3)">2 regiões redigidas</span></div>
                   </div>
                   <div class="op-mock-msg">Recebido. Vou revisar e respondo até amanhã. 👍</div>
+                </div>
+              </div>
+              <!-- Versão Vet (apenas persona=veterinary) -->
+              <div class="op-mock persona-vet-exclusive">
+                <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3);letter-spacing:0.1em">
+                  <span>VET PETLIFE ↔ DR. RICARDO</span>
+                  <span style="color:var(--ok)">● ONLINE</span>
+                </div>
+                <div class="op-mock-chat">
+                  <div class="op-mock-msg">Pode dar uma olhada no hemograma da Mel (felina, 12 anos)? Suspeita de CKD.</div>
+                  <div class="op-mock-msg is-mine has-attachment">
+                    <div class="op-mock-attachment"></div>
+                    <div>hemograma-mel-anonimizado.pdf · 0.9MB<br/><span style="font-size:10px;color:var(--text-3)">3 regiões redigidas</span></div>
+                  </div>
+                  <div class="op-mock-msg">Confirmado. Estágio IRIS-2. Mando conduta hoje. 👍</div>
                 </div>
               </div>
             </div>
@@ -3301,7 +3393,7 @@
       <div class="faq-a">Pra PDFs com text layer: extraímos texto e posições com pdfjs-dist, identificamos PII (nome, CPF, telefone, microchip, data) com regex + IA, e desenhamos retângulos pretos sobre as posições com pdf-lib — tudo client-side antes de fazer upload. Pra PDFs escaneados ou imagens: canvas editor com Tesseract+IA detecta texto sensível pra você confirmar redação manual. Anexo só sai com PII redigida.</div>
     </div>
 
-    <div class="faq-item">
+    <div class="faq-item persona-vet-only">
       <button class="faq-q" onclick="toggleFaq(this)">
         Atendem clínicas veterinárias de pequeno porte?
         <span class="faq-icon">+</span>
@@ -3440,11 +3532,14 @@
       btn.classList.toggle('is-active', btn.dataset.setPersona === persona);
     });
 
-    // Update terminology via data-human/data-vet attributes
+    // Update terminology via data-human/data-vet attributes.
+    // data-both opcional: texto explícito pra modo 'both' (default).
+    // Sem data-both, modo 'both' preserva o textContent original.
     document.querySelectorAll('[data-human][data-vet]').forEach(el => {
+      if (!el.dataset.original) el.dataset.original = el.textContent;
       if (persona === 'human') el.textContent = el.dataset.human;
       else if (persona === 'veterinary') el.textContent = el.dataset.vet;
-      else el.textContent = el.dataset.human + ' · ' + el.dataset.vet;
+      else el.textContent = el.dataset.both || el.dataset.original;
     });
   };
 
