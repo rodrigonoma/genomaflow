@@ -3197,6 +3197,9 @@
       <div class="pricing-price">R$ 199</div>
       <div class="pricing-period">/mês · acesso completo</div>
       <div class="pricing-desc">Todos os módulos (humano + veterinário). Sem tier forçado — escala por créditos.</div>
+      <div style="margin-bottom:18px;padding-top:18px;border-top:1px dashed var(--line-soft);font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-2);letter-spacing:0.05em;line-height:1.6">
+        Inclui agenda, copilot por voz, chat entre clínicas, dashboard e compliance — tudo no plano base. Créditos pagam apenas execução de agentes IA.
+      </div>
       <a class="pricing-cta" data-cta="/onboarding">Assinar agora</a>
     </div>
 
@@ -3247,15 +3250,15 @@
         Os laudos gerados substituem o diagnóstico médico?
         <span class="faq-icon">+</span>
       </button>
-      <div class="faq-a">Não. GenomaFlow é uma ferramenta de suporte à decisão clínica assistiva. Todo insight é auxiliar ao clínico responsável, nunca substituto do diagnóstico primário. Nossa camada de IA é auditável e rastreável para cada inferência.</div>
+      <div class="faq-a">Não. GenomaFlow é uma ferramenta de suporte à decisão clínica assistiva. Todo insight é auxiliar ao clínico responsável, nunca substituto do diagnóstico primário. Cada inferência expõe fonte, confiança e cadeia de raciocínio — auditável por design.</div>
     </div>
 
     <div class="faq-item">
       <button class="faq-q" onclick="toggleFaq(this)">
-        Qual o tempo médio de integração?
+        Quanto tempo leva pra começar a usar?
         <span class="faq-icon">+</span>
       </button>
-      <div class="faq-a">Clínicas padrão com File Drop: 15 minutos. Integrações HL7/FHIR com sistemas legados (MV, Tasy, Philips): de 3 a 10 dias, com onboarding técnico dedicado.</div>
+      <div class="faq-a">Cadastro em 5 minutos com aceite dos documentos legais (LGPD) e declaração de CRM/CRMV. Primeiro exame analisado em 1 minuto após upload. Sem instalação, sem integração com sistema legado — você sobe o PDF e a IA analisa.</div>
     </div>
 
     <div class="faq-item">
@@ -3263,23 +3266,47 @@
         Como funciona a cobrança por crédito?
         <span class="faq-icon">+</span>
       </button>
-      <div class="faq-a">Cada agente de IA executado consome 1 crédito. Um laudo típico humano consome 2–4 créditos (extração, correlação, RAG, síntese). Laudos veterinários consomem 2–3. Você vê o consumo em tempo real no console.</div>
+      <div class="faq-a">Cada agente de IA executado consome 1 crédito. Um laudo típico humano consome 2–4 créditos (extração, correlação, RAG, síntese). Laudos veterinários consomem 2–3. Imagens consomem 1–2. Você vê o consumo em tempo real no console. Agenda, voz, chat, dashboard, prescrições — todos inclusos no plano base, sem cobrar crédito.</div>
     </div>
 
     <div class="faq-item">
       <button class="faq-q" onclick="toggleFaq(this)">
-        Os dados dos pacientes são usados para treinamento?
+        Os dados dos pacientes são usados pra treinamento de modelos?
         <span class="faq-icon">+</span>
       </button>
-      <div class="faq-a">Nunca. Contratualmente e tecnicamente. Os modelos não são fine-tuned com dados de tenants. Cada clínica opera em isolamento lógico com chaves de criptografia próprias.</div>
+      <div class="faq-a">Nunca. Contratualmente e tecnicamente. Os modelos não são fine-tuned com dados de clínicas. Cada tenant opera em isolamento lógico (RLS multi-tenant) e os documentos clínicos são processados sem retenção pra treinamento.</div>
     </div>
 
     <div class="faq-item">
       <button class="faq-q" onclick="toggleFaq(this)">
-        Vocês atendem clínicas veterinárias de pequeno porte?
+        A agenda e o copilot por voz são pagos à parte?
         <span class="faq-icon">+</span>
       </button>
-      <div class="faq-a">Sim. O plano base R$ 199/mês é dimensionado para clínicas solo. Escalamos automaticamente via créditos conforme o volume — sem tier forçado.</div>
+      <div class="faq-a">Não. Agenda nativa, copilot por voz, chat entre clínicas, dashboard, prescrições e compliance — tudo incluso no plano base de R$ 199/mês. Créditos pagam apenas a execução dos agentes de IA.</div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-q" onclick="toggleFaq(this)">
+        O copilot por voz funciona em qualquer navegador?
+        <span class="faq-icon">+</span>
+      </button>
+      <div class="faq-a">Funciona em Chrome, Edge e Safari (incluindo mobile). Firefox não tem Web Speech API nativa, então o botão de mic fica oculto pra usuários nesse navegador (sem fallback). Áudio nunca sai do navegador — só o texto transcrito vai pro servidor.</div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-q" onclick="toggleFaq(this)">
+        Como funciona a anonimização de PII em anexos?
+        <span class="faq-icon">+</span>
+      </button>
+      <div class="faq-a">Pra PDFs com text layer: extraímos texto e posições com pdfjs-dist, identificamos PII (nome, CPF, telefone, microchip, data) com regex + IA, e desenhamos retângulos pretos sobre as posições com pdf-lib — tudo client-side antes de fazer upload. Pra PDFs escaneados ou imagens: canvas editor com Tesseract+IA detecta texto sensível pra você confirmar redação manual. Anexo só sai com PII redigida.</div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-q" onclick="toggleFaq(this)">
+        Atendem clínicas veterinárias de pequeno porte?
+        <span class="faq-icon">+</span>
+      </button>
+      <div class="faq-a">Sim. O plano base R$ 199/mês é dimensionado pra clínicas solo. Escalamos automaticamente via créditos conforme o volume — sem tier forçado. Módulo veterinário cobre pequenos animais, equinos e bovinos com agentes específicos por espécie.</div>
     </div>
 
   </div>
@@ -3371,22 +3398,25 @@
 
 <!-- FOOTER CTA -->
 <section class="footer-cta">
-  <div class="section-label">Pronto para começar?</div>
-  <div class="footer-cta-heading">REDUZA SEU<br/>TEMPO DE LAUDO<br/><span style="color:var(--cross)">EM 80%.</span></div>
-  <p class="footer-cta-sub">15 minutos para integrar. Escolha o módulo e comece a usar.</p>
-  <a class="btn-primary" style="font-size:14px;padding:14px 32px" data-cta="/onboarding">Criar conta →</a>
+  <div class="section-label">Pronto pra começar?</div>
+  <div class="footer-cta-heading">LIBERE HORAS<br/>DA SUA<br/><span style="color:var(--cross)">ROTINA CLÍNICA.</span></div>
+  <p class="footer-cta-sub">5 minutos pra começar. Comece pelo módulo do seu jeito de trabalhar.</p>
+  <div style="display:flex;gap:24px;align-items:center">
+    <a class="btn-primary" style="font-size:14px;padding:14px 32px" data-cta="/onboarding">Criar conta →</a>
+    <a class="hero-link-ghost" data-cta="/login">Já sou cliente · Entrar</a>
+  </div>
 </section>
 
 <!-- FOOTER -->
 <footer class="footer">
   <div class="footer-brand">
-    © 2026 GenomaFlow · Inteligência Clínica Assistiva · v2.4.0
+    © 2026 GenomaFlow · Inteligência Clínica Assistiva
   </div>
   <ul class="footer-links">
-    <li><a href="#">LGPD</a></li>
-    <li><a href="#">ANVISA</a></li>
-    <li><a href="#">Documentação</a></li>
-    <li><a href="#">Status</a></li>
+    <li><a href="#compliance">LGPD</a></li>
+    <li><a href="#compliance">Compliance</a></li>
+    <li><a href="#faq">FAQ</a></li>
+    <li><a href="#precos">Planos</a></li>
   </ul>
 </footer>
 
