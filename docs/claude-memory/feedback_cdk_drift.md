@@ -15,6 +15,8 @@ Outros lugares perdidos no mesmo deploy:
 
 Resolução: 5 minutos de produção quebrada + cdk deploy de fix com `?sslmode=require` no command de api/worker/migrate/reindex.
 
+**Incidente 2026-04-30 (relacionado):** o fix de `?sslmode=require` quebrou em outra direção — pg em Node 20 trata `require` como `verify-full` e exige validação de cert chain do RDS. Funcionou pra api/worker porque eles spreadam `backendEnv` que tem `NODE_TLS_REJECT_UNAUTHORIZED=0` (TLS bypass). MAS as task definitions one-off (migrate, reindex-help) tinham `environment: { NODE_ENV: 'production' }` hardcoded sem o spread → falhavam com `SELF_SIGNED_CERT_IN_CHAIN`. 3 deploys consecutivos do GitHub Actions falharam no step "Run migrations" antes de descobrirem essa assimetria. Fix: spreadar `backendEnv` em todas as one-off tasks. Detalhes em `feedback_ecs_one_shot_tasks.md`.
+
 **How to apply:**
 1. **Antes de qualquer cdk deploy**, comparar task def atual em prod (`aws ecs describe-task-definition`) com o que está no código (`infra/lib/ecs-stack.ts`). Diferença = drift = vai sumir.
 2. Se houver drift: trazer pro código ANTES do cdk deploy. Não rodar deploy esperando que CFN preserve.

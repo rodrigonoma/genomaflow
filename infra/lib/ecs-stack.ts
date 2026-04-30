@@ -237,7 +237,10 @@ export class EcsStack extends cdk.Stack {
 
     migrateTask.addContainer('migrate', {
       image:       ecs.ContainerImage.fromEcrRepository(apiRepo, 'latest'),
-      environment: { NODE_ENV: 'production' },
+      // backendEnv inclui NODE_TLS_REJECT_UNAUTHORIZED=0, necessário pra
+      // pg aceitar a cadeia de cert do RDS via ?sslmode=require sem CA bundle.
+      // Sem isso, o Node falha com SELF_SIGNED_CERT_IN_CHAIN (incidente 2026-04-30).
+      environment: backendEnv,
       secrets:     backendSecrets,
       command: [
         'sh', '-c',
@@ -259,9 +262,11 @@ export class EcsStack extends cdk.Stack {
 
     reindexHelpTask.addContainer('reindex', {
       image:       ecs.ContainerImage.fromEcrRepository(workerRepo, 'latest'),
+      // backendEnv inclui NODE_TLS_REJECT_UNAUTHORIZED=0 (mesmo motivo do migrate).
+      // REPO_ROOT específico pra esta task (docs/ + CLAUDE.md baked no /app pelo Dockerfile).
       environment: {
-        NODE_ENV:  'production',
-        REPO_ROOT: '/app', // dentro do container, docs/ e CLAUDE.md vivem em /app (baked no Dockerfile)
+        ...backendEnv,
+        REPO_ROOT: '/app',
       },
       secrets:     backendSecrets,
       command: [
