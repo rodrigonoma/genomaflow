@@ -3105,100 +3105,81 @@
   <div class="section-label" style="margin-bottom:40px">Impacto clínico mensurável</div>
   <div class="impact-kpis">
     <div class="impact-kpi">
-      <div class="kpi-val">−83%</div>
-      <div class="kpi-label">tempo de laudo complexo</div>
-      <div class="kpi-source">de 40min → 6min / caso</div>
+      <div class="kpi-val">~70%</div>
+      <div class="kpi-label">redução estimada do tempo<br/>de leitura por exame complexo</div>
+      <div class="kpi-source">estimado · revisão pós-IA</div>
     </div>
     <div class="impact-kpi">
-      <div class="kpi-val">+12</div>
-      <div class="kpi-label">atendimentos extras por semana</div>
-      <div class="kpi-source">média por clínico em uso ativo</div>
+      <div class="kpi-val">5</div>
+      <div class="kpi-label">agentes IA paralelos<br/>analisando o mesmo exame</div>
+      <div class="kpi-source">arquitetura multi-agente</div>
     </div>
     <div class="impact-kpi">
-      <div class="kpi-val">6.6h</div>
-      <div class="kpi-label">devolvidas ao clínico por semana</div>
-      <div class="kpi-source">tempo liberado para atendimento</div>
+      <div class="kpi-val">&lt; 60s</div>
+      <div class="kpi-label">PDF → insight estruturado<br/>com fontes citadas</div>
+      <div class="kpi-source">latência observada</div>
     </div>
     <div class="impact-kpi">
-      <div class="kpi-val">14×</div>
-      <div class="kpi-label">ROI médio mensal</div>
-      <div class="kpi-source">receita extra / custo GenomaFlow</div>
+      <div class="kpi-val">99%</div>
+      <div class="kpi-label">disponibilidade alvo<br/>(SLO operacional)</div>
+      <div class="kpi-source">monitoria 2025</div>
     </div>
   </div>
-
-  <div class="testimonials" style="display:none">
-    <div class="testimonial">
-      <div class="testimonial-quote">Reduzimos o tempo de laudo complexo de 40 minutos para 6. O diferencial é a rastreabilidade — eu vejo de onde veio cada inferência.</div>
-      <div class="testimonial-author">Dra. Camila Velasco</div>
-      <div class="testimonial-role">Cardiologista, Grupo Fleury</div>
-    </div>
-    <div class="testimonial">
-      <div class="testimonial-quote">Na rotina veterinária de pequenos animais, cortar 30 minutos por caso significa atender mais 15 pacientes por semana. O ROI é óbvio.</div>
-      <div class="testimonial-author">Dr. Henrique Sato</div>
-      <div class="testimonial-role">Diretor Técnico, Hospital Vet Pet+</div>
-    </div>
-    <div class="testimonial">
-      <div class="testimonial-quote">A integração HL7 com o Tasy levou 4 dias. É raro ver isso em saúde. O time de engenharia sabe o que faz.</div>
-      <div class="testimonial-author">Ricardo Moreira</div>
-      <div class="testimonial-role">CTO, Rede Clínica União</div>
-    </div>
-  </div>
+  <p style="font-size:11px;color:var(--text-3);margin-top:24px;line-height:1.5;font-family:'JetBrains Mono',monospace;letter-spacing:0.03em">
+    Estimativas baseadas em rotinas clínicas típicas; resultados variam por especialidade e volume.
+  </p>
 </section>
 
 <!-- CALCULATOR -->
 <section class="calc">
-  <div class="section-label">Calculadora de ROI</div>
-  <div class="calc-heading">Quanto você<br/>vai recuperar?</div>
-  <p class="calc-sub">Ajuste os parâmetros da sua rotina — o retorno aparece em tempo real.</p>
-
+  <div class="section-label">Calcule seu ganho estimado</div>
+  <h2 class="calc-heading">Quanto a IA libera<br/><em style="font-family:'Fraunces',serif;font-style:italic;font-weight:600;color:var(--cross)">da sua semana?</em></h2>
+  <p class="calc-sub">Estimativa de tempo e receita liberados ao reduzir leitura manual de exames. Ajuste pra refletir sua rotina.</p>
   <div class="calc-body">
     <div class="calc-sliders">
       <div class="slider-group">
         <label>
-          <span class="slider-name">Laudos por semana</span>
-          <span class="slider-val" id="val-laudos">50</span>
+          <span class="slider-name">Exames analisados por dia</span>
+          <span class="slider-val" id="calc-vol">10</span>
         </label>
-        <input type="range" id="sl-laudos" min="10" max="200" value="50" step="5"/>
+        <input type="range" id="calc-vol-input" min="1" max="50" value="10"/>
       </div>
       <div class="slider-group">
         <label>
-          <span class="slider-name">Minutos por laudo hoje</span>
-          <span class="slider-val" id="val-min">30<span style="font-size:14px;color:var(--text-3)">min</span></span>
+          <span class="slider-name">Minutos lidos manualmente por exame</span>
+          <span class="slider-val" id="calc-min">12</span>
         </label>
-        <input type="range" id="sl-min" min="10" max="60" value="30" step="5"/>
+        <input type="range" id="calc-min-input" min="5" max="30" value="12"/>
       </div>
       <div class="slider-group">
         <label>
-          <span class="slider-name">Ticket médio por consulta</span>
-          <span class="slider-val" id="val-ticket">R$250</span>
+          <span class="slider-name">Valor médio da consulta (R$)</span>
+          <span class="slider-val" id="calc-val">250</span>
         </label>
-        <input type="range" id="sl-ticket" min="100" max="500" value="250" step="25"/>
+        <input type="range" id="calc-val-input" min="100" max="500" value="250" step="10"/>
       </div>
     </div>
-
     <div class="calc-results">
       <div class="calc-result">
-        <div class="result-val" id="r-horas">8h</div>
-        <div class="result-label">horas poupadas por semana</div>
-        <div class="result-note">tempo livre para atendimento</div>
+        <div class="result-val" id="calc-hours">36h</div>
+        <div class="result-label">economizadas/mês</div>
+        <div class="result-note">22 dias úteis · revisão pós-IA ≈ 2min</div>
       </div>
       <div class="calc-result">
-        <div class="result-val" id="r-atend">14</div>
-        <div class="result-label">atendimentos extras / semana</div>
-        <div class="result-note">≈ 35min por atendimento</div>
+        <div class="result-val" id="calc-extra">72</div>
+        <div class="result-label">consultas extras possíveis</div>
+        <div class="result-note">consulta padrão = 30min</div>
       </div>
       <div class="calc-result highlight">
-        <div class="result-val" id="r-roi">14×</div>
-        <div class="result-label">ROI mensal estimado</div>
-        <div class="result-note">receita extra ÷ custo GenomaFlow (R$ 249/mês)</div>
-      </div>
-      <div class="calc-result">
-        <div class="result-val" id="r-receita">R$14k</div>
-        <div class="result-label">receita extra / mês</div>
-        <div class="result-note">atendimentos × 4 semanas × ticket</div>
+        <div class="result-val" id="calc-rev">R$ 18.000</div>
+        <div class="result-label">receita adicional estimada/mês</div>
+        <div class="result-note">consultas extras × valor médio</div>
       </div>
     </div>
   </div>
+  <p style="font-size:11px;color:var(--text-3);margin-top:32px;line-height:1.5;font-family:'JetBrains Mono',monospace;letter-spacing:0.03em">
+    Estimativas indicativas. Resultado real depende de especialidade, complexidade dos exames e volume.
+  </p>
 </section>
 
 <!-- PRICING -->
@@ -3553,32 +3534,50 @@
     if (!isOpen) item.classList.add('open');
   }
 
-  // Calculator
-  function calcUpdate() {
-    const laudos = +document.getElementById('sl-laudos').value;
-    const minPerLaudo = +document.getElementById('sl-min').value;
-    const ticket = +document.getElementById('sl-ticket').value;
+  // ── CALCULADORA ──
+  (function initCalc() {
+    const volInput = document.getElementById('calc-vol-input');
+    const minInput = document.getElementById('calc-min-input');
+    const valInput = document.getElementById('calc-val-input');
+    if (!volInput) return;
 
-    document.getElementById('val-laudos').textContent = laudos;
-    document.getElementById('val-min').innerHTML = minPerLaudo + '<span style="font-size:14px;color:var(--text-3)">min</span>';
-    document.getElementById('val-ticket').textContent = 'R$' + ticket;
+    const volOut = document.getElementById('calc-vol');
+    const minOut = document.getElementById('calc-min');
+    const valOut = document.getElementById('calc-val');
+    const hoursOut = document.getElementById('calc-hours');
+    const extraOut = document.getElementById('calc-extra');
+    const revOut = document.getElementById('calc-rev');
 
-    const minPoupados = Math.max(0, minPerLaudo - 6);
-    const horasPoupadas = ((laudos * minPoupados) / 60).toFixed(1);
-    const atendimentos = Math.floor((laudos * minPoupados) / 35);
-    const receita = atendimentos * 4 * ticket;
-    const roi = (receita / 249).toFixed(1);
+    function fmt(n) {
+      return n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
 
-    document.getElementById('r-horas').textContent = horasPoupadas + 'h';
-    document.getElementById('r-atend').textContent = atendimentos;
-    document.getElementById('r-receita').textContent = 'R$' + (receita >= 1000 ? (receita/1000).toFixed(1) + 'k' : receita);
-    document.getElementById('r-roi').textContent = roi + '×';
-  }
+    function update() {
+      const vol = parseInt(volInput.value, 10);
+      const min = parseInt(minInput.value, 10);
+      const val = parseInt(valInput.value, 10);
 
-  ['sl-laudos','sl-min','sl-ticket'].forEach(id => {
-    document.getElementById(id).addEventListener('input', calcUpdate);
-  });
-  calcUpdate();
+      volOut.textContent = vol;
+      minOut.textContent = min;
+      valOut.textContent = val;
+
+      const reviewedMin = 2;
+      const savedPerExam = Math.max(0, min - reviewedMin);
+      const minutesSaved = vol * savedPerExam * 22;
+      const hours = Math.round(minutesSaved / 60);
+      const extra = Math.floor(hours * 2);
+      const rev = extra * val;
+
+      hoursOut.textContent = hours + 'h';
+      extraOut.textContent = fmt(extra);
+      revOut.textContent = 'R$ ' + fmt(rev);
+    }
+
+    [volInput, minInput, valInput].forEach(el => {
+      el.addEventListener('input', update);
+    });
+    update();
+  })();
 </script>
 
 </body>
