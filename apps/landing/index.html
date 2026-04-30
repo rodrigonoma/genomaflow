@@ -1135,7 +1135,7 @@
     }
 
     /* Intro */
-    #diferenciais { border-bottom: 1px solid var(--line); }
+    #ia { border-bottom: 1px solid var(--line); }
     .feat-intro {
       padding: 80px 48px 56px;
       border-bottom: 1px solid var(--line);
@@ -1984,7 +1984,7 @@
         </div>
       </div>
       <div class="mock-foot">
-        <span>pipeline: CARDIO-3</span>
+        <span>pipeline: CARDIO-1</span>
         <span class="mock-timer">tempo: 42.3s</span>
         <span>4 créditos consumidos</span>
       </div>
@@ -2177,7 +2177,7 @@
     <!-- Risk card -->
     <div class="risk-card">
       <div class="risk-head">
-        <span class="risk-tag">CARDIO-3 · Framingham</span>
+        <span class="risk-tag">CARDIO-1 · Risco Cardiovascular</span>
         <span class="risk-live"><span class="dot-red"></span> análise ativa</span>
       </div>
       <div class="risk-num">18.4%</div>
@@ -2264,7 +2264,7 @@
     </div>
     <div class="stream-row">
       <span class="s-t">00:04.7</span>
-      <span class="s-label">agent.CARDIO-3 inference</span>
+      <span class="s-label">agent.CARDIO-1 inference</span>
       <span class="s-ms">38.2s</span>
       <span class="s-status s-ok">OK</span>
     </div>
@@ -2284,13 +2284,12 @@
 </section>
 
 <!-- FEATURE BLOCKS -->
-<section id="diferenciais">
+<section id="ia">
 
   <!-- ── INTRO ── -->
   <div class="feat-intro">
-    <div class="section-label">Como funciona na prática</div>
-    <div class="feat-intro-heading">Veja o sistema<br/>em ação.</div>
-    <p class="feat-intro-sub">Demonstrações reais do sistema em funcionamento.</p>
+    <div class="feat-intro-sub">01 — IA Clínica</div>
+  <h2 class="feat-intro-heading">Cinco agentes. Um exame.<br/><em style="font-family:'Fraunces',serif;font-style:italic;font-weight:600;color:var(--cross)">Um insight auditável.</em></h2>
   </div>
 
   <!-- ── F1: Análise de exame por IA ── -->
@@ -2383,34 +2382,79 @@
       <div class="feat-num">02</div>
       <div class="feat-tag">Multi-agentes especializados</div>
       <h3 class="feat-heading">Um agente<br/>para cada<br/><span class="feat-highlight">especialidade.</span></h3>
-      <p class="feat-body">Cada patologia tem seu próprio agente de IA treinado para ela — CARDIO-3, METAB-1, HEMA-2, ONCO-4 para humanos; CANIS-2, FELIS-3, EQUUS-1 para veterinários. Rodam em paralelo. Sem configuração manual.</p>
-      <div class="feat-agent-list">
-        <div class="feat-agent">
-          <span class="feat-agent-code">CARDIO-3</span>
-          <span class="feat-agent-desc">Risco cardiovascular, Framingham, ASCVD</span>
-        </div>
-        <div class="feat-agent">
-          <span class="feat-agent-code">METAB-1</span>
-          <span class="feat-agent-desc">Resistência insulínica, dislipidemias</span>
-        </div>
-        <div class="feat-agent">
-          <span class="feat-agent-code">CANIS-2</span>
-          <span class="feat-agent-desc">Nefrologia e hepatologia canina</span>
-        </div>
-        <div class="feat-agent">
-          <span class="feat-agent-code">+5</span>
-          <span class="feat-agent-desc">agentes ativos</span>
+<p class="feat-body">Cada patologia tem seu próprio agente de IA — CARDIO-1, METAB-1, HEMA-1, THERAP-1, NUTRI-1 para humanos; SMALL-1, EQUUS-1, BOVINE-1 para veterinários. Rodam em paralelo. Sem configuração manual. <strong>Cada inferência expõe fonte, confiança e cadeia de raciocínio.</strong></p>
+<div class="feat-agent-list">
+  <div class="feat-agent">
+    <span class="feat-agent-code">CARDIO-1</span>
+    <span class="feat-agent-desc">Risco cardiovascular e correlações lipídicas</span>
+  </div>
+  <div class="feat-agent">
+    <span class="feat-agent-code">METAB-1</span>
+    <span class="feat-agent-desc">Vias metabólicas, glicemia, função hepática/renal</span>
+  </div>
+  <div class="feat-agent">
+    <span class="feat-agent-code">SMALL-1</span>
+    <span class="feat-agent-desc">Pequenos animais — canídeos e felinos</span>
+  </div>
+  <div class="feat-agent">
+    <span class="feat-agent-code">+5</span>
+    <span class="feat-agent-desc">outros agentes especializados</span>
+  </div>
+</div>
+<div class="feat-economy">
+  <div class="feat-economy-item">
+    <div class="feat-economy-val">~6–13 min</div>
+    <div class="feat-economy-label">economizados por exame complexo (estimado)</div>
+  </div>
+  <div class="feat-economy-item">
+    <div class="feat-economy-val">5</div>
+    <div class="feat-economy-label">agentes IA paralelos por exame</div>
+  </div>
+</div>
+    </div>
+  </div>
+
+  <!-- ── F3 NOVO: Imagens DICOM ── -->
+  <div class="feat-block feat-block--rev" id="feat-imaging">
+    <div class="feat-video-col">
+      <div class="monitor-outer">
+        <div class="monitor-frame">
+          <div class="monitor-bezel">
+            <div class="monitor-screen" style="position:relative;background:#0a0a0e">
+              <div style="position:absolute;inset:12%;background:linear-gradient(135deg,#1a1a22,#0e0e13);border-radius:4px"></div>
+              <div style="position:absolute;left:30%;top:32%;width:18%;height:14%;border:2px solid var(--cross);border-radius:2px;animation:pulse 2.4s ease-in-out infinite"></div>
+              <div style="position:absolute;left:55%;top:48%;width:14%;height:10%;border:2px solid var(--ok);border-radius:2px;animation:pulse 2.4s ease-in-out infinite 0.8s"></div>
+              <div style="position:absolute;left:8%;top:8%;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-3);letter-spacing:0.1em">DICOM · CR · CHEST PA</div>
+              <div style="position:absolute;right:8%;bottom:8%;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--cross)">▣ 2 ACHADOS</div>
+            </div>
+          </div>
+          <div class="monitor-neck"></div>
+          <div class="monitor-foot"></div>
         </div>
       </div>
-      <div class="feat-economy">
-        <div class="feat-economy-item">
-          <div class="feat-economy-val">6.6h</div>
-          <div class="feat-economy-label">devolvidas ao clínico / semana</div>
+    </div>
+    <div class="feat-text-col">
+      <div class="feat-num">03</div>
+      <div class="feat-tag">Pipeline DICOM</div>
+      <h3 class="feat-heading">RX, ECG, ultrassom, ressonância.<br/><span class="feat-highlight">A IA também olha.</span></h3>
+      <p class="feat-body">Faça upload de DICOM, JPG ou PNG. A IA classifica a modalidade automaticamente, encaminha pro agente especializado e retorna o achado com <strong>bounding boxes</strong> sobre a imagem original. Suporte a RX, ECG, ultrassonografia e ressonância magnética.</p>
+      <div class="feat-stats">
+        <div>
+          <span class="feat-stat-val">4</span>
+          <span class="feat-stat-label">modalidades</span>
         </div>
-        <div class="feat-economy-item">
-          <div class="feat-economy-val">14×</div>
-          <div class="feat-economy-label">ROI médio mensal</div>
+        <div>
+          <span class="feat-stat-val">DICOM</span>
+          <span class="feat-stat-label">+ JPG/PNG</span>
         </div>
+        <div>
+          <span class="feat-stat-val">▣</span>
+          <span class="feat-stat-label">bounding boxes interativos</span>
+        </div>
+      </div>
+      <div class="feat-disclaimer">
+        <div class="feat-disclaimer-icon">⚕</div>
+        <p>Vision classifier identifica a modalidade · Agente especializado por modalidade · Disclaimer assistivo em todo achado · Imagem original sempre preservada</p>
       </div>
     </div>
   </div>
@@ -2433,7 +2477,7 @@
       </div>
     </div>
     <div class="feat-text-col">
-      <div class="feat-num">03</div>
+      <div class="feat-num">04</div>
       <div class="feat-tag">Chatbot com RAG clínico</div>
       <h3 class="feat-heading">Pergunte sobre<br/>qualquer paciente.<br/><span class="feat-highlight">A IA busca.</span></h3>
       <p class="feat-body">O assistente tem acesso ao histórico completo de exames, laudos e resultados de cada paciente. Perguntas em linguagem natural retornam respostas com fontes citadas — nunca inventadas.</p>
@@ -2487,7 +2531,7 @@
       </div>
     </div>
     <div class="feat-text-col">
-      <div class="feat-num">04</div>
+      <div class="feat-num">05</div>
       <div class="feat-tag">Comparação longitudinal</div>
       <h3 class="feat-heading">Evolução clínica<br/>detectada pela<br/><span class="feat-highlight">IA automaticamente.</span></h3>
       <p class="feat-body">Compare exames de datas diferentes lado a lado. A IA detecta deltas clínicos relevantes, sinaliza tendências de piora ou melhora e contextualiza no histórico do paciente — sem o clínico precisar comparar manualmente.</p>
