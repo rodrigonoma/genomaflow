@@ -26,6 +26,96 @@
       --ok: #4ad6a0;
     }
 
+    /* ── PERSONA TOP BAR (1ª visita) ── */
+    .persona-bar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 110;
+      height: 36px;
+      background: #000;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      padding: 0 48px;
+      transform: translateY(0);
+      transition: transform 0.4s ease, opacity 0.3s ease;
+    }
+    .persona-bar.is-dismissed {
+      transform: translateY(-100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+    .persona-bar-text {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-2);
+    }
+    .persona-bar-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .persona-bar-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 14px;
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--text);
+      font-family: "Inter Tight", sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      border-radius: 999px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .persona-bar-btn:hover {
+      background: var(--bg-2);
+      border-color: var(--cross);
+    }
+    .persona-bar-btn svg {
+      width: 14px;
+      height: 14px;
+      stroke: var(--cross);
+      fill: none;
+      stroke-width: 1.5;
+    }
+    .persona-bar-close {
+      position: absolute;
+      right: 16px;
+      background: none;
+      border: none;
+      color: var(--text-3);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 4px 8px;
+    }
+    .persona-bar-close:hover { color: var(--text); }
+
+    /* nav desce 36px quando persona bar visível */
+    body.persona-bar-visible .nav { top: 36px; }
+    body.persona-bar-visible .marquee-wrap { margin-top: 100px; }
+
+    @media (max-width: 640px) {
+      .persona-bar {
+        flex-direction: column;
+        height: auto;
+        padding: 8px 16px;
+        gap: 8px;
+      }
+      .persona-bar-text { font-size: 9px; }
+      .persona-bar-btn { padding: 8px 16px; font-size: 12px; }
+      .persona-bar-close { top: 8px; right: 12px; }
+      body.persona-bar-visible .nav { top: 88px; }
+      body.persona-bar-visible .marquee-wrap { margin-top: 152px; }
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
@@ -1555,6 +1645,30 @@
 </head>
 <body>
 
+<!-- PERSONA TOP BAR (mostra apenas 1ª visita) -->
+<div class="persona-bar" id="personaBar" role="dialog" aria-label="Personalize sua experiência">
+  <span class="persona-bar-text">Personalize sua experiência:</span>
+  <div class="persona-bar-actions">
+    <button class="persona-bar-btn" data-set-persona="human" aria-label="Atendo humanos">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="6" r="3"/>
+        <path d="M6 21v-2a6 6 0 0 1 12 0v2"/>
+      </svg>
+      Atendo humanos
+    </button>
+    <button class="persona-bar-btn" data-set-persona="veterinary" aria-label="Atendo animais">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="4" r="2"/>
+        <circle cx="18" cy="8" r="2"/>
+        <circle cx="4" cy="8" r="2"/>
+        <circle cx="7.5" cy="14.5" r="3" fill="currentColor" stroke="none"/>
+      </svg>
+      Atendo animais
+    </button>
+  </div>
+  <button class="persona-bar-close" id="personaBarClose" aria-label="Dispensar">×</button>
+</div>
+
 <!-- NAV -->
 <nav class="nav">
   <a class="nav-logo" href="/">
@@ -2377,6 +2491,42 @@
 </footer>
 
 <script>
+  // ── PERSONA BAR (1ª visita) ──
+  (function initPersonaBar() {
+    const PERSONA_KEY = 'genoma_persona';
+    const HINT_KEY = 'genoma_persona_hint_dismissed';
+    const bar = document.getElementById('personaBar');
+    const closeBtn = document.getElementById('personaBarClose');
+
+    if (!bar) return;
+
+    const hintDismissed = localStorage.getItem(HINT_KEY);
+    if (hintDismissed) {
+      bar.style.display = 'none';
+      return;
+    }
+
+    document.body.classList.add('persona-bar-visible');
+
+    function dismissBar(persona) {
+      if (persona) localStorage.setItem(PERSONA_KEY, persona);
+      localStorage.setItem(HINT_KEY, '1');
+      bar.classList.add('is-dismissed');
+      setTimeout(() => {
+        bar.style.display = 'none';
+        document.body.classList.remove('persona-bar-visible');
+      }, 400);
+      if (persona && typeof window.setPersona === 'function') {
+        window.setPersona(persona);
+      }
+    }
+
+    bar.querySelectorAll('[data-set-persona]').forEach(btn => {
+      btn.addEventListener('click', () => dismissBar(btn.dataset.setPersona));
+    });
+    closeBtn.addEventListener('click', () => dismissBar(null));
+  })();
+
   const APP_BASE = 'https://app.genomaflow.com.br';
 
   function resolveCtaUrl(path) {
