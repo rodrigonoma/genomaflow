@@ -1007,6 +1007,107 @@
       text-transform: uppercase;
     }
 
+    /* ── 3 PILARES ── */
+    .pillars-section {
+      padding: 80px 48px;
+      border-bottom: 1px solid var(--line);
+    }
+    .pillars-header {
+      margin-bottom: 56px;
+    }
+    .pillars-heading {
+      font-size: clamp(40px, 5vw, 64px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+    .pillars-heading em {
+      font-family: "Fraunces", serif;
+      font-style: italic;
+      font-weight: 600;
+      color: var(--cross);
+    }
+    .pillars-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .pillar-card {
+      position: relative;
+      padding: 32px 28px;
+      background: var(--bg-1);
+      border: 1px solid var(--line);
+      border-left: 2px solid var(--cross);
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .pillar-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--cross);
+    }
+    .pillar-icon {
+      width: 32px;
+      height: 32px;
+      stroke: var(--cross);
+      fill: none;
+      stroke-width: 1.5;
+      margin-bottom: 20px;
+    }
+    .pillar-tag {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 8px;
+    }
+    .pillar-heading {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+    .pillar-heading strong {
+      font-family: "Fraunces", serif;
+      font-style: italic;
+      font-weight: 600;
+      color: var(--cross);
+    }
+    .pillar-sub {
+      font-size: 13px;
+      color: var(--text-2);
+      line-height: 1.6;
+      margin-bottom: 18px;
+    }
+    .pillar-bullets {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 20px;
+    }
+    .pillar-bullets li {
+      font-size: 12px;
+      color: var(--text-3);
+      padding: 5px 0;
+      border-bottom: 1px dashed var(--line-soft);
+    }
+    .pillar-bullets li:last-child { border-bottom: none; }
+    .pillar-cta {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--cross);
+      border-bottom: 1px solid var(--cross);
+      padding-bottom: 2px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .pillar-cta:hover { color: var(--text); border-color: var(--text); }
+
+    @media (max-width: 1024px) {
+      .pillars-grid { grid-template-columns: 1fr; gap: 16px; }
+    }
+
     /* ── FEATURE BLOCKS ── */
     @property --scope-r {
       syntax: '<length>';
@@ -1721,10 +1822,12 @@
     Genoma<span>Flow</span>
   </a>
   <ul class="nav-links">
-    <li><a href="#modulos">Módulos</a></li>
-    <li><a href="#diferenciais">Produto</a></li>
-    <li><a href="#impacto">Impacto</a></li>
-    <li><a href="#precos">Preços</a></li>
+    <li><a href="#modulos">MÓDULOS</a></li>
+    <li><a href="#pilares">PILARES</a></li>
+    <li><a href="#produto">PRODUTO</a></li>
+    <li><a href="#operacao">OPERAÇÃO</a></li>
+    <li><a href="#compliance">COMPLIANCE</a></li>
+    <li><a href="#precos">PREÇOS</a></li>
     <li><a href="#faq">FAQ</a></li>
   </ul>
   <div class="nav-persona-pill" role="group" aria-label="Selecione seu perfil clínico">
@@ -1754,29 +1857,31 @@
 <!-- MARQUEE -->
 <div class="marquee-wrap">
   <div class="marquee-track">
-    <!-- duplicated for seamless loop -->
-    <span class="marquee-item">LAUDO → INSIGHT</span>
-    <span class="marquee-item marquee-sep">·</span>
-    <span class="marquee-item">&lt; 60 SEGUNDOS</span>
-    <span class="marquee-item marquee-sep">·</span>
-    <span class="marquee-item">CARDIO-3 · METAB-1 · HEMA-2 · ONCO-4</span>
-    <span class="marquee-item marquee-sep">·</span>
-    <span class="marquee-item">CANIS-2 · FELIS-3 · EQUUS-1 · EXOTIC-1</span>
-    <span class="marquee-item marquee-sep">·</span>
-    <span class="marquee-item">MULTI-TENANT · HL7/FHIR · RAG · pgvector</span>
-    <span class="marquee-item marquee-sep">·</span>
-    <!-- repeat -->
-    <span class="marquee-item">LAUDO → INSIGHT</span>
-    <span class="marquee-item marquee-sep">·</span>
-    <span class="marquee-item">&lt; 60 SEGUNDOS</span>
-    <span class="marquee-item marquee-sep">·</span>
-    <span class="marquee-item">CARDIO-3 · METAB-1 · HEMA-2 · ONCO-4</span>
-    <span class="marquee-item marquee-sep">·</span>
-    <span class="marquee-item">CANIS-2 · FELIS-3 · EQUUS-1 · EXOTIC-1</span>
-    <span class="marquee-item marquee-sep">·</span>
-    <span class="marquee-item">MULTI-TENANT · HL7/FHIR · RAG · pgvector</span>
-    <span class="marquee-item marquee-sep">·</span>
-  </div>
+  <span class="marquee-item">ANÁLISE MULTI-AGENTE</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">IMAGEM DICOM</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">CHATBOT RAG</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">COMPARAÇÃO LONGITUDINAL</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">AGENDA NATIVA</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">COPILOT POR VOZ</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">PRESCRIÇÕES</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">CHAT ENTRE CLÍNICAS</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">DASHBOARD</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">ANONIMIZAÇÃO PII</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">AUDIT LOG</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">LGPD-FIRST</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">ANÁLISE MULTI-AGENTE</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">IMAGEM DICOM</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">CHATBOT RAG</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">COMPARAÇÃO LONGITUDINAL</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">AGENDA NATIVA</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">COPILOT POR VOZ</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">PRESCRIÇÕES</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">CHAT ENTRE CLÍNICAS</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">DASHBOARD</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">ANONIMIZAÇÃO PII</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">AUDIT LOG</span><span class="marquee-sep">·</span>
+  <span class="marquee-item">LGPD-FIRST</span><span class="marquee-sep">·</span>
+</div>
 </div>
 
 <!-- HERO -->
@@ -1873,20 +1978,71 @@
   </div>
 </section>
 
-<!-- LOGOS -->
-<div class="logos" style="display:none">
-  <span class="logos-label">Usado por</span>
-  <div class="logo-items">
-    <span class="logo-item">FLEURY</span>
-    <span class="logo-item">DASA</span>
-    <span class="logo-item">ALBERT EINSTEIN</span>
-    <span class="logo-item">HOSP. VET+</span>
-    <span class="logo-item">REDE UNIÃO</span>
-    <span class="logo-item">PET CARE</span>
-    <span class="logo-item">SÍRIO</span>
-    <span class="logo-item">GRUPO NOA</span>
+<!-- 3 PILARES -->
+<section id="pilares" class="pillars-section">
+  <div class="pillars-header">
+    <div class="section-label">Plataforma completa</div>
+    <h2 class="pillars-heading">Três pilares.<br/><em>Uma só plataforma.</em></h2>
   </div>
-</div>
+  <div class="pillars-grid">
+    <article class="pillar-card">
+      <svg class="pillar-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 17l4-4 4 4 6-6 4 4"/>
+        <circle cx="7" cy="13" r="1.5"/>
+        <circle cx="11" cy="17" r="1.5"/>
+        <circle cx="17" cy="11" r="1.5"/>
+      </svg>
+      <div class="pillar-tag">Pilar 01 · IA Clínica</div>
+      <h3 class="pillar-heading">Inteligência que <strong>lê e correlaciona</strong></h3>
+      <p class="pillar-sub">Análise multi-agente em tempo real, com fontes citadas e confiança auditável.</p>
+      <ul class="pillar-bullets">
+        <li>Multi-agentes paralelos</li>
+        <li>Imagens DICOM/RX/ECG</li>
+        <li>Chatbot RAG por paciente</li>
+        <li>Comparação longitudinal</li>
+      </ul>
+      <a class="pillar-cta" href="#ia">Ver IA Clínica ↓</a>
+    </article>
+
+    <article class="pillar-card">
+      <svg class="pillar-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="5" width="18" height="16" rx="2"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+        <line x1="8" y1="3" x2="8" y2="7"/>
+        <line x1="16" y1="3" x2="16" y2="7"/>
+        <path d="M9 15l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="pillar-tag">Pilar 02 · Operação</div>
+      <h3 class="pillar-heading">A clínica que <strong>se organiza sozinha</strong></h3>
+      <p class="pillar-sub">Agenda, prescrições, comunicação entre clínicas e dashboard — tudo conversa entre si.</p>
+      <ul class="pillar-bullets">
+        <li>Agenda com voz</li>
+        <li>Prescrições com templates</li>
+        <li>Chat entre clínicas</li>
+        <li>Dashboard clínico</li>
+      </ul>
+      <a class="pillar-cta" href="#operacao">Ver Operação ↓</a>
+    </article>
+
+    <article class="pillar-card">
+      <svg class="pillar-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3l8 4v6c0 5-3.5 8.5-8 9-4.5-0.5-8-4-8-9V7z"/>
+        <rect x="9" y="11" width="6" height="6" rx="1"/>
+        <path d="M11 11V9a1 1 0 0 1 2 0v2"/>
+      </svg>
+      <div class="pillar-tag">Pilar 03 · Compliance</div>
+      <h3 class="pillar-heading"><strong>LGPD pensada</strong> desde o primeiro byte</h3>
+      <p class="pillar-sub">Anonimização automática de PII, audit log forense, consentimento e onboarding profissional verificado.</p>
+      <ul class="pillar-bullets">
+        <li>Anonimização automática</li>
+        <li>Audit log forense</li>
+        <li>Consentimento LGPD</li>
+        <li>CRM/CRMV verificado</li>
+      </ul>
+      <a class="pillar-cta" href="#compliance">Ver Compliance ↓</a>
+    </article>
+  </div>
+</section>
 
 <!-- MÓDULOS -->
 <section id="modulos" class="split">
