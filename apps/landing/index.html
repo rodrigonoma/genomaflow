@@ -1507,6 +1507,88 @@
       background: #000;
     }
 
+    /* ── PILAR 3: COMPLIANCE ── */
+    .compliance-section {
+      padding: 80px 48px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-1);
+    }
+    .compliance-header {
+      margin-bottom: 56px;
+      max-width: 800px;
+    }
+    .compliance-heading {
+      font-size: clamp(40px, 5vw, 64px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      margin-bottom: 20px;
+    }
+    .compliance-heading em {
+      font-family: "Fraunces", serif;
+      font-style: italic;
+      font-weight: 600;
+      color: var(--cross);
+    }
+    .compliance-sub {
+      font-size: 16px;
+      color: var(--text-2);
+      line-height: 1.7;
+    }
+    .compliance-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    .compliance-card {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      padding: 28px 24px;
+      transition: border-color 0.2s;
+    }
+    .compliance-card:hover {
+      border-color: var(--cross);
+    }
+    .compliance-card.is-star {
+      border-left: 3px solid var(--cross);
+    }
+    .compliance-card-icon {
+      width: 28px;
+      height: 28px;
+      stroke: var(--cross);
+      fill: none;
+      stroke-width: 1.5;
+      margin-bottom: 16px;
+    }
+    .compliance-card-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -0.01em;
+      margin-bottom: 10px;
+    }
+    .compliance-card-body {
+      font-size: 13px;
+      color: var(--text-2);
+      line-height: 1.65;
+    }
+    .compliance-card-body strong { color: var(--text); font-weight: 700; }
+    .compliance-badges {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding-top: 32px;
+      border-top: 1px solid var(--line);
+    }
+
+    @media (max-width: 1024px) {
+      .compliance-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .compliance-grid { grid-template-columns: 1fr; }
+    }
+
     /* RAG examples */
     .feat-rag-examples {
       display: flex;
@@ -3222,24 +3304,87 @@
   </div>
 </section>
 
-<!-- SECURITY -->
-<section id="seguranca" class="security">
-  <div class="security-left">
-    <div class="security-heading">Conformidade regulatória &amp; clínica.</div>
-    <p class="security-body">
-      GenomaFlow é uma ferramenta de suporte à decisão clínica assistiva. Os insights de IA são projetados para auxiliar clínicos, nunca para substituir o diagnóstico médico primário. Todos os sistemas estão em conformidade com as diretrizes da ANVISA e do CFM para Saúde Digital. Dados de pacientes são anonimizados conforme a LGPD.
-    </p>
-    <div class="security-badges">
-      <span class="badge">ANVISA CERTIFIED</span>
-      <span class="badge">LGPD COMPLIANT</span>
-      <span class="badge">CFM R-891-2</span>
-      <span class="badge">256-BIT AES</span>
-      <span class="badge">ISO 27001</span>
-    </div>
+<!-- ════════════════════════════════════════════ -->
+<!-- PILAR 3: COMPLIANCE & SEGURANÇA               -->
+<!-- ════════════════════════════════════════════ -->
+<section id="compliance" class="compliance-section">
+  <div class="compliance-header">
+    <div class="section-label">03 — Compliance</div>
+    <h2 class="compliance-heading">LGPD não é checkbox.<br/><em>É arquitetura.</em></h2>
+    <p class="compliance-sub">Construímos GenomaFlow com isolamento multi-tenant from day one. Cada clínica em RLS estrito, audit log forense, consentimento documentado, anonimização automática. Conformidade não é um documento PDF — é o código rodando.</p>
   </div>
-  <div class="security-right">
-    <div class="security-big">99.94%</div>
-    <div class="security-label">Uptime 2025</div>
+
+  <div class="compliance-grid">
+    <article class="compliance-card is-star">
+      <svg class="compliance-card-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <line x1="3" y1="9" x2="21" y2="9"/>
+        <line x1="9" y1="3" x2="9" y2="21"/>
+        <rect x="11" y="11" width="3" height="3" fill="currentColor" stroke="none"/>
+        <rect x="15" y="11" width="3" height="3" fill="currentColor" stroke="none"/>
+        <rect x="11" y="15" width="3" height="3" fill="currentColor" stroke="none"/>
+      </svg>
+      <h3 class="compliance-card-title">Anonimização automática de PII</h3>
+      <p class="compliance-card-body">Antes de qualquer anexo sair pra outra clínica, a plataforma extrai texto do PDF, identifica PII (nome, CPF, telefone, microchip, data de nascimento) com regex + IA e desenha <strong>retângulos pretos</strong> sobre as posições. Mantém o text layer. Imagens passam por canvas editor com Tesseract+IA detectando texto sensível.</p>
+    </article>
+
+    <article class="compliance-card">
+      <svg class="compliance-card-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="9" y1="13" x2="15" y2="13"/>
+        <line x1="9" y1="17" x2="13" y2="17"/>
+      </svg>
+      <h3 class="compliance-card-title">Audit log forense</h3>
+      <p class="compliance-card-body">Toda mutação em pacientes, prescrições, exames e agenda gera linha imutável: quem, quando, o que mudou (diff JSONB), de onde (UI, Copilot, sistema, worker). Master vê tudo, tenant só o seu. <strong>Append-only</strong> no Postgres — nem o admin apaga.</p>
+    </article>
+
+    <article class="compliance-card">
+      <svg class="compliance-card-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+      <h3 class="compliance-card-title">Consentimento LGPD do paciente</h3>
+      <p class="compliance-card-body">Cadastro do paciente exige <strong>checkbox de consentimento</strong> + opção de baixar PDF de termo de consentimento gerado client-side com dados da clínica pré-preenchidos. Pronto pra arquivamento físico ou digital.</p>
+    </article>
+
+    <article class="compliance-card">
+      <svg class="compliance-card-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="8.5" cy="7" r="4"/>
+        <path d="M20 8v6"/>
+        <path d="M23 11h-6"/>
+      </svg>
+      <h3 class="compliance-card-title">Onboarding profissional verificado</h3>
+      <p class="compliance-card-body">5 documentos legais (contrato SaaS, DPA, política de incidentes, segurança, uso aceitável) com aceite registrado: <strong>hash SHA-256</strong> do conteúdo + IP + user-agent + timestamp. Profissional declara CRM/CRMV + UF com checkbox de veracidade.</p>
+    </article>
+
+    <article class="compliance-card">
+      <svg class="compliance-card-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="11" width="18" height="11" rx="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      <h3 class="compliance-card-title">Single-session com sessão única</h3>
+      <p class="compliance-card-body">Login emite <strong>jti único</strong>; segunda autenticação no mesmo usuário invalida a anterior. Snackbar avisa antes de deslogar — sem sessão fantasma em outra máquina.</p>
+    </article>
+
+    <article class="compliance-card">
+      <svg class="compliance-card-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <ellipse cx="12" cy="5" rx="9" ry="3"/>
+        <path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/>
+        <path d="M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/>
+      </svg>
+      <h3 class="compliance-card-title">Multi-tenant defensivo</h3>
+      <p class="compliance-card-body">RLS ENABLE+FORCE em todas as tabelas tenant-scoped + filtro <strong>AND tenant_id = $X</strong> explícito em toda query (defesa em profundidade). Mesmo se a RLS falhar por bug de role, o filtro segura.</p>
+    </article>
+  </div>
+
+  <div class="compliance-badges">
+    <span class="badge">LGPD COMPLIANT</span>
+    <span class="badge">CFM RES. 2.314/2022</span>
+    <span class="badge">MULTI-TENANT RLS</span>
+    <span class="badge">AUDIT TRAIL</span>
+    <span class="badge">AES-256 IN TRANSIT/REST</span>
   </div>
 </section>
 
