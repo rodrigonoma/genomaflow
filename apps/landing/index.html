@@ -196,6 +196,55 @@
     }
     .btn-primary:hover { background: var(--cross-2); transform: translateY(-1px); }
 
+    /* ── NAV PERSONA PILL ── */
+    .nav-persona-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      padding: 3px;
+      background: var(--bg-2);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      margin-right: 8px;
+    }
+    .nav-persona-opt {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      background: transparent;
+      border: none;
+      color: var(--text-3);
+      font-family: "Inter Tight", sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      border-radius: 999px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .nav-persona-opt svg {
+      width: 12px;
+      height: 12px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.5;
+    }
+    .nav-persona-opt:hover { color: var(--text-2); }
+    .nav-persona-opt.is-active {
+      background: var(--cross);
+      color: #fff;
+    }
+    .nav-persona-opt.is-active:hover { color: #fff; }
+
+    @media (max-width: 768px) {
+      .nav-persona-pill { display: none; }
+      .nav-mobile-persona-pill {
+        display: inline-flex;
+        margin: 16px;
+      }
+    }
+
     /* ── MARQUEE ── */
     .marquee-wrap {
       margin-top: 64px;
@@ -1682,6 +1731,24 @@
     <li><a href="#precos">Preços</a></li>
     <li><a href="#faq">FAQ</a></li>
   </ul>
+  <div class="nav-persona-pill" role="group" aria-label="Selecione seu perfil clínico">
+    <button class="nav-persona-opt" data-set-persona="human" aria-label="Médico humano">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="6" r="3"/>
+        <path d="M6 21v-2a6 6 0 0 1 12 0v2"/>
+      </svg>
+      Humano
+    </button>
+    <button class="nav-persona-opt" data-set-persona="veterinary" aria-label="Veterinário">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="4" r="2"/>
+        <circle cx="18" cy="8" r="2"/>
+        <circle cx="4" cy="8" r="2"/>
+        <circle cx="7.5" cy="14.5" r="3" fill="currentColor" stroke="none"/>
+      </svg>
+      Vet
+    </button>
+  </div>
   <div class="nav-cta">
     <a class="nav-login" data-cta="/login">Entrar</a>
     <a class="btn-primary" data-cta="/onboarding">Registrar →</a>
@@ -2491,9 +2558,44 @@
 </footer>
 
 <script>
+  // ── PERSONA MACHINERY ──
+  const PERSONA_KEY = 'genoma_persona';
+
+  window.setPersona = function setPersona(persona) {
+    // persona: 'human' | 'veterinary' | 'both'
+    const validPersonas = ['human', 'veterinary', 'both'];
+    if (!validPersonas.includes(persona)) persona = 'both';
+
+    localStorage.setItem(PERSONA_KEY, persona);
+
+    // Remove all persona classes from body
+    document.body.classList.remove('persona--human', 'persona--veterinary', 'persona--both');
+    document.body.classList.add('persona--' + persona);
+
+    // Update active state on nav pill
+    document.querySelectorAll('.nav-persona-opt').forEach(btn => {
+      btn.classList.toggle('is-active', btn.dataset.setPersona === persona);
+    });
+
+    // Update terminology via data-human/data-vet attributes
+    document.querySelectorAll('[data-human][data-vet]').forEach(el => {
+      if (persona === 'human') el.textContent = el.dataset.human;
+      else if (persona === 'veterinary') el.textContent = el.dataset.vet;
+      else el.textContent = el.dataset.human + ' · ' + el.dataset.vet;
+    });
+  };
+
+  // Bind nav pill clicks
+  document.querySelectorAll('.nav-persona-opt').forEach(btn => {
+    btn.addEventListener('click', () => window.setPersona(btn.dataset.setPersona));
+  });
+
+  // Hydrate from localStorage on load
+  const storedPersona = localStorage.getItem(PERSONA_KEY) || 'both';
+  window.setPersona(storedPersona);
+
   // ── PERSONA BAR (1ª visita) ──
   (function initPersonaBar() {
-    const PERSONA_KEY = 'genoma_persona';
     const HINT_KEY = 'genoma_persona_hint_dismissed';
     const bar = document.getElementById('personaBar');
     const closeBtn = document.getElementById('personaBarClose');
@@ -2509,16 +2611,13 @@
     document.body.classList.add('persona-bar-visible');
 
     function dismissBar(persona) {
-      if (persona) localStorage.setItem(PERSONA_KEY, persona);
+      if (persona) window.setPersona(persona);
       localStorage.setItem(HINT_KEY, '1');
       bar.classList.add('is-dismissed');
       setTimeout(() => {
         bar.style.display = 'none';
         document.body.classList.remove('persona-bar-visible');
       }, 400);
-      if (persona && typeof window.setPersona === 'function') {
-        window.setPersona(persona);
-      }
     }
 
     bar.querySelectorAll('[data-set-persona]').forEach(btn => {
