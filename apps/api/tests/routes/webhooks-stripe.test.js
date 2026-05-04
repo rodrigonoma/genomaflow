@@ -124,3 +124,88 @@ describe('handleCheckoutCompleted — subscription mode', () => {
     await expect(handleCheckoutCompleted(pgMock.pool, event, null)).rejects.toThrow(/sem tenant_id/);
   });
 });
+
+describe('handleInvoicePaid', () => {
+  beforeEach(() => jest.clearAllMocks());
+  const { handleInvoicePaid } = require('../../src/services/billing-events');
+
+  test('grant 122 créditos recurring + atualiza period_end', async () => {
+    const pgMock = buildPgMock();
+    const redisMock = buildRedisMock();
+    const event = {
+      id: 'evt_inv_001',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_test_001',
+          subscription: 'sub_test_001',
+          subscription_details: { metadata: { tenant_id: 'tenant-uuid-1' } },
+          amount_paid: 19900,
+          lines: { data: [{ period: { end: 1735689600 } }] },
+        },
+      },
+    };
+    const result = await handleInvoicePaid(pgMock.pool, event, redisMock);
+    expect(result).toEqual({ handled: true, idempotent: false, credits: 122 });
+    expect(redisMock.publish).toHaveBeenCalledWith('billing:renewed:tenant-uuid-1', expect.any(String));
+  });
+
+  test('event sem subscription → no-op', async () => {
+    const pgMock = buildPgMock();
+    const event = {
+      id: 'evt_inv_002',
+      type: 'invoice.paid',
+      data: { object: { id: 'in_test_002' } }, // sem subscription
+    };
+    const result = await handleInvoicePaid(pgMock.pool, event, null);
+    expect(result.handled).toBe(false);
+  });
+});
+
+describe('handleInvoicePaymentFailed', () => {
+  beforeEach(() => jest.clearAllMocks());
+  const { handleInvoicePaymentFailed } = require('../../src/services/billing-events');
+
+  test('marca past_due — NÃO desativa tenant', async () => {
+    const pgMock = buildPgMock();
+    const redisMock = buildRedisMock();
+    const event = {
+      id: 'evt_inv_fail_001',
+      type: 'invoice.payment_failed',
+      data: {
+        object: {
+          subscription_details: { metadata: { tenant_id: 'tenant-uuid-1' } },
+        },
+      },
+    };
+    const result = await handleInvoicePaymentFailed(pgMock.pool, event, redisMock);
+    expect(result).toEqual({ handled: true, idempotent: false });
+    // Confirma que NÃO chamou UPDATE tenants SET active = false
+    expect(pgMock.client.query.mock.calls.some(c => /active\s*=\s*false/.test(c[0]))).toBe(false);
+    // Confirma que setou past_due
+    expect(pgMock.client.query.mock.calls.some(c => /past_due/.test(c[0]))).toBe(true);
+  });
+});
+
+describe('handleSubscriptionDeleted', () => {
+  beforeEach(() => jest.clearAllMocks());
+  const { handleSubscriptionDeleted } = require('../../src/services/billing-events');
+
+  test('desativa tenant + status cancelled', async () => {
+    const pgMock = buildPgMock();
+    const redisMock = buildRedisMock();
+    const event = {
+      id: 'evt_sub_del_001',
+      type: 'customer.subscription.deleted',
+      data: {
+        object: {
+          metadata: { tenant_id: 'tenant-uuid-1' },
+        },
+      },
+    };
+    const result = await handleSubscriptionDeleted(pgMock.pool, event, redisMock);
+    expect(result).toEqual({ handled: true, idempotent: false });
+    expect(pgMock.client.query.mock.calls.some(c => /active\s*=\s*false/.test(c[0]))).toBe(true);
+    expect(pgMock.client.query.mock.calls.some(c => /cancelled_at\s*=\s*NOW/.test(c[0]))).toBe(true);
+  });
+});

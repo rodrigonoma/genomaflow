@@ -120,8 +120,123 @@ async function handleTopupCompleted(pg, event, session, tenantId, redis) {
   }, { userId: null, channel: 'system' });
 }
 
+const RECURRING_BONUS_CREDITS = 122; // mesmo bônus mensal de subscriber ativo
+
+async function handleInvoicePaid(pg, event, redis) {
+  const invoice = event.data.object;
+  // Subscription invoices têm subscription_id; one-off não
+  if (!invoice.subscription) return { handled: false, reason: 'no subscription' };
+
+  const tenantId = invoice.subscription_details?.metadata?.tenant_id || invoice.metadata?.tenant_id;
+  if (!tenantId) {
+    // Stripe não devolve metadata na invoice por default — buscar via subscription
+    // Aqui aceitamos pular (próximo retry vai trazer) ou expandir
+    return { handled: false, reason: 'tenant_id ausente — checar expand[]' };
+  }
+
+  return withTenant(pg, MASTER_TENANT_ID, async (client) => {
+    const { isNew } = await recordPaymentEvent(client, {
+      gateway: 'stripe',
+      eventId: event.id,
+      kind: 'invoice_paid',
+      tenantId,
+      amountBrl: invoice.amount_paid ? invoice.amount_paid / 100 : null,
+      creditsGranted: RECURRING_BONUS_CREDITS,
+    });
+    if (!isNew) return { handled: true, idempotent: true };
+
+    await client.query(
+      `UPDATE subscriptions SET status = 'active', current_period_end = to_timestamp($2), updated_at = NOW()
+       WHERE tenant_id = $1`,
+      [tenantId, invoice.lines?.data?.[0]?.period?.end || Math.floor(Date.now() / 1000) + 30 * 86400]
+    );
+
+    await client.query(
+      `UPDATE tenants SET billing_status = 'active' WHERE id = $1`,
+      [tenantId]
+    );
+
+    await client.query(
+      `INSERT INTO credit_ledger (tenant_id, amount, kind, description)
+       VALUES ($1, $2, 'topup_recurring', 'Renovação mensal Stripe')`,
+      [tenantId, RECURRING_BONUS_CREDITS]
+    );
+
+    if (redis) {
+      await redis.publish(`billing:renewed:${tenantId}`, JSON.stringify({ credits: RECURRING_BONUS_CREDITS }));
+    }
+
+    return { handled: true, idempotent: false, credits: RECURRING_BONUS_CREDITS };
+  }, { userId: null, channel: 'system' });
+}
+
+async function handleInvoicePaymentFailed(pg, event, redis) {
+  const invoice = event.data.object;
+  const tenantId = invoice.subscription_details?.metadata?.tenant_id || invoice.metadata?.tenant_id;
+  if (!tenantId) return { handled: false, reason: 'no tenant_id' };
+
+  return withTenant(pg, MASTER_TENANT_ID, async (client) => {
+    const { isNew } = await recordPaymentEvent(client, {
+      gateway: 'stripe',
+      eventId: event.id,
+      kind: 'invoice_payment_failed',
+      tenantId,
+    });
+    if (!isNew) return { handled: true, idempotent: true };
+
+    await client.query(
+      `UPDATE subscriptions SET status = 'past_due', updated_at = NOW() WHERE tenant_id = $1`,
+      [tenantId]
+    );
+    await client.query(
+      `UPDATE tenants SET billing_status = 'past_due' WHERE id = $1`,
+      [tenantId]
+    );
+
+    if (redis) {
+      await redis.publish(`billing:payment_failed:${tenantId}`, JSON.stringify({}));
+    }
+    return { handled: true, idempotent: false };
+  }, { userId: null, channel: 'system' });
+}
+
+async function handleSubscriptionDeleted(pg, event, redis) {
+  const subscription = event.data.object;
+  const tenantId = subscription.metadata?.tenant_id;
+  if (!tenantId) return { handled: false, reason: 'no tenant_id' };
+
+  return withTenant(pg, MASTER_TENANT_ID, async (client) => {
+    const { isNew } = await recordPaymentEvent(client, {
+      gateway: 'stripe',
+      eventId: event.id,
+      kind: 'subscription_cancelled',
+      tenantId,
+    });
+    if (!isNew) return { handled: true, idempotent: true };
+
+    await client.query(
+      `UPDATE subscriptions SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW()
+       WHERE tenant_id = $1`,
+      [tenantId]
+    );
+    await client.query(
+      `UPDATE tenants SET active = false, billing_status = 'cancelled' WHERE id = $1`,
+      [tenantId]
+    );
+
+    if (redis) {
+      await redis.publish(`billing:cancelled:${tenantId}`, JSON.stringify({}));
+    }
+    return { handled: true, idempotent: false };
+  }, { userId: null, channel: 'system' });
+}
+
 module.exports = {
   handleCheckoutCompleted,
+  handleInvoicePaid,
+  handleInvoicePaymentFailed,
+  handleSubscriptionDeleted,
   recordPaymentEvent,
   ONBOARDING_BONUS_CREDITS,
+  RECURRING_BONUS_CREDITS,
 };
