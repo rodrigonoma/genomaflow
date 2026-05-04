@@ -1,43 +1,55 @@
 ---
-name: S3 lifecycle vs persistência — separar prefix de uploads efêmeros e persistentes
-description: Bucket genomaflow-uploads-prod tem lifecycle de 7d em uploads/ — qualquer asset persistente deve ir pra prefix diferente, senão some sem aviso
+name: S3 lifecycle vs persistência — bucket sem lifecycle desde 2026-05-04
+description: Bucket genomaflow-uploads-prod tinha lifecycle 7d em uploads/ que apagou imagens displayable de exames. Removida; ativos persistem indefinidamente. Worker passou a salvar imagens em prefix dedicado (exam-images/) por hygiene organizacional, mesmo sem pressão de lifecycle.
 type: feedback
 ---
 
-O bucket `genomaflow-uploads-prod` tem lifecycle rule `delete-processed-uploads` com `Filter: Prefix "uploads/"` e `Expiration: 7 days`. **Qualquer objeto em `uploads/*` é apagado automaticamente após 7 dias** — sem retorno, sem notificação, sem soft-delete.
+**Estado atual (desde 2026-05-04):** o bucket `genomaflow-uploads-prod` não tem lifecycle rule. **Todos os objetos persistem indefinidamente.** Plano de expurgo/backup pra outro bucket fica como dívida técnica futura — a definir cadência, retenção e destino.
 
-**Why:** 2026-05-04 — usuário reportou "imagens com marcadores não aparecem mais nos exames antigos". Investigação:
-1. Frontend chama `GET /api/exams/:id/image` → API tenta baixar do S3 → retorna 500 com "The specified key does not exist."
-2. Banco tem `original_image_url = s3://.../uploads/{tenant}/{exam}/image.png` populado corretamente
-3. Mas o objeto S3 foi apagado pelo lifecycle (exame de 13 dias atrás, > limite de 7d)
-4. Causa raiz: worker (`apps/worker/src/processors/exam.js`) salvava PNG processado em `uploads/${tenant_id}/${exam_id}/image.png` — mesmo prefix que tem lifecycle de 7d
+**Por quê removemos:** uma única rule `delete-processed-uploads` com `Filter: Prefix "uploads/"` e `Expiration: 7 days` estava purgando objetos depois de uma semana. Isso quebrou o GET /api/exams/:id/image pra qualquer exame com mais de 7 dias — banco mantinha `original_image_url` apontando pro objeto que o S3 já tinha apagado, API retornava 500 NoSuchKey, frontend caía na mensagem "imagem não disponível nesta versão". Incidente reportado 2026-05-04 por exame de RM de 2026-04-21 (13 dias antes).
 
-Lifecycle foi setado out-of-band (não está no CDK), provavelmente com a intenção de purgar uploads originais (PDF/DICOM brutos) que o worker já processou. Mas o PNG renderizado pra exibir os bounding boxes no frontend foi salvo no mesmo prefix por engano.
+Perda histórica: exames processados antes do fix tiveram tanto o objeto displayable (PNG renderizado) quanto a fonte original (PDF/DICOM/JPG bruto) apagados pelo lifecycle, ambos no mesmo prefix `uploads/`. **Sem recuperação possível.** Reprocess também falha porque a fonte sumiu.
 
-**How to apply:**
+## How to apply
 
-1. **Distinguir prefixes por intenção de retenção:**
-   - `uploads/` — material bruto efêmero (uploads de usuário, fontes processadas e descartáveis). Lifecycle 7d OK.
-   - `exam-images/` — imagens displayable de exames (renderizações, PNGs de bounding box overlay). **Sem lifecycle**. Imagens médicas exigem retenção longa por CFM.
-   - `inter-tenant-chat/`, `master-broadcasts/` — anexos de chat/comunicados, sem lifecycle.
-
-2. **Ao adicionar feature que persiste asset visual ou de longo prazo:** *jamais* salvar em `uploads/`. Criar prefix novo + adicionar à IAM policy do task role (ver `feedback_iam_s3_prefixes.md`).
-
-3. **Antes de mudar lifecycle ou adicionar nova rule:** auditar TODO asset persistente que vive no bucket. Comando:
+1. **Confirmar que lifecycle continua removida:**
    ```bash
    aws s3api get-bucket-lifecycle-configuration --bucket genomaflow-uploads-prod
+   # Deve retornar: NoSuchLifecycleConfiguration (erro esperado)
    ```
 
-4. **Defesa em profundidade na API:** quando rota faz `downloadFile()` em chave que pode ter sido purged, capturar `NoSuchKey` e retornar 404 limpo (não 500). Frontend trata 404 com fallback ("imagem não disponível"); 500 vira erro genérico ruim.
+2. **Antes de adicionar lifecycle de volta no futuro:** identificar exatamente quais prefixes podem ser purgados sem perda funcional. Ativos médicos (exames, laudos com markers, prescrições, anexos clínicos) devem ficar fora de qualquer expiração — CFM exige retenção de prontuários por décadas.
 
-5. **Trazer lifecycle pro CDK quando possível:** out-of-band é dívida latente (`feedback_cdk_drift.md`). Se algum dia rodarem `cdk deploy s3-stack`, a lifecycle some. Ainda não foi pra IaC porque o bucket atual não é gerenciado por CDK — quando migrar, levar a rule também.
+3. **Ativos efêmeros candidatos a expurgo futuro:**
+   - `uploads/*` raw user uploads se já processados (PDF/DICOM brutos podem ser descartados depois que worker já gerou o PNG displayable)
+   - Sessões de chat antigas talvez (mas check com legal antes)
+   - Anexos de testes / sandbox
 
-**Red flags:**
-- Salvar em `uploads/${tenant}/${exam}/image.png` ou path similar que cai em lifecycle
-- Endpoint que retorna 500 com "The specified key does not exist" / "NoSuchKey"
-- `downloadFile()` sem try/catch em rota de produção
-- Asset que precisa retenção médica longa (exames, laudos, prescrições) salvo em prefix com expiração curta
+4. **Ativos protegidos (NUNCA expirar):**
+   - `exam-images/*` — PNGs displayable com markers (introduzido 2026-05-04)
+   - `master-broadcasts/*` — anexos oficiais
+   - `inter-tenant-chat/*` — conversas profissionais (verificar legal)
 
-**Backlog perdido:** exames processados antes deste fix com `original_image_url` apontando pra `uploads/` já tiveram a imagem apagada pelo lifecycle (e a fonte original também — mesma prefix). Não há recuperação. Reprocess falha porque a fonte (PDF/DICOM/JPG bruto) também foi purged. Aceitar perda como dívida histórica.
+5. **Padrão preventivo no worker:** imagens displayable (DICOM convertido + JPG/PNG do user) salvam em `exam-images/{tenant_id}/{exam_id}/image.{ext}` desde o fix de 2026-05-04. Mesmo sem pressão de lifecycle hoje, mantém separação organizacional clara entre raw e processed.
 
-**Commit do fix:** branch `fix/preserve-exam-images` em 2026-05-04. Worker passa a salvar em `exam-images/` + IAM policy do task role estendida + try/catch NoSuchKey na API.
+6. **API defensive layer:** GET /:id/image captura `NoSuchKey` e retorna 404 limpo (em vez de 500). Cobre caso raro de objeto deletado manualmente ou referência órfã. Sem isso, frontend mostra erro genérico ruim em vez do fallback `noImage=true`.
+
+## Red flags
+
+- Adicionar lifecycle rule no bucket sem auditar TODO asset persistente
+- Salvar PNG displayable em `uploads/` (volte a vir pra `exam-images/`)
+- API que faz `downloadFile` sem try/catch numa rota crítica
+- Endpoint que retorna 500 com "NoSuchKey" / "The specified key does not exist"
+- Ativos médicos em prefix com expiração curta (CFM compliance)
+
+## Dívida técnica registrada
+
+**Plano de expurgo/backup futuro (TBD):**
+- Definir RPO/RTO para imagens de exame
+- Definir bucket destino (Glacier? S3 Standard-IA? bucket separado?)
+- Definir gatilho (idade? tag? movimentação manual?)
+- Decidir se uploads/ raw pode ser purgado depois de N dias (verificar dependência de reprocess)
+- Documentar no IaC (CDK) quando finalizar — atualmente lifecycle estava out-of-band
+
+**Commits relevantes:**
+- 2026-05-04 fix `bccd9238` — worker → exam-images/, IAM, API try/catch + delete da lifecycle rule via aws CLI

@@ -296,7 +296,7 @@ Incidente 2026-04-24 (causa raiz definitiva): `docs/claude-memory/feedback_angul
 - **API e Worker são containers separados no ECS — nunca compartilham filesystem**
 - Qualquer arquivo que precise ser lido por mais de um container (ex: PDF de exame) **obrigatoriamente vai para o S3**
 - `/tmp` e qualquer path local são efêmeros: somem ao reiniciar o container ou em novo deploy
-- Bucket de uploads: `genomaflow-uploads-prod` (região `us-east-1`, privado, lifecycle 7 dias)
+- Bucket de uploads: `genomaflow-uploads-prod` (região `us-east-1`, privado, **sem lifecycle desde 2026-05-04** — objetos persistem indefinidamente; plano de expurgo/backup futuro a definir)
 - Path padrão de uploads: `uploads/{tenant_id}/{timestamp}-{filename}`
 - IAM: task role do ECS tem `s3:PutObject + GetObject + DeleteObject` em `uploads/*`
 
