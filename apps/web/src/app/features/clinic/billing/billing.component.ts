@@ -62,8 +62,14 @@ import { BillingService, LedgerItem, LedgerSummary, UsageReport } from './billin
              [style.width]="balancePct() + '%'"></div>
       </div>
       <button (click)="openTopup = true"
-              style="width:100%;padding:0.625rem;background:#c0c1ff;color:#4b4d83;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;border:none;border-radius:0.25rem;cursor:pointer;">
+              style="width:100%;padding:0.625rem;background:#c0c1ff;color:#4b4d83;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;border:none;border-radius:0.25rem;cursor:pointer;margin-bottom:0.5rem;">
         Recarregar Créditos
+      </button>
+      <button (click)="openPortal()" [disabled]="portalLoading()"
+              style="width:100%;padding:0.625rem;background:transparent;color:#c0c1ff;font-family:'JetBrains Mono',monospace;font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;border:1px solid rgba(192,193,255,0.3);border-radius:0.25rem;cursor:pointer;"
+              [style.opacity]="portalLoading() ? '0.5' : '1'"
+              title="Atualizar cartão · Ver invoices · Cancelar plano">
+        {{ portalLoading() ? 'Abrindo...' : '⚙ Gerenciar Assinatura' }}
       </button>
     </div>
 
@@ -261,17 +267,17 @@ import { BillingService, LedgerItem, LedgerSummary, UsageReport } from './billin
         <div style="margin-bottom:1.5rem;">
           <label style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;color:#c7c5d0;display:block;margin-bottom:0.5rem;">Forma de Pagamento</label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
-            <div (click)="topupGateway = 'stripe'" style="padding:0.75rem;border-radius:0.25rem;cursor:pointer;text-align:center;border:2px solid transparent;transition:all 0.2s;"
-                 [style.borderColor]="topupGateway === 'stripe' ? '#c0c1ff' : 'transparent'"
-                 [style.background]="topupGateway === 'stripe' ? '#171f33' : '#060d20'">
-              <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#c0c1ff;">Stripe</div>
-              <div style="font-size:0.65rem;color:#c7c5d0;">Cartão</div>
+            <div (click)="selectedPaymentMethod = 'card'" style="padding:0.75rem;border-radius:0.25rem;cursor:pointer;text-align:center;border:2px solid transparent;transition:all 0.2s;"
+                 [style.borderColor]="selectedPaymentMethod === 'card' ? '#c0c1ff' : 'transparent'"
+                 [style.background]="selectedPaymentMethod === 'card' ? '#171f33' : '#060d20'">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#c0c1ff;">💳 Cartão</div>
+              <div style="font-size:0.65rem;color:#c7c5d0;">Crédito · instantâneo</div>
             </div>
-            <div (click)="topupGateway = 'mercadopago'" style="padding:0.75rem;border-radius:0.25rem;cursor:pointer;text-align:center;border:2px solid transparent;transition:all 0.2s;"
-                 [style.borderColor]="topupGateway === 'mercadopago' ? '#c0c1ff' : 'transparent'"
-                 [style.background]="topupGateway === 'mercadopago' ? '#171f33' : '#060d20'">
-              <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#c0c1ff;">Mercado Pago</div>
-              <div style="font-size:0.65rem;color:#c7c5d0;">PIX / Boleto</div>
+            <div (click)="selectedPaymentMethod = 'pix'" style="padding:0.75rem;border-radius:0.25rem;cursor:pointer;text-align:center;border:2px solid transparent;transition:all 0.2s;"
+                 [style.borderColor]="selectedPaymentMethod === 'pix' ? '#c0c1ff' : 'transparent'"
+                 [style.background]="selectedPaymentMethod === 'pix' ? '#171f33' : '#060d20'">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#c0c1ff;">⚡ PIX</div>
+              <div style="font-size:0.65rem;color:#c7c5d0;">QR Code · ~2-30s</div>
             </div>
           </div>
         </div>
@@ -303,14 +309,16 @@ export class BillingComponent implements OnInit {
   filterTo = '';
   openTopup = false;
   selectedCredits: number | null = null;
-  topupGateway: 'stripe' | 'mercadopago' | '' = '';
+  selectedPaymentMethod: 'card' | 'pix' = 'card';
   topupLoading = signal<boolean>(false);
   topupError = signal<string>('');
+  portalLoading = signal<boolean>(false);
 
   readonly creditPackages = [
-    { credits: 100, price: 49.90, perCredit: '0,49' },
-    { credits: 250, price: 109.90, perCredit: '0,44' },
-    { credits: 500, price: 199.90, perCredit: '0,40' }
+    { credits: 100,  price: 49.90,  perCredit: '0,49' },
+    { credits: 250,  price: 109.90, perCredit: '0,44' },
+    { credits: 500,  price: 199.90, perCredit: '0,40' },
+    { credits: 1000, price: 379.90, perCredit: '0,38' }
   ];
 
   constructor(private billingService: BillingService) {}
@@ -383,11 +391,27 @@ export class BillingComponent implements OnInit {
   confirmTopup(): void {
     this.topupError.set('');
     if (!this.selectedCredits) { this.topupError.set('Selecione um pacote.'); return; }
-    if (!this.topupGateway) { this.topupError.set('Selecione uma forma de pagamento.'); return; }
     this.topupLoading.set(true);
-    this.billingService.topup(this.topupGateway, this.selectedCredits).subscribe({
-      next: ({ checkout_url }) => { window.location.href = checkout_url; },
-      error: (err) => { this.topupLoading.set(false); this.topupError.set(err.error?.error ?? 'Erro ao iniciar pagamento.'); }
+    this.billingService.checkoutTopup(this.selectedCredits, this.selectedPaymentMethod).subscribe({
+      next: ({ url }) => { window.location.href = url; },
+      error: (err) => {
+        this.topupLoading.set(false);
+        this.topupError.set(err?.error?.error ?? 'Erro ao iniciar pagamento.');
+      }
+    });
+  }
+
+  // Abre Stripe Customer Portal pra cliente gerenciar plano (atualizar cartão / cancelar).
+  // Backend retorna 400 se tenant não tem subscription Stripe (ex: grandfathered ou
+  // ainda não assinou) — exibimos mensagem amigável.
+  openPortal(): void {
+    this.portalLoading.set(true);
+    this.billingService.portal().subscribe({
+      next: ({ url }) => { window.location.href = url; },
+      error: (err) => {
+        this.portalLoading.set(false);
+        this.topupError.set(err?.error?.error ?? 'Erro ao abrir portal Stripe.');
+      }
     });
   }
 }
