@@ -201,6 +201,8 @@ export interface JwtPayload {
   module: 'human' | 'veterinary';
 }
 
+export type BillingStatus = 'pending_payment' | 'active' | 'past_due' | 'cancelled' | 'grandfathered';
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -212,6 +214,10 @@ export interface UserProfile {
   professional_data_confirmed_at?: string | null;
   module: 'human' | 'veterinary';
   tenant_name: string;
+  // Status de cobrança do tenant. Permite UI condicional (banner past_due,
+  // chip "fundador" pra grandfathered, prompt "completar pagamento" pra
+  // pending_payment). Setado via webhook Stripe (ver project_stripe_integration.md).
+  billing_status: BillingStatus;
 }
 
 export interface Connector {
