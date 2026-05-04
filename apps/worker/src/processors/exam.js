@@ -184,17 +184,27 @@ async function processImagingExam({ exam_id, tenant_id, file_path, file_type }) 
 
     let imageMimeType = 'image/png';
 
+    // Imagens displayable (DICOM convertido + JPG/PNG enviados) vão pra
+    // prefix `exam-images/` — fora do alcance do lifecycle de 7 dias do S3
+    // que purga `uploads/`. Sem isso, depois de 7 dias o objeto some e o
+    // GET /exams/:id/image volta 500 NoSuchKey, frontend mostra "imagem
+    // não disponível" mesmo com original_image_url no banco.
+    // Incidente 2026-05-04: laudo MRI de 2026-04-21 já tinha sido apagado.
     if (file_type === 'dicom') {
       const { pngBuffer, meta } = await dicomToImage(buffer);
       imageMeta     = meta;
       imageBase64   = pngBuffer.toString('base64');
       imageMimeType = 'image/png';
-      imageS3Key    = `uploads/${tenant_id}/${exam_id}/image.png`;
+      imageS3Key    = `exam-images/${tenant_id}/${exam_id}/image.png`;
       await uploadFile(imageS3Key, pngBuffer, 'image/png');
     } else if (file_type === 'image') {
       imageMimeType = detectImageMime(buffer);
       imageBase64   = buffer.toString('base64');
-      imageS3Key    = keyFromPath(file_path);
+      // Original veio em uploads/ que é purged em 7 dias — copia pra
+      // exam-images/ pra preservar.
+      const ext  = (imageMimeType.split('/')[1] || 'png').replace('jpeg', 'jpg');
+      imageS3Key = `exam-images/${tenant_id}/${exam_id}/image.${ext}`;
+      await uploadFile(imageS3Key, buffer, imageMimeType);
     } else if (file_type === 'pdf') {
       pdfBuffer = buffer;
     }

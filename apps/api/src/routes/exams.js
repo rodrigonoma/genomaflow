@@ -358,7 +358,18 @@ module.exports = async function (fastify) {
     }
 
     const { downloadFile, keyFromPath } = require('../storage/s3');
-    const buffer = await downloadFile(keyFromPath(row.metadata.original_image_url));
+    let buffer;
+    try {
+      buffer = await downloadFile(keyFromPath(row.metadata.original_image_url));
+    } catch (err) {
+      // S3 NoSuchKey: exame antigo cuja imagem foi purged pelo lifecycle
+      // do bucket. Returna 404 pra frontend cair no caminho noImage limpo
+      // em vez de 500. Incidente 2026-05-04.
+      if (err && (err.name === 'NoSuchKey' || err.Code === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404)) {
+        return reply.status(404).send({ error: 'Imagem não disponível (exame antigo — preview não preservado)' });
+      }
+      throw err;
+    }
 
     reply.header('Content-Type', 'image/png');
     reply.header('Cache-Control', 'private, max-age=3600');
