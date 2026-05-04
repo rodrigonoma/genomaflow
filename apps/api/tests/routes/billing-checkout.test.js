@@ -75,3 +75,78 @@ describe('POST /billing/checkout/subscription', () => {
     await app.close();
   });
 });
+
+describe('POST /billing/checkout/topup', () => {
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_dummy';
+    process.env.FRONTEND_URL = 'https://app.test';
+    jest.clearAllMocks();
+    require('../../src/services/stripe-client')._resetClient();
+  });
+
+  test('admin + credits=250 + payment_method=card → 200', async () => {
+    const app = buildApp('admin');
+    await app.register(require('../../src/routes/billing'));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/billing/checkout/topup',
+      payload: { credits: 250, payment_method: 'card' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().url).toMatch(/^https:/);
+    await app.close();
+  });
+
+  test('credits inválido (999) → 400', async () => {
+    const app = buildApp('admin');
+    await app.register(require('../../src/routes/billing'));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/billing/checkout/topup',
+      payload: { credits: 999, payment_method: 'card' },
+    });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  test('payment_method inválido (boleto) → 400', async () => {
+    const app = buildApp('admin');
+    await app.register(require('../../src/routes/billing'));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/billing/checkout/topup',
+      payload: { credits: 100, payment_method: 'boleto' },
+    });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+});
+
+describe('POST /billing/portal', () => {
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_dummy';
+    process.env.FRONTEND_URL = 'https://app.test';
+    jest.clearAllMocks();
+    require('../../src/services/stripe-client')._resetClient();
+  });
+
+  test('admin com gateway_customer_id → 200 url do Portal', async () => {
+    const app = buildApp('admin');
+    app.pg.query = jest.fn(async () => ({ rows: [{ gateway_customer_id: 'cus_test_001' }] }));
+    await app.register(require('../../src/routes/billing'));
+    const res = await app.inject({ method: 'POST', url: '/billing/portal' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().url).toMatch(/portal/);
+    await app.close();
+  });
+
+  test('sem gateway_customer_id → 400', async () => {
+    const app = buildApp('admin');
+    app.pg.query = jest.fn(async () => ({ rows: [] }));
+    await app.register(require('../../src/routes/billing'));
+    const res = await app.inject({ method: 'POST', url: '/billing/portal' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/Sem subscription/);
+    await app.close();
+  });
+});
