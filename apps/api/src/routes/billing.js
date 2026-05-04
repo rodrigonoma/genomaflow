@@ -122,48 +122,59 @@ module.exports = async function billingRoutes(fastify) {
     }
   });
 
-  // POST /billing/subscribe
-  fastify.post('/billing/subscribe', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+  // POST /billing/checkout/subscription — admin-only
+  // Cria Stripe Customer (lazy) + Checkout Session subscription.
+  // NÃO concede crédito sincrono — webhook checkout.session.completed faz isso.
+  fastify.post('/billing/checkout/subscription', {
+    preHandler: [fastify.authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     const { tenant_id, role } = request.user;
-    if (role !== 'admin') return reply.status(403).send({ error: 'Admin only' });
-
-    const { gateway, plan, specialties } = request.body || {};
-    if (!gateway || !plan) return reply.status(400).send({ error: 'gateway e plan são obrigatórios' });
-    if (!['stripe','mercadopago'].includes(gateway)) return reply.status(400).send({ error: 'Gateway inválido' });
-
-    // Save specialties from onboarding metadata
-    if (Array.isArray(specialties) && specialties.length > 0) {
-      const client = await fastify.pg.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query('DELETE FROM tenant_specialties WHERE tenant_id = $1', [tenant_id]);
-        for (const agent_type of specialties) {
-          await client.query(
-            'INSERT INTO tenant_specialties (tenant_id, agent_type) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-            [tenant_id, agent_type]
-          );
-        }
-        await client.query('COMMIT');
-      } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-      } finally {
-        client.release();
-      }
+    if (role !== 'admin') {
+      return reply.status(403).send({ error: 'Admin only' });
     }
 
-    // Grant starter credits immediately (real gateway webhook will do this in production)
-    const starterCredits = 100;
+    const stripeClient = require('../services/stripe-client');
+    const priceId = process.env.STRIPE_PRICE_SUBSCRIPTION;
+    if (!priceId) {
+      fastify.log.error('STRIPE_PRICE_SUBSCRIPTION não configurada');
+      return reply.status(500).send({ error: 'Pagamento indisponível — configuração ausente' });
+    }
+    const frontendUrl = process.env.FRONTEND_URL || 'https://app.genomaflow.com.br';
+
+    // Pega dados do tenant pra criar Customer
+    const { rows } = await fastify.pg.query(
+      `SELECT t.name, u.email FROM tenants t
+       JOIN users u ON u.tenant_id = t.id AND u.role = 'admin'
+       WHERE t.id = $1 LIMIT 1`,
+      [tenant_id]
+    );
+    if (!rows[0]) return reply.status(404).send({ error: 'Tenant não encontrado' });
+
+    const customer = await stripeClient.findOrCreateCustomer({
+      tenantId: tenant_id,
+      email: rows[0].email,
+      name: rows[0].name,
+    });
+
+    // Persiste customer_id pra reuso futuro
     await fastify.pg.query(
-      `INSERT INTO credit_ledger (tenant_id, amount, kind, description)
-       VALUES ($1, $2, 'purchase', 'Créditos iniciais do plano')`,
-      [tenant_id, starterCredits]
+      `INSERT INTO subscriptions (tenant_id, gateway, gateway_customer_id, plan, status)
+       VALUES ($1, 'stripe', $2, 'starter', 'pending_payment')
+       ON CONFLICT (tenant_id) DO UPDATE
+       SET gateway_customer_id = EXCLUDED.gateway_customer_id, updated_at = NOW()`,
+      [tenant_id, customer.id]
     );
 
-    fastify.redis.publish(`billing:updated:${tenant_id}`, '{}').catch(() => {});
-    const appUrl = process.env.APP_URL || 'http://localhost:4200';
-    const checkout_url = `${appUrl}/login?activated=true`;
-    return reply.status(200).send({ checkout_url });
+    const session = await stripeClient.createSubscriptionCheckoutSession({
+      customerId: customer.id,
+      tenantId: tenant_id,
+      priceId,
+      successUrl: `${frontendUrl}/login?activated=true`,
+      cancelUrl: `${frontendUrl}/onboarding?cancelled=true`,
+    });
+
+    return { url: session.url, session_id: session.id };
   });
 
   // POST /billing/topup
