@@ -209,3 +209,76 @@ describe('handleSubscriptionDeleted', () => {
     expect(pgMock.client.query.mock.calls.some(c => /cancelled_at\s*=\s*NOW/.test(c[0]))).toBe(true);
   });
 });
+
+describe('POST /webhooks/stripe — signature validation', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_dummy';
+    process.env.STRIPE_SECRET_KEY = 'sk_test_dummy';
+    require('../../src/services/stripe-client')._resetClient();
+  });
+
+  async function buildAppWithWebhook() {
+    const Fastify = require('fastify');
+    const app = Fastify({ logger: false });
+
+    // Raw body parser (mesmo do server.js)
+    app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+      req.rawBody = body;
+      try {
+        const json = body.length > 0 ? JSON.parse(body.toString('utf8')) : {};
+        done(null, json);
+      } catch (err) { done(err, undefined); }
+    });
+
+    app.decorate('pg', { connect: jest.fn(), query: jest.fn() });
+    app.decorate('redis', { publish: jest.fn() });
+    await app.register(require('../../src/routes/webhooks/stripe'));
+    await app.ready();
+    return app;
+  }
+
+  test('sem header stripe-signature → 400', async () => {
+    const app = await buildAppWithWebhook();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe',
+      payload: { type: 'checkout.session.completed' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/Stripe-Signature/);
+    await app.close();
+  });
+
+  test('signature inválida → 400', async () => {
+    Stripe.mockConstructEvent.mockImplementation(() => {
+      throw new Error('No signatures found matching the expected signature');
+    });
+    const app = await buildAppWithWebhook();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe',
+      headers: { 'stripe-signature': 't=12345,v1=fake' },
+      payload: { type: 'checkout.session.completed' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/Invalid signature/);
+    await app.close();
+  });
+
+  test('signature válida + tipo desconhecido → 200 no-op', async () => {
+    Stripe.mockConstructEvent.mockImplementation(() => ({
+      id: 'evt_test', type: 'customer.created', data: { object: {} },
+    }));
+    const app = await buildAppWithWebhook();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe',
+      headers: { 'stripe-signature': 't=12345,v1=valid' },
+      payload: { type: 'customer.created' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ received: true });
+    await app.close();
+  });
+});
