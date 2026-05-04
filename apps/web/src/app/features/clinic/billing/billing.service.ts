@@ -52,7 +52,25 @@ export class BillingService {
     return this.http.get<UsageReport>(`${this.api}/billing/usage?days=${days}`);
   }
 
-  topup(gateway: string, credits: number): Observable<{ checkout_url: string }> {
-    return this.http.post<{ checkout_url: string }>(`${this.api}/billing/topup`, { gateway, credits });
+  // Cria Checkout Session de assinatura. Retorna URL hosted do Stripe.
+  // Frontend redireciona via window.location.href = url.
+  // Crédito é concedido pelo webhook checkout.session.completed (não aqui).
+  checkoutSubscription(): Observable<{ url: string; session_id: string }> {
+    return this.http.post<{ url: string; session_id: string }>(
+      `${this.api}/billing/checkout/subscription`, {}
+    );
+  }
+
+  // Compra de pacote de créditos one-time. paymentMethod: 'card' | 'pix'.
+  checkoutTopup(credits: number, paymentMethod: 'card' | 'pix'): Observable<{ url: string; session_id?: string }> {
+    return this.http.post<{ url: string; session_id?: string }>(
+      `${this.api}/billing/checkout/topup`,
+      { credits, payment_method: paymentMethod }
+    );
+  }
+
+  // Stripe Customer Portal: gerenciar plano, atualizar cartão, cancelar.
+  portal(): Observable<{ url: string }> {
+    return this.http.post<{ url: string }>(`${this.api}/billing/portal`, {});
   }
 }
