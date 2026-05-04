@@ -1,5 +1,5 @@
 import {
-  Component, Input, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewInit, inject
+  Component, Input, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewInit, OnDestroy, inject
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { MatIconModule } from '@angular/material/icon';
@@ -13,8 +13,8 @@ import { ClinicalResult, ImagingFinding, ImagingMetadata } from '../../../shared
   imports: [MatIconModule, MatButtonModule],
   styles: [`
     :host { display: block; }
-    .viewer-container { position: relative; display: inline-block; max-width: 100%; }
-    .exam-image { max-width: 100%; display: block; border-radius: 6px; border: 1px solid rgba(70,69,84,0.25); }
+    .viewer-container { position: relative; display: block; width: 100%; max-width: 100%; }
+    .exam-image { width: 100%; max-width: 100%; height: auto; display: block; border-radius: 6px; border: 1px solid rgba(70,69,84,0.25); }
     .overlay-canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
     .image-controls { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
     .disclaimer-box {
@@ -153,7 +153,7 @@ import { ClinicalResult, ImagingFinding, ImagingMetadata } from '../../../shared
     }
   `
 })
-export class ImagingResultComponent implements OnChanges, AfterViewInit {
+export class ImagingResultComponent implements OnChanges, AfterViewInit, OnDestroy {
   @Input({ required: true }) result!: ClinicalResult;
   @Input({ required: true }) examId!: string;
 
@@ -172,6 +172,7 @@ export class ImagingResultComponent implements OnChanges, AfterViewInit {
   hiddenIds = new Set<number>();
   private highlightedId: number | null = null;
   private imageLoaded = false;
+  private resizeObserver?: ResizeObserver;
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['result']) {
@@ -189,6 +190,10 @@ export class ImagingResultComponent implements OnChanges, AfterViewInit {
 
   ngAfterViewInit(): void {
     if (this.imageLoaded) this.drawFindings();
+  }
+
+  ngOnDestroy(): void {
+    this.resizeObserver?.disconnect();
   }
 
   private loadImage(): void {
@@ -210,6 +215,7 @@ export class ImagingResultComponent implements OnChanges, AfterViewInit {
     this.imageLoaded = true;
     this.syncCanvasSize();
     this.drawFindings();
+    this.setupResizeObserver();
   }
 
   onImageError(): void {
@@ -225,6 +231,22 @@ export class ImagingResultComponent implements OnChanges, AfterViewInit {
     canvas.height = img.clientHeight;
     canvas.style.width  = img.clientWidth  + 'px';
     canvas.style.height = img.clientHeight + 'px';
+  }
+
+  // Mantém canvas sincronizado com a imagem em mudanças de viewport (rotação,
+  // resize, layout shift). Sem isso, em mobile os bounding boxes ficam
+  // desacoplados: imagem escala fluida, canvas permanece no tamanho do load
+  // inicial — boxes invisíveis ou desalinhados.
+  private setupResizeObserver(): void {
+    if (this.resizeObserver) return;
+    if (typeof ResizeObserver === 'undefined') return;
+    const img = this.imageRef?.nativeElement;
+    if (!img) return;
+    this.resizeObserver = new ResizeObserver(() => {
+      this.syncCanvasSize();
+      this.drawFindings();
+    });
+    this.resizeObserver.observe(img);
   }
 
   toggleAnnotations(): void {
