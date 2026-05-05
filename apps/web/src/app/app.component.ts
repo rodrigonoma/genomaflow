@@ -257,6 +257,9 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
           <a class="nav-item" routerLink="/clinic/billing" routerLinkActive="active">
             <mat-icon>account_balance_wallet</mat-icon> Créditos
           </a>
+          <a class="nav-item" routerLink="/clinic/nps" routerLinkActive="active">
+            <mat-icon>insights</mat-icon> NPS
+          </a>
           <div class="nav-section-label">Clínica</div>
           <a class="nav-item" routerLink="/doctor/patients" routerLinkActive="active">
             <mat-icon>{{ user.module === 'veterinary' ? 'pets' : 'people' }}</mat-icon>

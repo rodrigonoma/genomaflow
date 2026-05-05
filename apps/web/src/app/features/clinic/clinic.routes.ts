@@ -26,5 +26,10 @@ export const CLINIC_ROUTES: Routes = [
     loadComponent: () =>
       import('./billing/billing.component').then(m => m.BillingComponent)
   },
+  {
+    path: 'nps',
+    loadComponent: () =>
+      import('./nps/nps.component').then(m => m.NpsComponent)
+  },
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' }
 ];
