@@ -6,19 +6,19 @@ module.exports = async function (fastify) {
   fastify.get('/profile', { preHandler: [fastify.authenticate] }, async (request) => {
     const { tenant_id } = request.user;
     const { rows } = await fastify.pg.query(
-      `SELECT id, name, module, cnpj, clinic_logo_url, contact_email, phone, address
+      `SELECT id, name, module, cnpj, clinic_logo_url, contact_email, phone, whatsapp_phone, address
        FROM tenants WHERE id = $1`,
       [tenant_id]
     );
     return rows[0] ?? {};
   });
 
-  // PUT /clinic/profile — atualizar nome, CNPJ e contato
+  // PUT /clinic/profile — atualizar nome, CNPJ e contato (incluindo whatsapp_phone)
   fastify.put('/profile', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { tenant_id, role } = request.user;
     if (role !== 'admin') return reply.status(403).send({ error: 'Acesso restrito a administradores' });
 
-    const { name, cnpj, contact_email, phone, address } = request.body || {};
+    const { name, cnpj, contact_email, phone, whatsapp_phone, address } = request.body || {};
     if (!name?.trim()) return reply.status(400).send({ error: 'Nome da clínica é obrigatório' });
 
     if (contact_email != null && String(contact_email).trim() !== '') {
@@ -29,6 +29,9 @@ module.exports = async function (fastify) {
     }
     if (phone != null && String(phone).length > 40) {
       return reply.status(400).send({ error: 'Telefone muito longo (máx 40 caracteres)' });
+    }
+    if (whatsapp_phone != null && String(whatsapp_phone).length > 40) {
+      return reply.status(400).send({ error: 'WhatsApp muito longo (máx 40 caracteres)' });
     }
     if (address != null && String(address).length > 500) {
       return reply.status(400).send({ error: 'Endereço muito longo (máx 500 caracteres)' });
@@ -42,14 +45,15 @@ module.exports = async function (fastify) {
 
     const { rows } = await fastify.pg.query(
       `UPDATE tenants
-       SET name = $1, cnpj = $2, contact_email = $3, phone = $4, address = $5
-       WHERE id = $6
-       RETURNING id, name, cnpj, clinic_logo_url, module, contact_email, phone, address`,
+       SET name = $1, cnpj = $2, contact_email = $3, phone = $4, whatsapp_phone = $5, address = $6
+       WHERE id = $7
+       RETURNING id, name, cnpj, clinic_logo_url, module, contact_email, phone, whatsapp_phone, address`,
       [
         name.trim(),
         normalize(cnpj),
         normalize(contact_email),
         normalize(phone),
+        normalize(whatsapp_phone),
         normalize(address),
         tenant_id
       ]

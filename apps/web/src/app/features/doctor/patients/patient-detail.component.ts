@@ -123,6 +123,13 @@ interface ComparisonBlock {
     }
     .field-row { display: flex; flex-direction: column; gap: 1rem; }
     .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .wa-quick-btn { display: inline-flex; align-items: center; gap: 8px;
+                    padding: 8px 14px; margin-top: -0.5rem; margin-bottom: 1rem;
+                    background: #25D366; color: #fff; text-decoration: none;
+                    border-radius: 4px; font-size: 0.8125rem; font-weight: 600;
+                    transition: opacity 0.15s; }
+    .wa-quick-btn:hover { opacity: 0.9; }
+    .wa-quick-btn .material-icons { font-size: 18px; }
     mat-form-field { width: 100%; }
     .save-row { display: flex; justify-content: flex-end; margin-top: 1rem; }
 
@@ -740,6 +747,12 @@ interface ComparisonBlock {
                         <input matInput [(ngModel)]="editForm.phone"/>
                       </mat-form-field>
                     </div>
+                    @if (whatsappLink(editForm.phone)) {
+                      <a [href]="whatsappLink(editForm.phone)" target="_blank" rel="noopener" class="wa-quick-btn">
+                        <span class="material-icons">chat</span>
+                        Abrir WhatsApp do paciente
+                      </a>
+                    }
                   }
                   @if (subject()!.subject_type === 'animal') {
                     <div class="field-pair">
@@ -1714,6 +1727,21 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     // Fallback pelo profile do tenant (sempre disponível pós-login)
     const profile = (this.auth?.currentProfile?.module) as 'human' | 'veterinary' | undefined;
     return profile ?? 'human';
+  }
+
+  /**
+   * Gera link wa.me pro telefone do paciente. Botão "Abrir WhatsApp"
+   * dentro do patient-detail (ficha clínica) — recepção/atendente abre
+   * direto sem copiar/colar número.
+   */
+  whatsappLink(rawPhone: string | null | undefined): string | null {
+    if (!rawPhone) return null;
+    const digits = String(rawPhone).replace(/\D/g, '');
+    if (digits.length < 10) return null;
+    const e164 = digits.length === 13 || digits.length === 12 ? digits : '55' + digits;
+    const subjName = this.subject()?.name || '';
+    const text = encodeURIComponent(`Olá ${subjName}, da clínica falando.`);
+    return `https://wa.me/${e164}?text=${text}`;
   }
 
   onEncounterSaved(_enc: any): void {
