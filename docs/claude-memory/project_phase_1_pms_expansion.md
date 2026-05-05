@@ -122,6 +122,15 @@ Frontend — integrações:
 - ✅ `ng build --configuration=development` OK (warnings preexistentes apenas, nenhum erro novo)
 - ✅ 31 web tests verdes / 3 skipped (preexistente)
 
+## Estado em prod (deploy 2026-05-05)
+
+- Pipeline run `25358666565` ✅ success (Unit tests gate + deploy + migrations)
+- Migrations 065-068 aplicadas em prod (confirmado via log da task ECS migrate `cf4b57354a6f4e5fb52636beec2028f6`)
+- ECS api + web `rolloutState=COMPLETED`, 1/1 running
+- API prod respondendo em `https://app.genomaflow.com.br/api/auth/login`
+- Branch `feat/phase-1-prontuario-agenda` deletada (local + remote) após merge
+- HEAD em main: `e030cf2e` (merge commit) com `f40fef4b` como commit do Phase 1
+
 ## Próximos passos (Fase 2-4)
 
 - **Fase 2:** vacinas (vet) + clinical_documents (atestado, pedido_exame, encaminhamento, relatório) + NPS surveys
