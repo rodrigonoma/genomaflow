@@ -7,7 +7,7 @@
   <meta name="description" content="Transforme laudos PDF em insights clínicos estruturados para médicos e veterinários. Pipeline multi-tenant com latência abaixo de 60 segundos."/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,700;0,800;1,400&family=Fraunces:ital,wght@0,600;1,600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,700;0,9..144,800;1,9..144,400;1,9..144,500;1,9..144,700;1,9..144,800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet"/>
   <!-- Hidratação anti-FOUC: aplica tema antes do primeiro paint -->
   <script>
     (function(){
@@ -3879,11 +3879,12 @@
     <div class="d-hero-grid-overlay" aria-hidden="true"></div>
     <div class="d-container d-hero-grid">
       <div class="d-hero-content">
-        <span class="d-eyebrow d-anim d-anim-fade" data-anim-delay="0">
-          <span class="d-eyebrow-dot"></span>
-          Clinical AI · Multi-tenant SaaS
-        </span>
-        <h1 class="d-display d-anim d-anim-up" data-anim-delay="100">A clínica que <span class="d-display-em d-shimmer">pensa com você.</span></h1>
+        <div class="d-section-num d-anim d-anim-fade" data-anim-delay="0">
+          <span class="d-num">01</span>
+          <span class="d-num-rule"></span>
+          <span class="d-num-label">Clinical AI · est. 2026 · São Paulo</span>
+        </div>
+        <h1 class="d-display d-anim d-anim-up" data-anim-delay="100">A clínica<br/>que <em class="d-display-em">pensa</em><br/>com você.</h1>
         <p class="d-lead d-anim d-anim-up" data-anim-delay="200">
           Plataforma multi-tenant pra clínicas humanas e veterinárias. Agenda, prontuário,
           análise de exames, prescrições e portal do paciente — com IA assistiva que pensa
@@ -3985,9 +3986,13 @@
   <section class="d-section" id="d-features">
     <div class="d-container">
       <div class="d-section-head d-anim d-anim-up">
-        <span class="d-eyebrow"><span class="d-eyebrow-dot"></span>A plataforma</span>
-        <h2 class="d-headline">Tudo o que sua clínica precisa,<br/>conversando entre si.</h2>
-        <p class="d-section-sub">Do laudo à prescrição, da agenda ao portal do paciente. Um único produto, três pilares.</p>
+        <div class="d-section-num">
+          <span class="d-num">02</span>
+          <span class="d-num-rule"></span>
+          <span class="d-num-label">A plataforma</span>
+        </div>
+        <h2 class="d-headline">Tudo o que sua clínica precisa, <em class="d-headline-em">conversando entre si</em>.</h2>
+        <p class="d-section-sub">Do laudo à prescrição, da agenda ao portal do paciente. Um único produto, três pilares — sem integração frágil, sem dado em silos.</p>
       </div>
 
       <div class="d-features-grid">
@@ -4051,8 +4056,12 @@
   <section class="d-section d-section-alt" id="d-modules">
     <div class="d-container">
       <div class="d-section-head d-anim d-anim-up">
-        <span class="d-eyebrow"><span class="d-eyebrow-dot"></span>Multi-módulo</span>
-        <h2 class="d-headline">Humano e veterinário,<br/>na mesma plataforma.</h2>
+        <div class="d-section-num">
+          <span class="d-num">03</span>
+          <span class="d-num-rule"></span>
+          <span class="d-num-label">Multi-módulo</span>
+        </div>
+        <h2 class="d-headline">Humano e veterinário, <em class="d-headline-em">na mesma plataforma</em>.</h2>
         <p class="d-section-sub">Mundos diferentes — terminologia, fluxos, agentes de IA, espécies. Cada um com seu próprio espaço.</p>
       </div>
 
@@ -4105,8 +4114,12 @@
   <section class="d-section" id="d-ai">
     <div class="d-container">
       <div class="d-section-head d-anim d-anim-up">
-        <span class="d-eyebrow"><span class="d-eyebrow-dot"></span>IA Clínica · Foso defensável</span>
-        <h2 class="d-headline">5 agentes IA + 4 features que <span class="d-headline-em">vão além de interpretar exame</span>.</h2>
+        <div class="d-section-num">
+          <span class="d-num">04</span>
+          <span class="d-num-rule"></span>
+          <span class="d-num-label">IA Clínica · Foso defensável</span>
+        </div>
+        <h2 class="d-headline">5 agentes IA + 4 features que <em class="d-headline-em">vão além de interpretar exame</em>.</h2>
         <p class="d-section-sub">Análise multi-agente, co-piloto durante consulta, sugestões pró-ativas no prontuário, OCR de foto do laudo, retenção via WhatsApp. Toda saída com disclaimer e cadeia de evidências auditável.</p>
       </div>
 
@@ -4310,13 +4323,30 @@
     </div>
   </section>
 
+  <!-- ── PULL QUOTE — momento editorial dramático ─────────────────── -->
+  <section class="d-pullquote">
+    <div class="d-pullquote-inner d-anim d-anim-fade">
+      <p class="d-pullquote-text">
+        Não vendemos software clínico. Vendemos <em class="d-pullquote-emph">tempo de volta</em> pro médico cuidar do paciente — e <em class="d-pullquote-emph">atenção computacional</em> pra que nenhum detalhe importante se perca no histórico.
+      </p>
+      <div class="d-pullquote-cite">
+        <span class="d-pullquote-rule"></span>
+        <span>Filosofia da plataforma · 2026</span>
+      </div>
+    </div>
+  </section>
+
   <!-- ── OPERAÇÃO DETALHADA ──────────────────────────────────────── -->
   <section class="d-section d-section-alt" id="d-operacao">
     <div class="d-container">
       <div class="d-section-head d-anim d-anim-up">
-        <span class="d-eyebrow"><span class="d-eyebrow-dot"></span>Operação · Pilar 02</span>
-        <h2 class="d-headline">A clínica que <span class="d-headline-em">se organiza sozinha</span>.</h2>
-        <p class="d-section-sub">Da agenda à comunicação com o tutor, do prontuário ao portal do paciente. 9 features que conversam entre si e tiram trabalho do seu time.</p>
+        <div class="d-section-num">
+          <span class="d-num">05</span>
+          <span class="d-num-rule"></span>
+          <span class="d-num-label">Operação</span>
+        </div>
+        <h2 class="d-headline">A clínica que <em class="d-headline-em">se organiza sozinha</em>.</h2>
+        <p class="d-section-sub">Da agenda à comunicação com o tutor, do prontuário ao portal do paciente. Nove features que conversam entre si e tiram trabalho do seu time.</p>
       </div>
 
       <div class="d-ops-grid">
@@ -4381,9 +4411,13 @@
   <section class="d-section">
     <div class="d-container">
       <div class="d-section-head d-anim d-anim-up">
-        <span class="d-eyebrow"><span class="d-eyebrow-dot"></span>Vantagem real</span>
-        <h2 class="d-headline">O que muda no <span class="d-headline-em">dia a dia da clínica</span>.</h2>
-        <p class="d-section-sub">Não é só software bonito. É tempo liberado, pacientes melhor cuidados, equipe menos sobrecarregada.</p>
+        <div class="d-section-num">
+          <span class="d-num">06</span>
+          <span class="d-num-rule"></span>
+          <span class="d-num-label">Vantagem real</span>
+        </div>
+        <h2 class="d-headline">O que muda no <em class="d-headline-em">dia a dia da clínica</em>.</h2>
+        <p class="d-section-sub">Não é só software bonito. É tempo liberado, pacientes melhor cuidados, equipe menos sobrecarregada — e a sensação de que finalmente alguém pensou no seu fluxo.</p>
       </div>
 
       <div class="d-versus-grid">
@@ -4466,8 +4500,12 @@
   <section class="d-section d-section-alt">
     <div class="d-container">
       <div class="d-section-head d-anim d-anim-up">
-        <span class="d-eyebrow"><span class="d-eyebrow-dot"></span>Perguntas frequentes</span>
-        <h2 class="d-headline">Tudo o que você precisa saber<br/>antes de criar conta.</h2>
+        <div class="d-section-num">
+          <span class="d-num">07</span>
+          <span class="d-num-rule"></span>
+          <span class="d-num-label">Perguntas frequentes</span>
+        </div>
+        <h2 class="d-headline">Tudo o que você precisa saber <em class="d-headline-em">antes de criar conta</em>.</h2>
       </div>
 
       <div class="d-faq">
@@ -4518,9 +4556,13 @@
   <section class="d-section d-section-alt" id="d-pricing">
     <div class="d-container">
       <div class="d-section-head d-anim d-anim-up">
-        <span class="d-eyebrow"><span class="d-eyebrow-dot"></span>Planos</span>
-        <h2 class="d-headline">Plano único.<br/>Pague pelo uso.</h2>
-        <p class="d-section-sub">Sem tier forçado. Sem surpresa fiscal. Créditos por exame analisado pela IA, ajusta ao seu volume real.</p>
+        <div class="d-section-num">
+          <span class="d-num">08</span>
+          <span class="d-num-rule"></span>
+          <span class="d-num-label">Planos</span>
+        </div>
+        <h2 class="d-headline">Plano único. <em class="d-headline-em">Pague pelo uso</em>.</h2>
+        <p class="d-section-sub">Sem tier forçado. Sem surpresa fiscal. Créditos por exame analisado pela IA — ajusta ao seu volume real.</p>
       </div>
 
       <div class="d-pricing-grid">
@@ -4626,6 +4668,12 @@
         </div>
       </div>
     </div>
+    <div class="d-colophon">
+      <p class="d-colophon-text">
+        Composto em <em>Fraunces</em> (display, opsz 144) e <em>Inter Tight</em> (corpo). Etiquetas técnicas em <em>JetBrains Mono</em>. Texturas geradas por SVG <em>fractalNoise</em>. Sem stock photo, sem template — desenhado pra essa clínica, em Português.
+      </p>
+      <div class="d-colophon-mark">— GF</div>
+    </div>
     <div class="d-footer-base">
       <span>© 2026 GenomaFlow · CNPJ 64.052.716/0001-15</span>
       <span class="d-footer-base-by">Built in Brazil 🇧🇷</span>
@@ -4642,7 +4690,8 @@
      ════════════════════════════════════════════════════════════════ */
   .layout-day {
     color: var(--d-on-surface);
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-feature-settings: 'ss01' on, 'cv05' on, 'cv11' on;
     background: var(--d-bg);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
@@ -4657,7 +4706,7 @@
   /* ── Eyebrow / Headlines / Body ─────────────────────────────── */
   .d-eyebrow {
     display: inline-flex; align-items: center; gap: 8px;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 12px; font-weight: 600;
     letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--d-secondary);
@@ -4673,7 +4722,7 @@
   .d-eyebrow-light .d-eyebrow-dot { background: rgba(255,255,255,0.85); }
 
   .d-display, .d-headline {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     color: var(--d-on-surface);
     margin: 0;
   }
@@ -4710,7 +4759,7 @@
   .d-btn-primary, .d-btn-ghost, .d-btn-cross, .d-btn-ghost-light {
     display: inline-flex; align-items: center; gap: 8px;
     padding: 10px 20px;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter Tight', system-ui, sans-serif;
     font-size: 15px; font-weight: 600;
     border-radius: 8px;
     border: 1px solid transparent;
@@ -4774,7 +4823,7 @@
   .d-logo { display: inline-flex; align-items: center; gap: 10px; }
   .d-logo-img { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
   .d-logo-text {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 18px; font-weight: 600;
     letter-spacing: -0.02em;
     color: var(--d-on-surface);
@@ -4836,7 +4885,7 @@
   }
   .d-trust-item { display: flex; flex-direction: column; gap: 2px; }
   .d-trust-num {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 24px; font-weight: 700;
     color: var(--d-on-surface);
     letter-spacing: -0.02em;
@@ -4844,7 +4893,7 @@
   .d-trust-label {
     font-size: 12px;
     color: var(--d-on-surface-variant);
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     letter-spacing: 0.02em;
   }
   .d-trust-divider {
@@ -4876,7 +4925,7 @@
     background: var(--d-outline-variant);
   }
   .d-chrome-url {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 12px;
     color: var(--d-on-surface-variant);
     flex: 1;
@@ -4891,14 +4940,14 @@
   .d-hero-row-head { padding-top: 4px; }
   .d-hero-row:last-of-type { border-bottom: none; }
   .d-hero-row-label {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--d-on-surface-variant);
   }
   .d-hero-row-val {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 15px; font-weight: 600;
     color: var(--d-on-surface);
   }
@@ -4907,7 +4956,7 @@
   .d-badge {
     display: inline-flex; align-items: center; gap: 4px;
     padding: 4px 10px;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px; font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -4926,7 +4975,7 @@
   }
   .d-hero-insight-tag {
     display: inline-flex; align-items: center; gap: 6px;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px; font-weight: 600;
     text-transform: uppercase; letter-spacing: 0.05em;
     color: var(--d-secondary);
@@ -4941,7 +4990,7 @@
   .d-conf {
     display: inline-block;
     margin-left: 6px;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px;
     color: var(--d-on-surface-variant);
   }
@@ -4993,7 +5042,7 @@
     color: var(--d-tertiary);
   }
   .d-card-title {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 22px; font-weight: 700;
     color: var(--d-on-surface);
     margin: 0 0 12px;
@@ -5072,13 +5121,13 @@
     color: var(--d-on-secondary);
   }
   .d-module-tag {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 12px; font-weight: 600;
     text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--d-on-surface-variant);
   }
   .d-module-title {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 26px; font-weight: 700;
     color: var(--d-on-surface);
     margin: 0 0 28px;
@@ -5149,7 +5198,7 @@
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(8px);
     border-radius: 100px;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px; font-weight: 600;
     text-transform: uppercase; letter-spacing: 0.04em;
     color: var(--d-on-surface);
@@ -5174,14 +5223,14 @@
   }
   .d-ai-feature:hover { border-left-color: var(--d-secondary); }
   .d-ai-feature-num {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 13px; font-weight: 700;
     color: var(--d-secondary);
     margin-bottom: 4px;
     letter-spacing: 0.02em;
   }
   .d-ai-feature-title {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 18px; font-weight: 700;
     color: var(--d-on-surface);
     margin: 0 0 6px;
@@ -5224,7 +5273,7 @@
     box-shadow: 0 16px 48px rgba(4, 13, 28, 0.08);
   }
   .d-pricing-tag {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 12px; font-weight: 600;
     text-transform: uppercase; letter-spacing: 0.05em;
     color: var(--d-secondary);
@@ -5236,11 +5285,11 @@
     margin-bottom: 8px;
   }
   .d-pricing-currency {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 22px; font-weight: 600;
   }
   .d-pricing-num {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 64px; font-weight: 800;
     line-height: 1;
     letter-spacing: -0.03em;
@@ -5276,7 +5325,7 @@
     padding: 32px;
   }
   .d-extras-title {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 18px; font-weight: 700;
     color: var(--d-on-surface);
     margin: 0 0 20px;
@@ -5295,7 +5344,7 @@
   }
   .d-extras-item:hover { border-color: var(--d-on-surface); }
   .d-extras-name {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 15px; font-weight: 600;
     color: var(--d-on-surface);
   }
@@ -5304,7 +5353,7 @@
     margin-top: 2px;
   }
   .d-extras-price {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 18px; font-weight: 700;
     color: var(--d-on-surface);
   }
@@ -5333,7 +5382,7 @@
       radial-gradient(ellipse at 100% 100%, rgba(255, 59, 47, 0.15), transparent 50%);
   }
   .d-cta-title {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: clamp(36px, 5vw, 56px);
     font-weight: 800;
     line-height: 1.1;
@@ -5377,7 +5426,7 @@
     display: flex; flex-direction: column; gap: 10px;
   }
   .d-footer-col-title {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 12px; font-weight: 600;
     text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--d-on-surface);
@@ -5395,7 +5444,7 @@
     padding: 24px 32px 0;
     border-top: 1px solid var(--d-outline-variant);
     display: flex; align-items: center; justify-content: space-between;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 12px;
     color: var(--d-on-surface-variant);
     flex-wrap: wrap; gap: 12px;
@@ -5430,7 +5479,7 @@
   }
   .d-stat { display: flex; flex-direction: column; gap: 4px; }
   .d-stat-num {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: clamp(36px, 4vw, 52px);
     font-weight: 800;
     line-height: 1;
@@ -5444,7 +5493,7 @@
     margin-top: 4px;
   }
   .d-stat-detail {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 12px;
     color: rgba(255,255,255,0.55);
     letter-spacing: 0.01em;
@@ -5473,7 +5522,7 @@
     padding: 4px 10px;
     background: rgba(4, 13, 28, 0.06);
     border-radius: 100px;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px; font-weight: 700;
     letter-spacing: 0.05em; text-transform: uppercase;
     color: var(--d-primary);
@@ -5483,7 +5532,7 @@
     color: var(--d-secondary);
   }
   .d-feat-title {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: clamp(28px, 3.5vw, 40px);
     font-weight: 800;
     line-height: 1.1;
@@ -5525,7 +5574,7 @@
     display: flex; flex-direction: column; gap: 2px;
   }
   .d-feat-stats strong {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 18px; font-weight: 700;
     color: var(--d-secondary);
     letter-spacing: -0.01em;
@@ -5535,7 +5584,7 @@
     color: var(--d-on-surface-variant);
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
   }
 
   /* Mock cards for AI features */
@@ -5551,14 +5600,14 @@
   }
   .d-mock-tag, .d-whatsapp-tag {
     display: inline-flex; align-items: center; gap: 6px;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 12px; font-weight: 600;
     color: var(--d-secondary);
     margin-bottom: 4px;
   }
   .d-whatsapp-tag { color: #25D366; }
   .d-mock-section-label {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px; font-weight: 600;
     text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--d-on-surface-variant);
@@ -5580,7 +5629,7 @@
   .d-mock-row-medium { border-left-color: #f5c14a; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
   .d-mock-row-side-top { display: flex; justify-content: flex-end; width: 100%; }
   .d-mock-row-title {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 14px; font-weight: 700;
     color: var(--d-on-surface);
     line-height: 1.3;
@@ -5600,13 +5649,13 @@
     font-size: 11px;
     color: var(--d-on-surface-variant);
     margin-top: 4px;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
   }
   .d-mock-row-side {
     display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
   }
   .d-mock-cid {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px; font-weight: 700;
     color: var(--d-primary);
     background: rgba(4,13,28,0.06);
@@ -5614,12 +5663,12 @@
     border-radius: 100px;
   }
   .d-mock-prob {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 13px; font-weight: 700;
     color: var(--d-secondary);
   }
   .d-mock-urgency {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px; font-weight: 700;
     color: var(--d-cross);
     background: rgba(255,59,47,0.1);
@@ -5629,7 +5678,7 @@
     letter-spacing: 0.04em;
   }
   .d-mock-priority {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 10px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.05em;
     padding: 3px 8px;
@@ -5664,7 +5713,7 @@
     flex-shrink: 0;
   }
   .d-photo-arrow {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 28px; font-weight: 700;
     color: var(--d-secondary);
   }
@@ -5690,7 +5739,7 @@
     background: var(--d-secondary);
     color: #fff;
     border-radius: 100px;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 10px; font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -5707,7 +5756,7 @@
   .d-wa-msg-yellow { background: rgba(245,193,74,0.06); border-color: rgba(245,193,74,0.3); }
   .d-wa-msg-blue { background: rgba(0,106,99,0.06); border-color: rgba(0,106,99,0.3); }
   .d-wa-msg-label {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 10px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.05em;
     margin-bottom: 4px;
@@ -5768,7 +5817,7 @@
     margin-bottom: 16px;
   }
   .d-ops-card h3 {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 17px; font-weight: 700;
     color: var(--d-on-surface);
     margin: 0 0 8px;
@@ -5809,7 +5858,7 @@
   .d-versus-before { padding-right: 8px; }
   .d-versus-after { padding-left: 8px; border-left: 2px solid var(--d-outline-variant); }
   .d-versus-label {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--d-on-surface-variant);
@@ -5823,7 +5872,7 @@
   .d-versus-before p { color: var(--d-on-surface-variant); }
   .d-versus-arrow {
     display: flex; align-items: center; justify-content: center;
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 24px; font-weight: 800;
     color: var(--d-secondary);
   }
@@ -5852,7 +5901,7 @@
     list-style: none;
     cursor: pointer;
     padding: 18px 24px;
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 16px; font-weight: 600;
     color: var(--d-on-surface);
     display: flex; align-items: center; justify-content: space-between;
@@ -5862,7 +5911,7 @@
   .d-faq-item summary::-webkit-details-marker { display: none; }
   .d-faq-item summary:hover { color: var(--d-secondary); }
   .d-faq-arrow {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 20px; font-weight: 700;
     color: var(--d-secondary);
     transition: transform 0.2s;
@@ -5978,7 +6027,7 @@
   .d-chrome-live {
     margin-left: auto;
     display: inline-flex; align-items: center; gap: 4px;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 9px; font-weight: 700;
     letter-spacing: 0.08em;
     padding: 3px 8px;
@@ -6237,6 +6286,717 @@
   .theme-toggle:active { transform: translateY(0) scale(0.96); }
   .theme-toggle svg { transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
   .theme-toggle:hover svg { transform: rotate(15deg) scale(1.1); }
+
+  /* ════════════════════════════════════════════════════════════════
+     EDITORIAL OVERLAY — refinamento radical do day theme
+     Direção: editorial magazine + technical specification.
+     Fraunces serif + Inter Tight + JetBrains Mono.
+     Asymmetric grids, drop caps, pull quotes, paper texture.
+     ════════════════════════════════════════════════════════════════ */
+
+  [data-theme="day"] {
+    --d-paper: #f6f1e7;
+    --d-paper-deep: #efe9da;
+    --d-ink: #0a0a0c;
+    --d-ink-2: #2a2a30;
+    --d-rule: #c5c1b0;
+  }
+
+  /* Paper grain overlay sutil */
+  .layout-day::before {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.35;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.06 0'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>");
+  }
+
+  /* Display Fraunces — drama editorial */
+  .layout-day .d-display {
+    font-family: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+    font-variation-settings: 'opsz' 144, 'SOFT' 100;
+    font-weight: 500;
+    font-size: clamp(56px, 8vw, 120px);
+    line-height: 0.95;
+    letter-spacing: -0.04em;
+    color: var(--d-ink);
+    margin-top: 32px;
+  }
+  .layout-day .d-display em.d-display-em {
+    font-style: italic;
+    font-weight: 500;
+    font-variation-settings: 'opsz' 144, 'SOFT' 100;
+    color: var(--d-secondary);
+    background: none;
+    -webkit-text-fill-color: var(--d-secondary);
+    -webkit-background-clip: initial;
+    background-clip: initial;
+    animation: none;
+    position: relative;
+    padding: 0 0.05em;
+  }
+  .layout-day .d-display em.d-display-em::before {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    bottom: 0.05em;
+    height: 0.18em;
+    background: rgba(0,106,99,0.12);
+    z-index: -1;
+    transform: skewX(-8deg);
+  }
+
+  /* Section number editorial — "01 / Clinical AI" */
+  .d-section-num {
+    display: inline-flex; align-items: center; gap: 14px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--d-ink-2);
+  }
+  .d-num {
+    font-family: 'Fraunces', serif;
+    font-size: 13px; font-weight: 700;
+    font-style: italic;
+    letter-spacing: 0;
+    color: var(--d-secondary);
+    text-transform: none;
+  }
+  .d-num-rule {
+    width: 32px; height: 1px;
+    background: var(--d-ink);
+  }
+  .d-num-label { color: var(--d-ink-2); font-weight: 500; }
+
+  /* Restyle eyebrow para editorial — fica mais sóbrio */
+  .layout-day .d-eyebrow {
+    background: transparent;
+    color: var(--d-ink-2);
+    padding: 0;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    border-radius: 0;
+    border-bottom: 1px solid var(--d-ink);
+    padding-bottom: 4px;
+    line-height: 1;
+  }
+  .layout-day .d-eyebrow-dot {
+    width: 5px; height: 5px;
+    background: var(--d-secondary);
+  }
+  .layout-day .d-eyebrow-light {
+    color: rgba(255,255,255,0.85);
+    border-bottom-color: rgba(255,255,255,0.4);
+  }
+  .layout-day .d-eyebrow-light .d-eyebrow-dot {
+    background: rgba(255,255,255,0.95);
+  }
+
+  /* Headlines — Fraunces italic emphasis */
+  .layout-day .d-headline {
+    font-family: 'Fraunces', Georgia, serif;
+    font-variation-settings: 'opsz' 96, 'SOFT' 50;
+    font-weight: 500;
+    font-size: clamp(40px, 5vw, 72px);
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    color: var(--d-ink);
+  }
+  .layout-day .d-headline-em {
+    font-style: italic;
+    font-weight: 500;
+    color: var(--d-secondary);
+    background: none;
+    -webkit-text-fill-color: var(--d-secondary);
+  }
+
+  /* Body lead — drop cap + maior */
+  .layout-day .d-lead {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 20px;
+    line-height: 1.55;
+    color: var(--d-ink-2);
+    max-width: 540px;
+    margin-top: 32px;
+    font-feature-settings: 'ss01' on, 'cv05' on;
+  }
+
+  /* Section sub */
+  .layout-day .d-section-sub {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--d-ink-2);
+    max-width: 620px;
+    margin-top: 20px;
+  }
+
+  /* Hero — layout assimétrico mais editorial */
+  .layout-day .d-hero {
+    padding: 100px 0 120px;
+    background: var(--d-bg);
+  }
+  .layout-day .d-hero-grid {
+    grid-template-columns: 7fr 5fr;
+    gap: 64px;
+    align-items: end;
+  }
+  .layout-day .d-hero-orb-1, .layout-day .d-hero-orb-2 {
+    opacity: 0.25;
+    filter: blur(120px);
+  }
+  .layout-day .d-hero-grid-overlay {
+    background-image:
+      linear-gradient(rgba(10,10,12,0.05) 1px, transparent 1px);
+    background-size: 24px 24px;
+    mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent);
+  }
+
+  /* Trust row — restyle minimalista */
+  .layout-day .d-trust-row {
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--d-rule);
+    gap: 40px;
+  }
+  .layout-day .d-trust-num {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 500;
+    font-size: 32px;
+    color: var(--d-ink);
+    letter-spacing: -0.02em;
+  }
+  .layout-day .d-trust-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--d-ink-2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .layout-day .d-trust-divider {
+    background: var(--d-rule);
+    height: 24px;
+  }
+
+  /* Stats strip — preto absoluto, big italic numbers */
+  .layout-day .d-stats-strip {
+    background: var(--d-ink);
+    padding: 80px 0;
+  }
+  .layout-day .d-stats-noise {
+    background:
+      radial-gradient(ellipse at 10% 50%, rgba(0,106,99,0.18), transparent 60%),
+      radial-gradient(ellipse at 90% 50%, rgba(255,59,47,0.10), transparent 60%);
+    opacity: 0.7;
+  }
+  .layout-day .d-stat-num {
+    font-family: 'Fraunces', serif;
+    font-variation-settings: 'opsz' 144, 'SOFT' 100;
+    font-style: italic;
+    font-weight: 500;
+    font-size: clamp(48px, 5.5vw, 80px);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: #fff;
+  }
+  .layout-day .d-stat-prefix {
+    font-style: normal;
+    font-weight: 400;
+    color: rgba(255,255,255,0.5);
+  }
+  .layout-day .d-stat-unit {
+    font-style: normal;
+    font-size: 0.55em;
+    color: rgba(255,255,255,0.6);
+  }
+  .layout-day .d-stat-label {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.9);
+    margin-top: 14px;
+  }
+  .layout-day .d-stat-detail {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+  }
+
+  /* Cards — paper texture + sharper border */
+  .layout-day .d-card {
+    background: var(--d-surface);
+    border: 1px solid var(--d-rule);
+    border-radius: 4px;
+    padding: 36px 32px;
+    box-shadow: 0 1px 0 var(--d-rule);
+  }
+  .layout-day .d-card:hover {
+    border-color: var(--d-ink);
+    box-shadow: 0 1px 0 var(--d-ink), 0 12px 32px rgba(10,10,12,0.06);
+  }
+  .layout-day .d-card-icon {
+    border-radius: 4px;
+    width: 48px; height: 48px;
+  }
+  .layout-day .d-card-title {
+    font-family: 'Fraunces', serif;
+    font-variation-settings: 'opsz' 36, 'SOFT' 50;
+    font-weight: 500;
+    font-size: 26px;
+    letter-spacing: -0.015em;
+    color: var(--d-ink);
+    margin: 24px 0 12px;
+  }
+  .layout-day .d-card-body {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 15px;
+    color: var(--d-ink-2);
+    line-height: 1.6;
+  }
+
+  /* Section alt — cream paper background */
+  .layout-day .d-section-alt {
+    background: var(--d-paper);
+  }
+  .layout-day .d-section-alt::before {
+    /* paper texture mais densa nas seções alt */
+    content: '';
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n2'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='1' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.04 0'/></filter><rect width='200' height='200' filter='url(%23n2)'/></svg>");
+    opacity: 0.6;
+    mix-blend-mode: multiply;
+  }
+  .layout-day .d-section-alt { position: relative; }
+  .layout-day .d-section-alt > * { position: relative; z-index: 1; }
+
+  /* Section heads — tightly typeset */
+  .layout-day .d-section-head {
+    text-align: left;
+    max-width: 920px;
+    margin: 0 auto 80px;
+  }
+  .layout-day .d-section-head .d-eyebrow {
+    margin-bottom: 24px;
+  }
+  @media (min-width: 720px) {
+    .layout-day .d-section-head { padding-left: 8.33%; }
+  }
+
+  /* Module cards — editorial restyle */
+  .layout-day .d-module-card {
+    background: var(--d-surface);
+    border: 1px solid var(--d-rule);
+    border-radius: 4px;
+    padding: 48px 40px;
+  }
+  .layout-day .d-module-icon {
+    border-radius: 4px;
+    width: 64px; height: 64px;
+  }
+  .layout-day .d-module-title {
+    font-family: 'Fraunces', serif;
+    font-variation-settings: 'opsz' 60;
+    font-weight: 500;
+    font-size: 32px;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    color: var(--d-ink);
+  }
+  .layout-day .d-module-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--d-ink-2);
+  }
+
+  /* Feature blocks — large italic display */
+  .layout-day .d-feat {
+    border-bottom: 1px solid var(--d-rule);
+    padding: 80px 0;
+  }
+  .layout-day .d-feat-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: transparent;
+    padding: 0;
+    border-bottom: 1px solid var(--d-secondary);
+    color: var(--d-secondary);
+    border-radius: 0;
+  }
+  .layout-day .d-feat-tag-secondary { color: var(--d-secondary); }
+  .layout-day .d-feat-title {
+    font-family: 'Fraunces', serif;
+    font-variation-settings: 'opsz' 72;
+    font-weight: 500;
+    font-size: clamp(36px, 4.5vw, 56px);
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+    color: var(--d-ink);
+    margin: 24px 0 24px;
+  }
+  .layout-day .d-feat-em {
+    font-style: italic;
+    font-weight: 500;
+    color: var(--d-secondary);
+  }
+  .layout-day .d-feat-body {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 17px;
+    line-height: 1.65;
+    color: var(--d-ink-2);
+  }
+
+  /* Pull quote — pa-bam editorial moment */
+  .d-pullquote {
+    padding: 96px 0;
+    background: var(--d-secondary);
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+  }
+  .d-pullquote::before {
+    content: '"';
+    position: absolute;
+    top: -80px; left: 4%;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 500;
+    font-size: 480px;
+    color: rgba(255,255,255,0.06);
+    line-height: 1;
+    pointer-events: none;
+  }
+  .d-pullquote-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 32px;
+    position: relative;
+  }
+  .d-pullquote-text {
+    font-family: 'Fraunces', Georgia, serif;
+    font-variation-settings: 'opsz' 144;
+    font-style: italic;
+    font-weight: 400;
+    font-size: clamp(32px, 4.5vw, 56px);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: #fff;
+    margin: 0;
+    max-width: 880px;
+  }
+  .d-pullquote-emph {
+    font-weight: 700;
+    font-style: italic;
+  }
+  .d-pullquote-cite {
+    margin-top: 36px;
+    display: flex; align-items: center; gap: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.7);
+  }
+  .d-pullquote-rule {
+    width: 48px; height: 1px;
+    background: rgba(255,255,255,0.4);
+  }
+
+  /* Versus — editorial table style */
+  .layout-day .d-versus-row {
+    background: var(--d-surface);
+    border: 1px solid var(--d-rule);
+    border-radius: 4px;
+    padding: 28px 32px;
+  }
+  .layout-day .d-versus-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+  }
+  .layout-day .d-versus-before p,
+  .layout-day .d-versus-after p {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .layout-day .d-versus-arrow {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+  }
+
+  /* Pricing — refined editorial */
+  .layout-day .d-pricing-card {
+    border: 1px solid var(--d-ink);
+    border-radius: 4px;
+    box-shadow: 8px 8px 0 var(--d-ink);
+    background: var(--d-surface);
+    padding: 48px;
+  }
+  .layout-day .d-pricing-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--d-secondary);
+  }
+  .layout-day .d-pricing-num {
+    font-family: 'Fraunces', serif;
+    font-variation-settings: 'opsz' 144;
+    font-weight: 500;
+    font-style: italic;
+    color: var(--d-ink);
+  }
+  .layout-day .d-pricing-currency {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    color: var(--d-ink-2);
+  }
+  .layout-day .d-pricing-period {
+    font-family: 'Inter Tight', sans-serif;
+  }
+  .layout-day .d-extras-name { font-family: 'Fraunces', serif; font-weight: 500; }
+  .layout-day .d-extras-price { font-family: 'Fraunces', serif; font-style: italic; font-weight: 500; }
+  .layout-day .d-extras-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 20px;
+  }
+
+  /* CTA card — paper instead of plastic */
+  .layout-day .d-cta-card {
+    border-radius: 4px;
+    background: var(--d-ink);
+    padding: 96px 56px;
+  }
+  .layout-day .d-cta-title {
+    font-family: 'Fraunces', serif;
+    font-variation-settings: 'opsz' 144;
+    font-style: italic;
+    font-weight: 500;
+    font-size: clamp(40px, 5.5vw, 72px);
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+  }
+  .layout-day .d-cta-sub {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 19px;
+  }
+
+  /* FAQ — editorial */
+  .layout-day .d-faq-item {
+    background: var(--d-surface);
+    border: 1px solid var(--d-rule);
+    border-radius: 4px;
+  }
+  .layout-day .d-faq-item summary {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 18px;
+    letter-spacing: -0.005em;
+    padding: 24px 28px;
+  }
+  .layout-day .d-faq-arrow { font-family: 'Fraunces', serif; font-style: italic; }
+  .layout-day .d-faq-body {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 15px;
+    color: var(--d-ink-2);
+    padding: 0 28px 24px;
+  }
+
+  /* Buttons — sharper, no rounded blob */
+  .layout-day .d-btn-primary,
+  .layout-day .d-btn-ghost,
+  .layout-day .d-btn-cross,
+  .layout-day .d-btn-ghost-light {
+    border-radius: 2px;
+    font-family: 'Inter Tight', sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+  }
+  .layout-day .d-btn-primary { background: var(--d-ink); }
+  .layout-day .d-btn-primary:hover { background: var(--d-ink-2); }
+
+  /* NAV — editorial sober */
+  .layout-day .d-nav {
+    background: rgba(251,248,255,0.92);
+    border-bottom: 1px solid var(--d-rule);
+  }
+  .layout-day .d-logo-text {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 20px;
+    letter-spacing: -0.02em;
+  }
+  .layout-day .d-logo-text-em {
+    font-style: italic;
+    font-weight: 500;
+    color: var(--d-secondary);
+  }
+  .layout-day .d-nav-links a {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
+  /* Footer editorial — colophon */
+  .layout-day .d-footer {
+    background: var(--d-paper);
+    padding: 80px 0 40px;
+  }
+  .layout-day .d-footer-tagline {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 18px;
+    color: var(--d-ink-2);
+    line-height: 1.45;
+    max-width: 360px;
+  }
+  .layout-day .d-footer-col-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--d-ink);
+  }
+  .layout-day .d-footer-col a {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 14px;
+    color: var(--d-ink-2);
+  }
+  .layout-day .d-footer-col a:hover { color: var(--d-secondary); }
+  .layout-day .d-footer-base {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--d-ink-2);
+  }
+
+  /* Colophon — meta about the typefaces */
+  .d-colophon {
+    margin-top: 64px;
+    padding-top: 32px;
+    border-top: 1px solid var(--d-rule);
+    max-width: 1280px;
+    margin-left: auto; margin-right: auto;
+    padding-left: 32px; padding-right: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+  .d-colophon-text {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 13px;
+    color: var(--d-ink-2);
+    line-height: 1.5;
+    max-width: 540px;
+  }
+  .d-colophon-mark {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 32px;
+    color: var(--d-ink);
+  }
+
+  /* Mock cards — editorial spec */
+  .layout-day .d-mock-card,
+  .layout-day .d-photo-card,
+  .layout-day .d-whatsapp-card {
+    background: var(--d-surface);
+    border: 1px solid var(--d-rule);
+    border-radius: 4px;
+    padding: 24px;
+    box-shadow: 8px 8px 0 var(--d-paper-deep);
+  }
+  .layout-day .d-mock-row,
+  .layout-day .d-mock-row-alert,
+  .layout-day .d-mock-row-medium { border-radius: 2px; }
+  .layout-day .d-mock-row-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 15px;
+  }
+  .layout-day .d-mock-row-meta {
+    font-family: 'Inter Tight', sans-serif;
+    color: var(--d-ink-2);
+  }
+
+  /* Hero card editorial */
+  .layout-day .d-hero-card {
+    border: 1px solid var(--d-rule);
+    border-radius: 4px;
+    box-shadow: 12px 12px 0 var(--d-paper-deep);
+  }
+  .layout-day .d-hero-row-val {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 17px;
+  }
+  .layout-day .d-hero-insight {
+    border-radius: 2px;
+    background: var(--d-paper);
+    border-color: var(--d-rule);
+  }
+  .layout-day .d-hero-insight p {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 14px;
+  }
+  .layout-day .d-hero-insight-tag {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--d-ink);
+  }
+
+  /* Ops cards editorial */
+  .layout-day .d-ops-card {
+    background: var(--d-surface);
+    border: 1px solid var(--d-rule);
+    border-radius: 4px;
+    padding: 28px 24px;
+  }
+  .layout-day .d-ops-card h3 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 19px;
+    letter-spacing: -0.01em;
+  }
+  .layout-day .d-ops-card p {
+    font-family: 'Inter Tight', sans-serif;
+    color: var(--d-ink-2);
+  }
+
+  /* Editorial tweaks pra elementos genéricos */
+  .layout-day .d-feat-list strong { font-family: 'Inter Tight', sans-serif; font-weight: 700; }
+  .layout-day .d-feat-stats strong { font-family: 'Fraunces', serif; font-style: italic; font-size: 22px; }
+  .layout-day .d-feat-stats span { font-family: 'JetBrains Mono', monospace; }
+
+  /* Hero card LIVE badge — refined */
+  .layout-day .d-chrome-live {
+    font-family: 'JetBrains Mono', monospace;
+    background: transparent;
+    color: var(--d-ink);
+    font-weight: 700;
+    border-radius: 0;
+    padding: 0;
+  }
+
+  /* Anim shimmer disable em editorial — favorece a italic limpa */
+  .layout-day .d-shimmer { animation: none; }
+
+  /* Compor com o display-em editorial */
+  .layout-day .d-display em.d-display-em.d-shimmer {
+    background: none;
+    -webkit-text-fill-color: var(--d-secondary);
+  }
 </style>
 
 <script>
