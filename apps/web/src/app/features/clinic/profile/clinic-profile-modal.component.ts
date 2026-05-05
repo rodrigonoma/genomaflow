@@ -69,6 +69,12 @@ interface ChatSettings {
       </mat-form-field>
 
       <mat-form-field class="field" appearance="outline">
+        <mat-label>WhatsApp (botão "Falar com a clínica" no portal do paciente)</mat-label>
+        <input matInput [(ngModel)]="whatsappPhone" placeholder="(11) 99999-9999" />
+        <mat-hint>Se vazio, usa o telefone acima. DDI 55 é adicionado automaticamente.</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field class="field" appearance="outline">
         <mat-label>Endereço</mat-label>
         <textarea matInput rows="3" [(ngModel)]="address" placeholder="Rua, número, bairro, cidade/UF, CEP"></textarea>
       </mat-form-field>
@@ -126,6 +132,7 @@ export class ClinicProfileModalComponent implements OnInit {
   cnpj               = '';
   contactEmail       = '';
   phone              = '';
+  whatsappPhone      = '';
   address            = '';
   visibleInDirectory = false;
   logoPreview        = signal<string | null>(null);
@@ -145,6 +152,7 @@ export class ClinicProfileModalComponent implements OnInit {
         this.cnpj         = profile.cnpj ?? '';
         this.contactEmail = profile.contact_email ?? '';
         this.phone        = profile.phone ?? '';
+        this.whatsappPhone = (profile as any).whatsapp_phone ?? '';
         this.address      = profile.address ?? '';
         if (profile.clinic_logo_url) this.logoPreview.set(profile.clinic_logo_url);
         this.visibleInDirectory = settings?.visible_in_directory ?? false;
@@ -174,6 +182,7 @@ export class ClinicProfileModalComponent implements OnInit {
       cnpj: this.cnpj.trim() || null,
       contact_email: this.contactEmail.trim() || null,
       phone: this.phone.trim() || null,
+      whatsapp_phone: this.whatsappPhone.trim() || null,
       address: this.address.trim() || null,
     };
     const updateProfile$ = this.http.put(`${environment.apiUrl}/clinic/profile`, body);

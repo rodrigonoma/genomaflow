@@ -166,7 +166,7 @@ module.exports = async function (fastify) {
 
     return withTenant(fastify.pg, t.tenant_id, async (client) => {
       const { rows: tenantRows } = await client.query(
-        `SELECT name, module FROM tenants WHERE id = $1`, [t.tenant_id]
+        `SELECT name, module, whatsapp_phone, phone FROM tenants WHERE id = $1`, [t.tenant_id]
       );
       const tenant = tenantRows[0] || {};
 
@@ -196,8 +196,11 @@ module.exports = async function (fastify) {
         subjects = subRows;
       }
 
+      // Fallback: usa phone se whatsapp_phone não setado (clínica costuma ter
+      // o mesmo número pra fixo + WhatsApp em ICP pequeno)
+      const whatsapp = tenant.whatsapp_phone || tenant.phone || null;
       return {
-        tenant: { name: tenant.name, module: tenant.module },
+        tenant: { name: tenant.name, module: tenant.module, whatsapp_phone: whatsapp },
         scope: t.subject_id ? 'subject' : 'owner',
         subject,
         owner,
