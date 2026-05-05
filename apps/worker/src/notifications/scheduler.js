@@ -44,14 +44,26 @@ function getWhatsApp() {
           console.log(`[notif][MOCK] WhatsApp → ${phone}: ${body.slice(0, 80)}`);
           return { messageId: `mock-${Date.now()}`, status: 'sent' };
         }
-        // Implementação inline mínima usando fetch nativo
+        // Implementação inline mínima usando fetch nativo + timeout 10s
+        // (sem timeout, Z-API lento pode travar todo o tick — perde reminders)
         const url = `https://api.z-api.io/instances/${process.env.ZAPI_INSTANCE_ID}/token/${process.env.ZAPI_TOKEN}/send-text`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Client-Token': process.env.ZAPI_CLIENT_TOKEN },
-          body: JSON.stringify({ phone, message: body }),
-        });
-        if (!res.ok) throw new Error(`Z-API ${res.status}`);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        let res;
+        try {
+          res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Client-Token': process.env.ZAPI_CLIENT_TOKEN },
+            body: JSON.stringify({ phone, message: body }),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          throw new Error(`Z-API ${res.status}: ${errText.slice(0, 200)}`);
+        }
         const data = await res.json();
         return { messageId: data.messageId || data.id, status: 'sent' };
       },
@@ -233,11 +245,14 @@ async function sendPendingNotifications() {
 }
 
 async function tick() {
+  const startTs = Date.now();
   try {
+    console.log('[notif] tick start');
     await generateRemindersForUpcoming();
     await sendPendingNotifications();
+    console.log(`[notif] tick done in ${Date.now() - startTs}ms`);
   } catch (err) {
-    console.error('[notif] tick error:', err.message);
+    console.error('[notif] tick error:', err.message, err.stack?.split('\n').slice(0, 3).join(' | '));
   }
 }
 
