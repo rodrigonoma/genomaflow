@@ -67,6 +67,19 @@ export class AuthService {
   }
 
   /**
+   * Hidrata a sessão a partir de um token já obtido (ex: auto-login após
+   * /auth/register no onboarding). Faz o mesmo que login() faz no .pipe.tap,
+   * mas SEM HTTP request e SEM navegação. Caller decide pra onde ir.
+   */
+  setSession(token: string): void {
+    localStorage.setItem('token', token);
+    const payload = this.decode(token);
+    this.currentUserSubject.next(payload);
+    this.ws.connect(token);
+    if (payload.role !== 'master') this.fetchProfile();
+  }
+
+  /**
    * Limpa toda a sessão (token, WS, signal) SEM navegar.
    * Uso: antes de entrar na tela de registro de novo tenant, para evitar
    * que um JWT de tenant antigo fique ativo após a criação do novo.

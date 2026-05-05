@@ -132,7 +132,24 @@ module.exports = async function (fastify) {
       request.log.error({ err, user_id }, 'falha ao enviar email de verificação no register');
     }
 
+    // Auto-login após registro: gera JWT + jti + grava session no Redis. Permite
+    // que o frontend chame rotas autenticadas (ex: /billing/checkout/subscription)
+    // imediatamente no step de pagamento do onboarding sem voltar pra tela de login.
+    // Bypassa propositalmente a checagem de email_verified — o email recém-enviado
+    // ainda não foi clicado. Login subsequente (após fechar o browser) exige
+    // verificação normalmente via /auth/login.
+    const jti = randomUUID();
+    const token = fastify.jwt.sign({
+      user_id,
+      tenant_id,
+      role: 'admin',
+      module: mod,
+      jti
+    });
+    await fastify.redis.set(`session:${user_id}`, jti, 'EX', SESSION_TTL_SECONDS);
+
     return reply.status(201).send({
+      token,
       tenant_id,
       user_id,
       email,

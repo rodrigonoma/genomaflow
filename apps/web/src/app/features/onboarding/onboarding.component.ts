@@ -304,7 +304,7 @@ export class OnboardingComponent implements OnInit {
     this.errorMsg.set('');
     if (this.data.specialties.length === 0) return this.errorMsg.set('Selecione ao menos 1 especialidade.');
     this.loading.set(true);
-    this.http.post<{ tenant_id: string; user_id: string; email: string }>(
+    this.http.post<{ token: string; tenant_id: string; user_id: string; email: string }>(
       `${environment.apiUrl}/auth/register`,
       {
         clinic_name: this.data.clinic_name,
@@ -315,6 +315,9 @@ export class OnboardingComponent implements OnInit {
     ).subscribe({
       next: (res) => {
         this.data.tenant_id = res.tenant_id;
+        // Auto-login com o token retornado pelo register pra próxima request
+        // (POST /billing/checkout/subscription) já ir autenticada.
+        if (res.token) this.auth.setSession(res.token);
         this.loading.set(false);
         this.step.set(4);
       },
