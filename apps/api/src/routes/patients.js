@@ -65,7 +65,8 @@ module.exports = async function (fastify) {
     const { id } = request.params;
     const {
       name, phone, email, notes,
-      cep, street, number, complement, neighborhood, city, state
+      cep, street, number, complement, neighborhood, city, state,
+      observations,
     } = request.body;
 
     const owner = await withTenant(fastify.pg, tenant_id, async (client) => {
@@ -81,12 +82,14 @@ module.exports = async function (fastify) {
            complement   = COALESCE($8,  complement),
            neighborhood = COALESCE($9,  neighborhood),
            city         = COALESCE($10, city),
-           state        = COALESCE($11, state)
-         WHERE id = $12 AND tenant_id = $13
-         RETURNING id, name, cpf_last4, phone, email, notes, updated_at,
+           state        = COALESCE($11, state),
+           observations = COALESCE($12, observations)
+         WHERE id = $13 AND tenant_id = $14
+         RETURNING id, name, cpf_last4, phone, email, notes, observations, updated_at,
                    cep, street, number, complement, neighborhood, city, state`,
         [name, phone, email, notes,
          cep, street, number, complement, neighborhood, city, state,
+         observations ?? null,
          id, tenant_id]
       );
       return rows[0] || null;
@@ -238,7 +241,10 @@ module.exports = async function (fastify) {
       weight, height, blood_type, allergies, comorbidities, notes,
       breed, color, microchip, neutered, owner_id,
       medications, smoking, alcohol, diet_type, physical_activity, family_history,
-      consent_given
+      consent_given,
+      // Fase 1 extended fields
+      allergies_text, current_weight_kg,
+      emergency_contact_name, emergency_contact_phone, insurance_name,
     } = request.body;
 
     // Consentimento LGPD: apenas seta se o campo vier true. Não aceita revogação por aqui.
@@ -248,30 +254,35 @@ module.exports = async function (fastify) {
     const subject = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
         `UPDATE subjects SET
-           name              = COALESCE($1,  name),
-           birth_date        = COALESCE($2,  birth_date),
-           sex               = COALESCE($3,  sex),
-           phone             = COALESCE($4,  phone),
-           weight            = COALESCE($5,  weight),
-           height            = COALESCE($6,  height),
-           blood_type        = COALESCE($7,  blood_type),
-           allergies         = COALESCE($8,  allergies),
-           comorbidities     = COALESCE($9,  comorbidities),
-           notes             = COALESCE($10, notes),
-           breed             = COALESCE($11, breed),
-           color             = COALESCE($12, color),
-           microchip         = COALESCE($13, microchip),
-           neutered          = COALESCE($14, neutered),
-           owner_id          = $15,
-           medications       = COALESCE($16, medications),
-           smoking           = COALESCE($17, smoking),
-           alcohol           = COALESCE($18, alcohol),
-           diet_type         = COALESCE($19, diet_type),
-           physical_activity = COALESCE($20, physical_activity),
-           family_history    = COALESCE($21, family_history),
-           consent_given_at  = COALESCE($22, consent_given_at),
-           consent_given_by  = COALESCE($23, consent_given_by)
-         WHERE id = $24 AND tenant_id = $25 AND deleted_at IS NULL
+           name                    = COALESCE($1,  name),
+           birth_date              = COALESCE($2,  birth_date),
+           sex                     = COALESCE($3,  sex),
+           phone                   = COALESCE($4,  phone),
+           weight                  = COALESCE($5,  weight),
+           height                  = COALESCE($6,  height),
+           blood_type              = COALESCE($7,  blood_type),
+           allergies               = COALESCE($8,  allergies),
+           comorbidities           = COALESCE($9,  comorbidities),
+           notes                   = COALESCE($10, notes),
+           breed                   = COALESCE($11, breed),
+           color                   = COALESCE($12, color),
+           microchip               = COALESCE($13, microchip),
+           neutered                = COALESCE($14, neutered),
+           owner_id                = $15,
+           medications             = COALESCE($16, medications),
+           smoking                 = COALESCE($17, smoking),
+           alcohol                 = COALESCE($18, alcohol),
+           diet_type               = COALESCE($19, diet_type),
+           physical_activity       = COALESCE($20, physical_activity),
+           family_history          = COALESCE($21, family_history),
+           consent_given_at        = COALESCE($22, consent_given_at),
+           consent_given_by        = COALESCE($23, consent_given_by),
+           allergies_text          = COALESCE($24, allergies_text),
+           current_weight_kg       = COALESCE($25, current_weight_kg),
+           emergency_contact_name  = COALESCE($26, emergency_contact_name),
+           emergency_contact_phone = COALESCE($27, emergency_contact_phone),
+           insurance_name          = COALESCE($28, insurance_name)
+         WHERE id = $29 AND tenant_id = $30 AND deleted_at IS NULL
          RETURNING *`,
         [name, birth_date, sex, phone,
          weight, height, blood_type, allergies, comorbidities, notes,
@@ -279,6 +290,8 @@ module.exports = async function (fastify) {
          medications ?? null, smoking ?? null, alcohol ?? null,
          diet_type ?? null, physical_activity ?? null, family_history ?? null,
          consentAt, consentBy,
+         allergies_text ?? null, current_weight_kg ?? null,
+         emergency_contact_name ?? null, emergency_contact_phone ?? null, insurance_name ?? null,
          id, tenant_id]
       );
       return rows[0] || null;
@@ -301,6 +314,104 @@ module.exports = async function (fastify) {
     }, { userId: user_id, channel: 'ui' });
     if (!deleted) return reply.status(404).send({ error: 'Patient not found' });
     return reply.status(204).send();
+  });
+
+  // ── TIMELINE UNIFICADA (encontros + exames + prescrições + análises IA) ──
+  // Cursor pagination via base64 de "ISOdate|uuid" — maior performance que OFFSET.
+  // UNION ALL pra performance (vs N queries no app server). Cada source vira um row
+  // com event_type discriminator. Frontend renderiza por tipo.
+  // Wrapper withTenant pq exams/clinical_results/prescriptions têm RLS direto (sem NULLIF).
+  fastify.get('/:id/timeline', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { tenant_id } = request.user;
+    const { id: subject_id } = request.params;
+    const rawCursor = request.query?.cursor;
+    const rawLimit = parseInt(request.query?.limit, 10);
+    const limit = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50, 200);
+
+    let cursor = null;
+    if (rawCursor) {
+      try {
+        const decoded = Buffer.from(rawCursor, 'base64').toString('utf8');
+        const [iso, cid] = decoded.split('|');
+        const d = new Date(iso);
+        if (!isNaN(d.getTime()) && cid && /^[0-9a-f]{8}-/i.test(cid)) {
+          cursor = { iso: d.toISOString(), id: cid };
+        }
+      } catch (_) {}
+    }
+
+    const cursorClause = cursor ? `AND (event_at, event_id) < ($3::timestamptz, $4::uuid)` : '';
+    const params = cursor ? [tenant_id, subject_id, cursor.iso, cursor.id] : [tenant_id, subject_id];
+
+    const sql = `
+      WITH events AS (
+        SELECT 'encounter'::text AS event_type, e.id AS event_id, e.created_at AS event_at,
+               jsonb_build_object(
+                 'id', e.id,
+                 'encounter_type', e.encounter_type,
+                 'chief_complaint', e.chief_complaint,
+                 'professional_user_id', e.professional_user_id,
+                 'signed_at', e.signed_at
+               ) AS payload
+        FROM clinical_encounters e
+        WHERE e.tenant_id = $1 AND e.subject_id = $2
+
+        UNION ALL
+
+        SELECT 'exam'::text, ex.id, ex.created_at,
+               jsonb_build_object(
+                 'id', ex.id,
+                 'status', ex.status,
+                 'file_type', ex.file_type,
+                 'file_path', ex.file_path
+               )
+        FROM exams ex
+        WHERE ex.tenant_id = $1 AND ex.subject_id = $2
+
+        UNION ALL
+
+        SELECT 'prescription'::text, p.id, p.created_at,
+               jsonb_build_object(
+                 'id', p.id,
+                 'created_by', p.created_by,
+                 'exam_id', p.exam_id,
+                 'agent_type', p.agent_type,
+                 'item_count', COALESCE(jsonb_array_length(p.items), 0)
+               )
+        FROM prescriptions p
+        WHERE p.tenant_id = $1 AND p.subject_id = $2
+
+        UNION ALL
+
+        SELECT 'ai_analysis'::text, cr.id, cr.created_at,
+               jsonb_build_object(
+                 'id', cr.id,
+                 'agent_type', cr.agent_type,
+                 'exam_id', cr.exam_id,
+                 'risk_scores', cr.risk_scores
+               )
+        FROM clinical_results cr
+        JOIN exams ex_cr ON ex_cr.id = cr.exam_id
+        WHERE cr.tenant_id = $1 AND ex_cr.subject_id = $2
+      )
+      SELECT * FROM events
+      WHERE 1=1 ${cursorClause}
+      ORDER BY event_at DESC, event_id DESC
+      LIMIT ${limit + 1}
+    `;
+
+    const rows = await withTenant(fastify.pg, tenant_id, async (client) => {
+      const r = await client.query(sql, params);
+      return r.rows;
+    });
+
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore
+      ? Buffer.from(`${new Date(items[items.length - 1].event_at).toISOString()}|${items[items.length - 1].event_id}`).toString('base64')
+      : null;
+
+    return { items, next_cursor: nextCursor, has_more: hasMore };
   });
 
   // ── TREATMENT PLANS ────────────────────────────────────────

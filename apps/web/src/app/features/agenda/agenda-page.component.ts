@@ -81,6 +81,9 @@ interface SubjectMap { [id: string]: string; }
       display:grid;
       grid-template-rows: auto 1fr;
     }
+    .prof-select { padding: 6px 10px; background: #060d20; color: #dbe2fd; border: 1px solid #2a3148;
+                   border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+                   cursor: pointer; margin-right: 8px; }
     .day-headers {
       display:grid;
       grid-template-columns: 60px repeat(7, 1fr);
@@ -229,6 +232,21 @@ interface SubjectMap { [id: string]: string; }
       <span class="range-label desktop-only">{{ rangeLabel() }}</span>
       <span class="range-label mobile-only">{{ mobileDayLabel() }}</span>
       <div class="toolbar-spacer"></div>
+
+      <!-- Fase 1 PMS: seletor multi-profissional. Sem seleção = self (V1 backward-compat) -->
+      @if (professionals().length > 1) {
+        <select class="prof-select"
+                [value]="selectedProfessionalId() ?? ''"
+                (change)="onProfessionalChange(($any($event.target)).value || undefined)"
+                title="Profissional">
+          <option value="">Minha agenda</option>
+          <option value="all">Toda a clínica</option>
+          @for (p of professionals(); track p.id) {
+            <option [value]="p.id">{{ p.email }}</option>
+          }
+        </select>
+      }
+
       <button mat-icon-button class="settings-btn" (click)="refresh()" matTooltip="Recarregar agenda">
         <mat-icon>refresh</mat-icon>
       </button>
@@ -429,6 +447,7 @@ export class AgendaPageComponent implements OnInit, OnDestroy {
 
     this.loadSettings();
     this.loadSubjects();
+    this.loadProfessionals();
     this.loadWeek();
 
     // Auto-refresh em 3 redes de segurança:
@@ -495,10 +514,30 @@ export class AgendaPageComponent implements OnInit, OnDestroy {
   private loadWeek() {
     const start = this.weekStart();
     const end = new Date(start); end.setDate(end.getDate() + 7);
-    this.agenda.listAppointments(start.toISOString(), end.toISOString()).subscribe({
+    const profId = this.selectedProfessionalId() || undefined;
+    this.agenda.listAppointments(start.toISOString(), end.toISOString(), profId).subscribe({
       next: r => this.appointments.set(r.results || []),
       error: () => this.snack.open('Erro ao carregar agenda.', 'Fechar', { duration: 4000 })
     });
+  }
+
+  // Fase 1 PMS expansion — agenda multi-profissional
+  // selectedProfessionalId: undefined = self (V1 backward-compat)
+  // 'all' = todos do tenant (admin only — backend valida)
+  // <uuid> = profissional específico
+  selectedProfessionalId = signal<string | undefined>(undefined);
+  professionals = signal<Array<{ id: string; email: string; specialty: string | null }>>([]);
+
+  loadProfessionals() {
+    this.agenda.listProfessionals().subscribe({
+      next: r => this.professionals.set(r.results || []),
+      error: () => {}
+    });
+  }
+
+  onProfessionalChange(value: string | undefined) {
+    this.selectedProfessionalId.set(value);
+    this.loadWeek();
   }
 
   // Swipe horizontal no mobile pra trocar de dia. Threshold conservador

@@ -48,6 +48,7 @@ app.register((fastify, _opts, done) => {
   fastify.register(require('./routes/integrations'),{ prefix: '/integrations' });
   fastify.register(require('./routes/billing'),     { prefix: '' });
   fastify.register(require('./routes/onboarding-checkout'), { prefix: '' });
+  fastify.register(require('./routes/encounters'),  { prefix: '/encounters' });
   fastify.register(require('./routes/feedback'),    { prefix: '/feedback' });
   fastify.register(require('./routes/error-log'),   { prefix: '/error-log' });
   fastify.register(require('./routes/chat'),          { prefix: '/chat' });

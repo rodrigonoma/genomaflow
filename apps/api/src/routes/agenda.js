@@ -57,8 +57,10 @@ function validateBusinessHours(bh) {
   return null;
 }
 
+const VALID_APPOINTMENT_TYPES = ['consulta', 'retorno', 'vacina', 'procedimento', 'banho_tosa', 'telemedicina', 'exame', 'outro'];
+
 function validateAppointmentBody(body, isUpdate = false) {
-  const { start_at, duration_minutes, status, subject_id, reason } = body;
+  const { start_at, duration_minutes, status, subject_id, reason, appointment_type } = body;
 
   if (!isUpdate || start_at !== undefined) {
     if (!start_at || typeof start_at !== 'string') return 'start_at obrigatório (ISO string)';
@@ -87,6 +89,12 @@ function validateAppointmentBody(body, isUpdate = false) {
       if (!subject_id || typeof subject_id !== 'string') {
         return `status=${status} exige subject_id`;
       }
+    }
+  }
+
+  if (appointment_type !== undefined) {
+    if (!VALID_APPOINTMENT_TYPES.includes(appointment_type)) {
+      return `appointment_type inválido (use: ${VALID_APPOINTMENT_TYPES.join(', ')})`;
     }
   }
 
@@ -151,10 +159,30 @@ module.exports = async function (fastify) {
 
   // ── Appointments ──────────────────────────────────────────────────
 
-  // GET /appointments?from=&to=
+  // GET /agenda/professionals — lista usuários da clínica que podem aparecer
+  // como profissionais (todos com role admin no tenant; opcionalmente filtrar
+  // por professional_data_confirmed_at quando exigir CRM verificado).
+  // Usado pelo seletor de profissional no frontend.
+  fastify.get('/professionals', { preHandler: [fastify.authenticate] }, async (request) => {
+    const { tenant_id } = request.user;
+    const { rows } = await fastify.pg.query(
+      `SELECT u.id, u.email, u.role, u.specialty, u.crm_number, u.crm_uf,
+              u.professional_data_confirmed_at IS NOT NULL AS professional_verified
+       FROM users u
+       WHERE u.tenant_id = $1 AND u.active = true
+       ORDER BY u.email ASC`,
+      [tenant_id]
+    );
+    return { results: rows };
+  });
+
+  // GET /appointments?from=&to=&professional_id=&appointment_type=
+  // Retrocompat: sem professional_id → comportamento idêntico ao V1 (só self).
+  // Com professional_id → filtra; admin pode ver de qualquer um do tenant,
+  // profissional só pode ver self ou outros (clínica colaborativa).
   fastify.get('/appointments', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { tenant_id, user_id } = request.user;
-    let { from, to } = request.query || {};
+    const { tenant_id, user_id, role } = request.user;
+    let { from, to, professional_id: rawProfId, appointment_type } = request.query || {};
 
     // Default: semana atual (segunda 00:00 → domingo 23:59:59) UTC
     if (!from || !to) {
@@ -180,15 +208,55 @@ module.exports = async function (fastify) {
       return reply.status(400).send({ error: 'range máximo: 90 dias' });
     }
 
-    const { rows } = await fastify.pg.query(
-      `SELECT id, tenant_id, user_id, subject_id, series_id, start_at, duration_minutes,
-              status, reason, notes, created_by, created_at, updated_at, cancelled_at
-       FROM appointments
-       WHERE user_id = $1 AND tenant_id = $2
-         AND start_at >= $3 AND start_at < $4
-       ORDER BY start_at ASC`,
-      [user_id, tenant_id, fromDate.toISOString(), toDate.toISOString()]
-    );
+    // Resolve filtro de profissional
+    // - sem param: self (V1 backward-compat)
+    // - 'all': todos do tenant (master ou admin pode)
+    // - uuid específico: valida que pertence ao tenant
+    let profFilter = user_id;
+    let profIsList = false;
+    if (rawProfId === 'all') {
+      // Apenas admin/master vê todos
+      if (role !== 'admin' && role !== 'master') {
+        return reply.status(403).send({ error: 'professional_id=all requer role admin' });
+      }
+      profIsList = true;
+      profFilter = null;
+    } else if (rawProfId && typeof rawProfId === 'string') {
+      // Valida que profissional pertence ao tenant
+      const { rows: profCheck } = await fastify.pg.query(
+        `SELECT id FROM users WHERE id = $1 AND tenant_id = $2`,
+        [rawProfId, tenant_id]
+      );
+      if (profCheck.length === 0) {
+        return reply.status(400).send({ error: 'professional_id inválido' });
+      }
+      profFilter = rawProfId;
+    }
+
+    // Validate appointment_type filter
+    const validTypes = ['consulta', 'retorno', 'vacina', 'procedimento', 'banho_tosa', 'telemedicina', 'exame', 'outro'];
+    if (appointment_type !== undefined && !validTypes.includes(appointment_type)) {
+      return reply.status(400).send({ error: `appointment_type inválido (use: ${validTypes.join(', ')})` });
+    }
+
+    let sql = `SELECT id, tenant_id, user_id, subject_id, series_id, start_at, duration_minutes,
+                      status, appointment_type, reason, notes, created_by, created_at, updated_at, cancelled_at
+               FROM appointments
+               WHERE tenant_id = $1
+                 AND start_at >= $2 AND start_at < $3`;
+    const params = [tenant_id, fromDate.toISOString(), toDate.toISOString()];
+    let p = 4;
+    if (!profIsList) {
+      sql += ` AND user_id = $${p++}`;
+      params.push(profFilter);
+    }
+    if (appointment_type) {
+      sql += ` AND appointment_type = $${p++}`;
+      params.push(appointment_type);
+    }
+    sql += ` ORDER BY start_at ASC`;
+
+    const { rows } = await fastify.pg.query(sql, params);
     return { results: rows };
   });
 
@@ -198,7 +266,10 @@ module.exports = async function (fastify) {
     const validationError = validateAppointmentBody(request.body || {});
     if (validationError) return reply.status(400).send({ error: validationError });
 
-    const { start_at, duration_minutes, status, subject_id, reason, notes } = request.body;
+    const { start_at, duration_minutes, status, subject_id, reason, notes, appointment_type } = request.body;
+    // Default 'consulta' se não passado (retrocompat com clientes V1).
+    // 'blocked' status implica appointment_type='outro'.
+    const aptType = appointment_type || (status === 'blocked' ? 'outro' : 'consulta');
 
     try {
       const result = await withTenant(fastify.pg, tenant_id, async (client) => {
@@ -217,11 +288,11 @@ module.exports = async function (fastify) {
 
         const { rows } = await client.query(
           `INSERT INTO appointments
-            (tenant_id, user_id, subject_id, start_at, duration_minutes, status, reason, notes, created_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            (tenant_id, user_id, subject_id, start_at, duration_minutes, status, appointment_type, reason, notes, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            RETURNING id, tenant_id, user_id, subject_id, series_id, start_at, duration_minutes,
-                     status, reason, notes, created_by, created_at, updated_at, cancelled_at`,
-          [tenant_id, user_id, subject_id || null, start_at, duration_minutes, status,
+                     status, appointment_type, reason, notes, created_by, created_at, updated_at, cancelled_at`,
+          [tenant_id, user_id, subject_id || null, start_at, duration_minutes, status, aptType,
            reason || null, notes || null, user_id]
         );
         return rows[0];
@@ -287,7 +358,7 @@ module.exports = async function (fastify) {
         const setParts = [];
         const values = [];
         let i = 1;
-        for (const field of ['start_at', 'duration_minutes', 'status', 'subject_id', 'reason', 'notes']) {
+        for (const field of ['start_at', 'duration_minutes', 'status', 'subject_id', 'reason', 'notes', 'appointment_type']) {
           if (body[field] !== undefined) {
             setParts.push(`${field} = $${i++}`);
             values.push(body[field]);
