@@ -83,16 +83,22 @@ module.exports = async function (fastify) {
     if (!subject_id || typeof subject_id !== 'string') {
       return reply.status(400).send({ error: 'subject_id obrigatório' });
     }
-    if (!sent_to || typeof sent_to !== 'string' || !sent_to.includes('@')) {
-      return reply.status(400).send({ error: 'sent_to (email) obrigatório' });
+    if (!sent_to || typeof sent_to !== 'string') {
+      return reply.status(400).send({ error: 'sent_to obrigatório' });
     }
     const via = sent_via || 'email';
+    // Email exige @; whatsapp aceita formato de telefone (validado abaixo)
+    if (via === 'email' && !sent_to.includes('@')) {
+      return reply.status(400).send({ error: 'sent_to inválido (email esperado)' });
+    }
     if (!['email', 'whatsapp', 'manual'].includes(via)) {
       return reply.status(400).send({ error: 'sent_via inválido' });
     }
+    // Fase 3: WhatsApp habilitado via Z-API (whatsapp-client + templates)
     if (via === 'whatsapp') {
-      // Fase 3 entrega WhatsApp via Z-API. Por ora, aceita marker mas não envia.
-      return reply.status(400).send({ error: 'sent_via=whatsapp ainda não disponível (Fase 3)' });
+      const whatsapp = require('../services/whatsapp-client');
+      const phone = whatsapp.normalizePhone(sent_to);
+      if (!phone) return reply.status(400).send({ error: 'sent_to inválido (telefone esperado pra whatsapp)' });
     }
 
     const token = randomBytes(16).toString('hex');
@@ -120,13 +126,23 @@ module.exports = async function (fastify) {
       return { row: rows[0], subject_name };
     }, { userId: user_id, channel: 'ui' });
 
-    // Envia email best-effort
+    // Envia best-effort
     try {
       if (via === 'email') {
         await sendNpsEmail({ fastify, to: sent_to, subject_name: result.subject_name, token });
+      } else if (via === 'whatsapp') {
+        const whatsapp = require('../services/whatsapp-client');
+        const tpl = require('../services/notification-templates');
+        const frontendUrl = process.env.FRONTEND_URL || 'https://app.genomaflow.com.br';
+        const body = tpl.build('nps_request', {
+          paciente: result.subject_name,
+          tenant_name: 'GenomaFlow',
+          link: `${frontendUrl}/nps/${token}`,
+        });
+        await whatsapp.sendText({ phone: sent_to, body, log: fastify.log });
       }
     } catch (err) {
-      fastify.log.error({ err, token }, 'Falha ao enviar email NPS — token criado, reenvio manual possível');
+      fastify.log.error({ err: err.message, token }, 'Falha ao enviar NPS — token criado, reenvio manual possível');
     }
 
     return reply.status(201).send(result.row);
