@@ -156,7 +156,12 @@ Antes de configurar Z-API real, scheduler roda em modo silencioso (sem ZAPI_MOCK
 
 ## Estado em prod (deploy 2026-05-05)
 
-A preencher após pipeline rodar.
+- Pipeline run `25376793905` ✅ success (Unit tests gate + deploy + migrations)
+- Migration 072 applied em prod (confirmado via log da task ECS migrate `0c7e3800269b4c14b3b6745beb866f26`)
+- ECS api + web + **worker** `rolloutState=COMPLETED`, 1/1 running cada
+- Branch `feat/phase-3-whatsapp-portal` deletada (local + remote)
+- HEAD em main: `c1cfe7a5` (merge commit) com `9e1a5ee5` como commit do Phase 3
+- **Z-API ainda não configurada em SSM** — scheduler roda em modo silencioso (logs apenas, sem envio real). Para ativar: setup SSM + ssmParam() no CDK + webhook URL no painel Z-API. Zero risco em prod até ativação manual.
 
 ## Próximos passos (Fase 4+)
 
