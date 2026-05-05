@@ -27,3 +27,4 @@
 - [CDK drift — config out-of-band](feedback_cdk_drift.md) — cdk deploy regenera task def e zera tudo setado via console; DATABASE_URL ?sslmode=require + S3_BUCKET + AWS_REGION estavam out-of-band, perdidos no split landing×app (incidente 2026-04-27)
 - [Session Checkpoint 2026-04-28](session_checkpoint_2026_04_28.md) — Estado ao fim da sessão. Último HEAD bc05983f. Como retomar, processo, entregas. Sem WIP — tudo em prod.
 - [Stripe Integration](project_stripe_integration.md) — Pagamentos reais Stripe (Subscriptions API + Checkout cartão/PIX + Customer Portal); webhook é única origem de créditos; tenants existentes grandfathered (entregue 2026-05-04)
+- [PMS Expansion Phase 1](project_phase_1_pms_expansion.md) — Prontuário (clinical_encounters + vital_signs) + timeline unificada + agenda multi-profissional. Caminho A (sem PDV/NF-e nativo, deferidos). Migrations 065-068. Aba "Prontuário" no patient-detail. Cross-module 400 explicit. (entregue 2026-05-05)

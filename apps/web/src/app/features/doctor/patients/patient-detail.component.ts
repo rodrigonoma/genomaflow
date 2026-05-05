@@ -23,6 +23,10 @@ import { environment } from '../../../../environments/environment';
 import { Subject, Exam, Alert, TreatmentPlan, TreatmentItem, ClinicalResult, SPECIALTY_AGENTS, Prescription, Owner } from '../../../shared/models/api.models';
 import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/prescription/prescription-modal.component';
 import { WsService } from '../../../core/ws/ws.service';
+import { EncounterFormComponent } from '../../encounters/encounter-form.component';
+import { EncounterListComponent } from '../../encounters/encounter-list.component';
+import { TimelineComponent } from '../../encounters/timeline.component';
+import { AuthService } from '../../../core/auth/auth.service';
 import { shortId, examTypeLabel } from '../../../shared/utils/id-format';
 import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
 import { Subscription } from 'rxjs';
@@ -49,7 +53,8 @@ interface ComparisonBlock {
     MatTabsModule, MatButtonModule, MatIconModule,
     MatFormFieldModule, MatInputModule, MatSelectModule,
     MatChipsModule, MatDialogModule, MatCheckboxModule, MatMenuModule, MatAutocompleteModule, MatSnackBarModule, MatTooltipModule, ExamCardComponent,
-    PrescriptionModalComponent
+    PrescriptionModalComponent,
+    EncounterFormComponent, EncounterListComponent, TimelineComponent,
   ],
   styles: [`
     :host { display: block; background: #0b1326; min-height: 100vh; }
@@ -953,6 +958,41 @@ interface ComparisonBlock {
           }
         </mat-tab>
 
+        <!-- ── PRONTUÁRIO (Fase 1 PMS expansion) ── -->
+        <mat-tab label="Prontuário">
+          <div class="tab-content">
+            @if (showEncounterForm()) {
+              <div class="encounter-form-wrapper">
+                <h3>Nova evolução</h3>
+                <app-encounter-form
+                  [subjectId]="patientId"
+                  [module]="moduleHint()"
+                  (saved)="onEncounterSaved($event)"
+                  (cancel)="showEncounterForm.set(false)"
+                ></app-encounter-form>
+              </div>
+            } @else {
+              <div class="prontuario-actions">
+                <button mat-raised-button color="primary" (click)="showEncounterForm.set(true)">
+                  <mat-icon>add</mat-icon> Nova evolução
+                </button>
+              </div>
+
+              <h3>Timeline unificada</h3>
+              <app-timeline
+                [subjectId]="patientId"
+                [refreshTick]="encounterRefreshTick()"
+              ></app-timeline>
+
+              <h3 style="margin-top: 24px;">Evoluções registradas</h3>
+              <app-encounter-list
+                [subjectId]="patientId"
+                [refreshTick]="encounterRefreshTick()"
+              ></app-encounter-list>
+            }
+          </div>
+        </mat-tab>
+
         <!-- ── EXAMES ── -->
         <mat-tab [label]="'Exames (' + exams().length + ')'">
           <input #examFile type="file" accept=".pdf,.dcm,.dicom,.jpg,.jpeg,.png,.tiff" style="display:none"
@@ -1563,6 +1603,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   private snack  = inject(MatSnackBar);
   private dialog = inject(MatDialog);
   private ws     = inject(WsService);
+  protected auth = inject(AuthService);
   private wsSub?: Subscription;
   private pollInterval?: ReturnType<typeof setInterval>;
 
@@ -1582,6 +1623,9 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   });
   selectedTabIndex = signal(0);
   showNewPlan = signal(false);
+  // Fase 1 PMS expansion — Prontuário tab state
+  showEncounterForm = signal(false);
+  encounterRefreshTick = signal(0);
   uploading   = signal(false);
   uploadError = signal('');
   selectedAiExamId = signal<string | null>(null);
@@ -1644,8 +1688,29 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     title: '', type: 'therapeutic', description: '', items: []
   };
 
+  // Patient ID populated em ngOnInit; usado por componentes filhos (Prontuário tab)
+  patientId: string = '';
+
+  // Heurística de módulo pra renderizar campos vet vs human no formulário de evolução.
+  // Prefere subject_type quando carregado (mais específico que tenant.module).
+  moduleHint(): 'human' | 'veterinary' {
+    const subj = this.subject();
+    if (subj?.subject_type === 'animal') return 'veterinary';
+    if (subj?.subject_type === 'human') return 'human';
+    // Fallback pelo profile do tenant (sempre disponível pós-login)
+    const profile = (this.auth?.currentProfile?.module) as 'human' | 'veterinary' | undefined;
+    return profile ?? 'human';
+  }
+
+  onEncounterSaved(_enc: any): void {
+    this.showEncounterForm.set(false);
+    this.encounterRefreshTick.update(t => t + 1);
+    this.snack.open('Evolução salva.', 'OK', { duration: 3000 });
+  }
+
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id')!;
+    this.patientId = id;
     this.loadSubject(id);
     this.loadExams(id);
     this.loadPlans(id);

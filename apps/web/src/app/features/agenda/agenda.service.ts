@@ -40,11 +40,20 @@ export class AgendaService {
     return this.http.put<ScheduleSettings>(`${this.base}/settings`, settings);
   }
 
-  listAppointments(from?: string, to?: string): Observable<{ results: Appointment[] }> {
+  listAppointments(from?: string, to?: string, professionalId?: string | 'all'): Observable<{ results: Appointment[] }> {
     let params = new HttpParams();
     if (from) params = params.set('from', from);
     if (to) params = params.set('to', to);
+    if (professionalId) params = params.set('professional_id', professionalId);
     return this.http.get<{ results: Appointment[] }>(`${this.base}/appointments`, { params });
+  }
+
+  // Fase 1 PMS expansion — lista profissionais da clínica pra seletor multi-prof
+  listProfessionals(): Observable<{ results: Array<{
+    id: string; email: string; role: string; specialty: string | null;
+    crm_number: string | null; crm_uf: string | null; professional_verified: boolean;
+  }> }> {
+    return this.http.get<any>(`${this.base}/professionals`);
   }
 
   create(body: CreateAppointmentBody): Observable<Appointment> {
