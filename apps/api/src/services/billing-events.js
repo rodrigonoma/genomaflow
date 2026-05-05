@@ -29,6 +29,13 @@ async function recordPaymentEvent(client, { gateway, eventId, kind, tenantId, am
  */
 async function handleCheckoutCompleted(pg, event, redis) {
   const session = event.data.object;
+
+  // Onboarding (Option E): tenant ainda não existe — webhook cria tudo agora
+  // a partir da metadata da Session. Vide handleOnboardingSubscriptionCompleted.
+  if (session.metadata?.origin === 'onboarding' && session.mode === 'subscription') {
+    return handleOnboardingSubscriptionCompleted(pg, event, session, redis);
+  }
+
   const tenantId = session.client_reference_id || session.metadata?.tenant_id;
   if (!tenantId) {
     throw new Error(`checkout.session.completed sem tenant_id (session ${session.id})`);
@@ -86,6 +93,141 @@ async function handleSubscriptionCompleted(pg, event, session, tenantId, redis) 
     }
 
     return { handled: true, idempotent: false, credits: ONBOARDING_BONUS_CREDITS };
+  }, { userId: null, channel: 'system' });
+}
+
+/**
+ * Option E (2026-05-04): tenant + user só são criados aqui, quando Stripe
+ * confirma o pagamento. Toda a info veio na metadata da Session
+ * (vide routes/onboarding-checkout.js).
+ *
+ * Idempotência: payment_events UNIQUE(gateway, gateway_event_id) faz lock.
+ * Se webhook fire duas vezes (Stripe retry), segunda transação rola back na
+ * INSERT do payment_events e nada vaza.
+ */
+async function handleOnboardingSubscriptionCompleted(pg, event, session, redis) {
+  const meta = session.metadata || {};
+  const { email, clinic_name, password_hash, module: mod, specialties } = meta;
+
+  if (!email || !clinic_name || !password_hash || !mod) {
+    throw new Error(`onboarding metadata incompleta (session ${session.id})`);
+  }
+  const specialtiesArr = (specialties || '').split(',').filter(Boolean);
+
+  // Pré-check de idempotência: se evento já foi processado, já temos tenant.
+  // Evita recriar tenant + user numa retry. Pega antes do INSERT em tenants
+  // (que não tem proteção idempotente).
+  const existing = await pg.query(
+    `SELECT tenant_id FROM payment_events WHERE gateway = 'stripe' AND gateway_event_id = $1`,
+    [event.id]
+  );
+  if (existing.rows.length > 0) {
+    return { handled: true, idempotent: true, tenant_id: existing.rows[0].tenant_id };
+  }
+
+  // Pré-check email — entre /onboarding/checkout e webhook (PIX pode demorar)
+  // outro fluxo pode ter cadastrado o mesmo email. Falhar aqui é melhor do
+  // que UNIQUE violation no INSERT (que não dá pra distinguir do retry).
+  const userExisting = await pg.query(
+    `SELECT id, tenant_id FROM users WHERE LOWER(email) = $1`,
+    [email]
+  );
+  if (userExisting.rows.length > 0) {
+    // Pagou mas email já existia — situação rara que precisa de intervenção
+    // manual (refund + comunicação). Sobe o erro pra Stripe retentar (idempotente
+    // não vai resolver, mas master vê os logs e age).
+    throw new Error(`onboarding webhook ${event.id}: email ${email} já existe (tenant ${userExisting.rows[0].tenant_id}); refund manual necessário`);
+  }
+
+  // Cria tenant fora de RLS context (tenants é tabela global sem RLS).
+  // active=true e billing_status='active' pq pagamento já confirmado.
+  const { rows: tenantRows } = await pg.query(
+    `INSERT INTO tenants (name, type, module, active, billing_status)
+     VALUES ($1, 'clinic', $2, true, 'active') RETURNING id`,
+    [clinic_name, mod]
+  );
+  const newTenantId = tenantRows[0].id;
+
+  // Atualiza Customer no Stripe com tenant_id em metadata — invoice.paid
+  // futuro vai conseguir achar o tenant via subscription_details.metadata.
+  // Best-effort: falha aqui não rola back o registro local (vamos logar).
+  try {
+    const stripeClient = require('./stripe-client');
+    const stripe = stripeClient.getClient();
+    await stripe.customers.update(session.customer, {
+      metadata: { tenant_id: newTenantId, origin: 'onboarding' },
+    });
+    if (session.subscription) {
+      await stripe.subscriptions.update(session.subscription, {
+        metadata: { tenant_id: newTenantId, origin: 'onboarding' },
+      });
+    }
+  } catch (err) {
+    // Logado mas não fatal — invoice.paid pode buscar tenant via
+    // subscriptions.gateway_subscription_id no banco.
+    console.error('[onboarding-webhook] falha ao atualizar metadata Stripe:', err.message);
+  }
+
+  return withTenant(pg, newTenantId, async (client) => {
+    // User admin com email auto-verificado (paid signup = ID verificada via Stripe)
+    await client.query(
+      `INSERT INTO users (tenant_id, email, password_hash, role, email_verified_at)
+       VALUES ($1, $2, $3, 'admin', NOW())`,
+      [newTenantId, email, password_hash]
+    );
+
+    // Specialties (whitelist já validada em /onboarding/checkout, valida de novo aqui
+    // pra defesa em profundidade — metadata Stripe não é trusted input).
+    const { VALID_AGENT_TYPES } = require('../constants');
+    for (const spec of specialtiesArr) {
+      if (!VALID_AGENT_TYPES.includes(spec)) continue;
+      await client.query(
+        `INSERT INTO tenant_specialties (tenant_id, agent_type) VALUES ($1, $2)`,
+        [newTenantId, spec]
+      );
+    }
+
+    // Subscription
+    await client.query(
+      `INSERT INTO subscriptions (tenant_id, gateway, gateway_subscription_id, gateway_customer_id, plan, status)
+       VALUES ($1, 'stripe', $2, $3, 'starter', 'active')
+       ON CONFLICT (tenant_id) DO UPDATE
+       SET gateway_subscription_id = EXCLUDED.gateway_subscription_id,
+           gateway_customer_id = EXCLUDED.gateway_customer_id,
+           status = 'active',
+           updated_at = NOW()`,
+      [newTenantId, session.subscription, session.customer]
+    );
+
+    // Bônus 30% do onboarding
+    await client.query(
+      `INSERT INTO credit_ledger (tenant_id, amount, kind, description)
+       VALUES ($1, $2, 'subscription_bonus', 'Bônus 30% do onboarding R$ 199 — Stripe')`,
+      [newTenantId, ONBOARDING_BONUS_CREDITS]
+    );
+
+    // Idempotency lock — se segunda call cair aqui simultaneamente, ON CONFLICT
+    // não retorna row e essa transação será descartada (pelo throw abaixo).
+    const { rows: peRows } = await client.query(
+      `INSERT INTO payment_events (gateway, gateway_event_id, kind, tenant_id, amount_brl, credits_granted, processed_at)
+       VALUES ('stripe', $1, 'subscription_started', $2, $3, $4, NOW())
+       ON CONFLICT (gateway, gateway_event_id) DO NOTHING
+       RETURNING id`,
+      [event.id, newTenantId, session.amount_total ? session.amount_total / 100 : 199, ONBOARDING_BONUS_CREDITS]
+    );
+    if (peRows.length === 0) {
+      // Race com outro webhook — esse perdeu. Aborta tx (rollback).
+      throw new Error(`onboarding webhook ${event.id}: race condition perdida — outro processo já criou o tenant`);
+    }
+
+    if (redis) {
+      await redis.publish(
+        `billing:onboarding_completed:${newTenantId}`,
+        JSON.stringify({ credits: ONBOARDING_BONUS_CREDITS, email })
+      );
+    }
+
+    return { handled: true, idempotent: false, tenant_id: newTenantId, credits: ONBOARDING_BONUS_CREDITS };
   }, { userId: null, channel: 'system' });
 }
 
@@ -233,6 +375,7 @@ async function handleSubscriptionDeleted(pg, event, redis) {
 
 module.exports = {
   handleCheckoutCompleted,
+  handleOnboardingSubscriptionCompleted,
   handleInvoicePaid,
   handleInvoicePaymentFailed,
   handleSubscriptionDeleted,

@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -6,7 +6,6 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/auth/auth.service';
-import { BillingService } from '../clinic/billing/billing.service';
 
 interface OnboardingData {
   clinic_name: string;
@@ -15,13 +14,6 @@ interface OnboardingData {
   confirm_password: string;
   module: 'human' | 'veterinary' | '';
   specialties: string[];
-  tenant_id: string;
-  // Token retornado pelo /auth/register. Mantido em memória (NÃO no localStorage)
-  // até o click final em goToPayment(). Se gravarmos cedo, o ngOnInit do
-  // OnboardingComponent (que faz resetSession se há token) pode matar a sessão
-  // entre re-renders e o usuário volta pro step 1. Salvar só no momento do
-  // window.location.href pra Stripe garante que o reset não corre.
-  token: string;
 }
 
 @Component({
@@ -161,10 +153,9 @@ interface OnboardingData {
         }
         <div style="display:flex;gap:0.75rem;">
           <button (click)="step.set(2)" style="flex:1;padding:0.75rem;background:#060d20;color:#c7c5d0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;border:none;border-radius:0.25rem;cursor:pointer;">Voltar</button>
-          <button (click)="nextStep3()" [disabled]="loading()"
-                  style="flex:1;padding:0.75rem;background:#c0c1ff;color:#4b4d83;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;border:none;border-radius:0.25rem;cursor:pointer;"
-                  [style.opacity]="loading() ? '0.5' : '1'">
-            {{ loading() ? 'Registrando...' : 'Continuar' }}
+          <button (click)="nextStep3()"
+                  style="flex:1;padding:0.75rem;background:#c0c1ff;color:#4b4d83;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;border:none;border-radius:0.25rem;cursor:pointer;">
+            Continuar
           </button>
         </div>
       }
@@ -222,8 +213,6 @@ export class OnboardingComponent implements OnInit {
   errorMsg = signal<string>('');
   loading = signal<boolean>(false);
 
-  private billing = inject(BillingService);
-
   data: OnboardingData = {
     clinic_name: '',
     email: '',
@@ -231,8 +220,6 @@ export class OnboardingComponent implements OnInit {
     confirm_password: '',
     module: '',
     specialties: [],
-    tenant_id: '',
-    token: ''
   };
 
   ngOnInit(): void {
@@ -310,49 +297,32 @@ export class OnboardingComponent implements OnInit {
   nextStep3(): void {
     this.errorMsg.set('');
     if (this.data.specialties.length === 0) return this.errorMsg.set('Selecione ao menos 1 especialidade.');
-    this.loading.set(true);
-    this.http.post<{ token: string; tenant_id: string; user_id: string; email: string }>(
-      `${environment.apiUrl}/auth/register`,
-      {
-        clinic_name: this.data.clinic_name,
-        email: this.data.email,
-        password: this.data.password,
-        module: this.data.module
-      }
-    ).subscribe({
-      next: (res) => {
-        this.data.tenant_id = res.tenant_id;
-        // Token guardado em memória do componente. Só vira sessão ativa
-        // (localStorage + observable) quando o user clicar "Ir para pagamento"
-        // no step 4 — vide goToPayment(). Salvar agora dispara resetSession
-        // do ngOnInit em qualquer re-mount → state perdido.
-        this.data.token = res.token || '';
-        this.loading.set(false);
-        this.step.set(4);
-      },
-      error: (err) => {
-        this.loading.set(false);
-        this.errorMsg.set(err.error?.error ?? 'Erro ao criar conta. Tente novamente.');
-      }
-    });
+    // Step 3 → Step 4 é só transição de UI. NÃO grava nada no banco.
+    // Tenant + user só são criados pelo webhook do Stripe quando pagamento
+    // for confirmado (vide POST /onboarding/checkout + handleOnboardingSubscriptionCompleted).
+    this.step.set(4);
   }
 
   async goToPayment(): Promise<void> {
     this.errorMsg.set('');
     this.loading.set(true);
     try {
-      // Ativa a sessão APENAS aqui — imediatamente antes do redirect pra Stripe.
-      // window.location.href sai da SPA, então qualquer re-mount do
-      // OnboardingComponent (e seu ngOnInit que limpa sessão) é evitado.
-      if (this.data.token) {
-        this.auth.setSession(this.data.token);
-      } else {
-        this.errorMsg.set('Sessão expirou. Recarregue a página e refaça o cadastro.');
-        this.loading.set(false);
-        return;
-      }
-      const { url } = await firstValueFrom(this.billing.checkoutSubscription());
-      window.location.href = url;
+      // Single-shot: API valida tudo + cria Stripe Customer + Checkout Session
+      // com toda a info na metadata. NENHUM efeito colateral no DB se o user
+      // desistir no Stripe — orfão zero.
+      const res = await firstValueFrom(
+        this.http.post<{ url: string; session_id: string }>(
+          `${environment.apiUrl}/onboarding/checkout`,
+          {
+            clinic_name: this.data.clinic_name,
+            email: this.data.email,
+            password: this.data.password,
+            module: this.data.module,
+            specialties: this.data.specialties,
+          }
+        )
+      );
+      window.location.href = res.url;
     } catch (err: any) {
       this.loading.set(false);
       this.errorMsg.set(err?.error?.error ?? 'Erro ao iniciar pagamento.');
