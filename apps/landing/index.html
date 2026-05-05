@@ -2161,7 +2161,7 @@
       <span class="display-num" style="font-family:'Fraunces',serif;font-style:italic;font-weight:600;letter-spacing:-0.04em">com você.</span>
     </div>
     <p class="hero-sub">
-      Da agenda à análise de exames, do laudo à prescrição, <em class="hero-italic">uma só plataforma</em>. Inteligência artificial assistiva pra suas decisões clínicas — auditável, multi-tenant e em conformidade com a LGPD.
+      Da agenda à análise de exames, do laudo à prescrição, <em class="hero-italic">uma só plataforma</em>. IA <strong>pensa junto</strong> durante a consulta, <strong>vê o que falta</strong> no histórico do paciente, e a clínica <strong>retém pacientes</strong> sem esforço — auditável, multi-tenant e em conformidade com a LGPD.
       <br/><em class="hero-italic" data-human="Para clínicas médicas." data-vet="Para clínicas veterinárias.">Para humanos e animais.</em>
     </p>
     <div class="hero-actions">
@@ -2264,8 +2264,10 @@
       <ul class="pillar-bullets">
         <li>Multi-agentes paralelos</li>
         <li>Imagens DICOM/RX/ECG</li>
+        <li>Foto do laudo impresso (OCR)</li>
+        <li>Co-piloto durante consulta</li>
+        <li>Sugestões pró-ativas</li>
         <li>Chatbot RAG por paciente</li>
-        <li>Comparação longitudinal</li>
       </ul>
       <a class="pillar-cta" href="#ia">Ver IA Clínica ↓</a>
     </article>
@@ -2284,8 +2286,10 @@
       <ul class="pillar-bullets">
         <li>Agenda com voz</li>
         <li>Prescrições com templates</li>
+        <li>Lembretes WhatsApp automáticos</li>
+        <li>Follow-up pós-consulta</li>
+        <li>Portal do paciente/tutor</li>
         <li>Chat entre clínicas</li>
-        <li>Dashboard clínico</li>
       </ul>
       <a class="pillar-cta" href="#operacao">Ver Operação ↓</a>
     </article>
@@ -2589,7 +2593,7 @@
       <div class="feat-num">01</div>
       <div class="feat-tag">Core — IA Clínica</div>
       <h3 class="feat-heading">De 40 minutos<br/>para menos de<br/><span class="feat-highlight">60 segundos.</span></h3>
-      <p class="feat-body">O laudo entra como PDF. Em menos de um minuto, o clínico recebe estrutura completa: valores normalizados, alertas críticos, escore de risco e raciocínio clínico gerado por IA com cadeia de evidências auditável.</p>
+      <p class="feat-body">O laudo entra como PDF, imagem (DICOM/RX/ECG/RM) ou <strong>foto do papel impresso pelo celular</strong> — IA reconhece e processa. Em menos de um minuto, o clínico recebe estrutura completa: valores normalizados, alertas críticos, escore de risco e raciocínio clínico gerado por IA com cadeia de evidências auditável.</p>
       <div class="feat-stats">
         <div class="feat-stat">
           <span class="feat-stat-val">−83%</span>
@@ -2853,6 +2857,132 @@
             <div class="feat-compare-desc">Função renal em declínio gradual — atenção</div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── F6: Co-piloto durante consulta (Phase 4.4) ── -->
+  <div class="feat-block" id="feat-copilot">
+    <div class="feat-video-col">
+      <div class="monitor-outer">
+        <div class="monitor-frame">
+          <div class="monitor-bezel">
+            <div class="monitor-screen" style="background:#0b1326;padding:14px;display:flex;flex-direction:column;gap:8px;font-family:Inter,sans-serif">
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#c0c1ff;font-weight:600">
+                <span style="font-size:16px">✨</span> Co-piloto IA · Análise em curso
+              </div>
+              <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:#a09fb2">Hipóteses prováveis</div>
+              <div style="background:rgba(11,19,38,0.6);border:1px solid rgba(192,193,255,0.18);border-left:3px solid #c0c1ff;border-radius:6px;padding:8px 10px">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                  <strong style="font-size:11px;color:#fff">Síndrome coronariana aguda</strong>
+                  <span style="font-size:9px;background:rgba(192,193,255,0.15);color:#c0c1ff;padding:1px 6px;border-radius:100px;font-weight:600;font-family:'JetBrains Mono',monospace">I21.9</span>
+                  <span style="margin-left:auto;font-size:9px;color:#c0c1ff;font-weight:600">72%</span>
+                </div>
+                <div style="font-size:9px;color:#c7c5d0;line-height:1.4">Dor torácica retroesternal + fatores de risco (HAS, tabagismo, idade)</div>
+              </div>
+              <div style="background:rgba(11,19,38,0.6);border:1px solid rgba(192,193,255,0.18);border-left:3px solid #c0c1ff;border-radius:6px;padding:8px 10px">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                  <strong style="font-size:11px;color:#fff">Angina instável</strong>
+                  <span style="font-size:9px;background:rgba(192,193,255,0.15);color:#c0c1ff;padding:1px 6px;border-radius:100px;font-weight:600;font-family:'JetBrains Mono',monospace">I20.0</span>
+                  <span style="margin-left:auto;font-size:9px;color:#c0c1ff;font-weight:600">48%</span>
+                </div>
+              </div>
+              <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:#ff8b8b;margin-top:2px">⚠ Sinais de alarme</div>
+              <div style="background:rgba(255,107,107,0.05);border:1px solid rgba(255,107,107,0.3);border-radius:6px;padding:6px 8px;font-size:10px;color:#fff">
+                <strong>Instabilidade hemodinâmica</strong>
+                <span style="font-size:9px;background:rgba(255,107,107,0.25);color:#ff8b8b;padding:1px 6px;border-radius:100px;margin-left:4px;font-weight:600">imediata</span>
+              </div>
+              <div style="font-size:9px;color:#7c7b8f;text-align:center;margin-top:6px;padding-top:6px;border-top:1px solid rgba(192,193,255,0.08)">⚕ Sugestões da IA. Médico decide.</div>
+            </div>
+          </div>
+          <div class="monitor-neck"></div>
+          <div class="monitor-foot"></div>
+        </div>
+      </div>
+    </div>
+    <div class="feat-text-col">
+      <div class="feat-num">06</div>
+      <div class="feat-tag">IA Clínica — Co-piloto</div>
+      <h3 class="feat-heading">A IA <span class="feat-highlight">pensa junto</span><br/>enquanto você<br/>escreve.</h3>
+      <p class="feat-body">Você digita queixa principal, anamnese, exame físico — e a IA, em uma sidebar discreta, sugere as hipóteses diagnósticas mais prováveis com CID-10, exames recomendados pra confirmar ou excluir cada uma, e sinaliza red flags que merecem atenção imediata. <strong>O médico continua decidindo</strong> — a IA só pensa junto.</p>
+      <div class="feat-stats">
+        <div class="feat-stat">
+          <span class="feat-stat-val">Top 3</span>
+          <span class="feat-stat-label">hipóteses com CID</span>
+        </div>
+        <div class="feat-stat">
+          <span class="feat-stat-val">Real-time</span>
+          <span class="feat-stat-label">durante a consulta</span>
+        </div>
+        <div class="feat-stat">
+          <span class="feat-stat-val">Red flags</span>
+          <span class="feat-stat-label">com urgência clara</span>
+        </div>
+      </div>
+      <div class="feat-disclaimer">
+        <div class="feat-disclaimer-icon">⚕</div>
+        <p>O co-piloto <strong>não diagnostica</strong>. Sugere hipóteses, exames e sinais de alarme — pra que o clínico raciocine com mais informação à mão.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── F7: IA pró-ativa no prontuário (Phase 4.3) ── -->
+  <div class="feat-block feat-block--rev" id="feat-proactive">
+    <div class="feat-video-col">
+      <div class="monitor-outer">
+        <div class="monitor-frame">
+          <div class="monitor-bezel">
+            <div class="monitor-screen" style="background:#0b1326;padding:14px;display:flex;flex-direction:column;gap:8px;font-family:Inter,sans-serif">
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#c0c1ff;font-weight:600">
+                <span style="font-size:16px">✨</span> Sugestões da IA · Anderson Martins
+              </div>
+              <div style="background:rgba(11,19,38,0.6);border:1px solid rgba(192,193,255,0.1);border-left:3px solid #ff6b6b;border-radius:6px;padding:8px 10px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+                  <span style="font-size:9px;background:rgba(255,107,107,0.15);color:#ff8b8b;padding:1px 6px;border-radius:100px;font-weight:700;text-transform:uppercase">Alta</span>
+                  <span style="font-size:11px;color:#7c7b8f;cursor:pointer">×</span>
+                </div>
+                <div style="font-size:11px;color:#fff;font-weight:500;margin-bottom:3px">Solicitar HbA1c — sem coleta há 7 meses</div>
+                <div style="font-size:9px;color:#c7c5d0;line-height:1.4;margin-bottom:3px">Diabético tipo 2 em uso de metformina; HbA1c última 7.8% (acima da meta).</div>
+                <div style="font-size:9px;color:#4ad6a0;font-weight:500">→ Pedir HbA1c na próxima coleta</div>
+                <div style="font-size:9px;color:#a09fb2;margin-top:3px">📖 ADA Standards of Care 2024, Cap. 6</div>
+              </div>
+              <div style="background:rgba(11,19,38,0.6);border:1px solid rgba(192,193,255,0.1);border-left:3px solid #f7c873;border-radius:6px;padding:8px 10px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+                  <span style="font-size:9px;background:rgba(247,200,115,0.15);color:#f7c873;padding:1px 6px;border-radius:100px;font-weight:700;text-transform:uppercase">Média</span>
+                </div>
+                <div style="font-size:11px;color:#fff;font-weight:500;margin-bottom:3px">Avaliar perfil lipídico</div>
+                <div style="font-size:9px;color:#c7c5d0;line-height:1.4">Sem lipidograma há 14 meses em paciente diabético + tabagista.</div>
+              </div>
+              <div style="font-size:9px;color:#7c7b8f;text-align:center;margin-top:4px;padding-top:6px;border-top:1px solid rgba(192,193,255,0.08)">⚕ Sugestões da IA. Médico decide.</div>
+            </div>
+          </div>
+          <div class="monitor-neck"></div>
+          <div class="monitor-foot"></div>
+        </div>
+      </div>
+    </div>
+    <div class="feat-text-col">
+      <div class="feat-num">07</div>
+      <div class="feat-tag">IA Clínica — Pró-atividade</div>
+      <h3 class="feat-heading">A IA <span class="feat-highlight">vê o que falta</span><br/>antes mesmo de<br/>você procurar.</h3>
+      <p class="feat-body">Toda vez que você abre o prontuário, a IA revisa silenciosamente o histórico inteiro do paciente — comorbidades, exames passados com alertas, prescrições ativas, intervalos entre consultas — e sugere ações pró-ativas baseadas em diretrizes clínicas. Identifica lacunas: exames vencidos, follow-ups esquecidos, oportunidades de prevenção.</p>
+      <div class="feat-stats">
+        <div class="feat-stat">
+          <span class="feat-stat-val">Diretrizes</span>
+          <span class="feat-stat-label">como fonte</span>
+        </div>
+        <div class="feat-stat">
+          <span class="feat-stat-val">Priorizado</span>
+          <span class="feat-stat-label">alta / média / baixa</span>
+        </div>
+        <div class="feat-stat">
+          <span class="feat-stat-val">Atualiza</span>
+          <span class="feat-stat-label">a cada 24h</span>
+        </div>
+      </div>
+      <div class="feat-disclaimer">
+        <div class="feat-disclaimer-icon">⚕</div>
+        <p>Sugestões com base em padrões clínicos e diretrizes. <strong>Não substituem</strong> avaliação individual — apenas evitam que algo fique invisível no histórico.</p>
       </div>
     </div>
   </div>
@@ -3190,6 +3320,63 @@
       </div>
     </div>
   </div>
+
+  <!-- O7. Follow-up automatizado WhatsApp (Phase 4.2) -->
+  <div class="feat-block feat-block--rev" id="feat-followup">
+    <div class="feat-video-col">
+      <div class="monitor-outer">
+        <div class="monitor-frame">
+          <div class="monitor-bezel">
+            <div class="monitor-screen" style="background:#0b1326;padding:14px;display:flex;flex-direction:column;gap:10px;font-family:Inter,sans-serif">
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#25D366;font-weight:600">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="flex-shrink:0"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884"/></svg>
+                Lembretes WhatsApp · Automático
+              </div>
+              <div style="background:rgba(37,211,102,0.08);border:1px solid rgba(37,211,102,0.3);border-radius:8px;padding:10px 12px">
+                <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:#4ad6a0;margin-bottom:3px;font-weight:700">+ 7 dias após consulta</div>
+                <div style="font-size:11px;color:#fff;line-height:1.4">"Olá Maria! Como está se sentindo após a consulta? Se precisar de algo, é só responder."</div>
+              </div>
+              <div style="background:rgba(247,200,115,0.08);border:1px solid rgba(247,200,115,0.3);border-radius:8px;padding:10px 12px">
+                <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:#f7c873;margin-bottom:3px;font-weight:700">+ 30 dias após exame com alerta</div>
+                <div style="font-size:11px;color:#fff;line-height:1.4">"Faz 30 dias do seu último exame. Para acompanhar a evolução, vale conversar com a clínica."</div>
+              </div>
+              <div style="background:rgba(192,193,255,0.08);border:1px solid rgba(192,193,255,0.3);border-radius:8px;padding:10px 12px">
+                <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:#c0c1ff;margin-bottom:3px;font-weight:700">7 dias antes da próxima dose</div>
+                <div style="font-size:11px;color:#fff;line-height:1.4">"Lembrete: próxima dose da V10 do Thor está agendada para 12/06. Quer remarcar?"</div>
+              </div>
+            </div>
+          </div>
+          <div class="monitor-neck"></div>
+          <div class="monitor-foot"></div>
+        </div>
+      </div>
+    </div>
+    <div class="feat-text-col">
+      <div class="feat-num">12</div>
+      <div class="feat-tag">Operação — Retenção</div>
+      <h3 class="feat-heading">Pacientes lembrados <span class="feat-highlight">sem você lembrar</span> deles.</h3>
+      <p class="feat-body">A clínica não precisa mais ligar pra perguntar como o paciente está, marcar follow-up de exame com alerta, ou avisar do reforço da vacina. O sistema dispara mensagens automáticas no WhatsApp em 3 momentos: <strong>7 dias após consulta</strong>, <strong>30 dias após exame com alerta crítico</strong>, e <strong>antes da próxima dose</strong> de vacina. Tudo configurável por tenant.</p>
+      <div class="feat-stats">
+        <div class="feat-stat">
+          <span class="feat-stat-val">3 tipos</span>
+          <span class="feat-stat-label">de follow-up</span>
+        </div>
+        <div class="feat-stat">
+          <span class="feat-stat-val">WhatsApp</span>
+          <span class="feat-stat-label">via Z-API oficial</span>
+        </div>
+        <div class="feat-stat">
+          <span class="feat-stat-val">Opt-in</span>
+          <span class="feat-stat-label">configurável</span>
+        </div>
+      </div>
+      <div class="feat-disclaimer">
+        <div class="feat-disclaimer-icon">💚</div>
+        <p>Retenção sem esforço · Idempotente (não duplica) · Cliente desliga quando quiser</p>
+      </div>
+    </div>
+  </div>
+
 </section>
 
 <!-- IMPACT -->
@@ -3399,6 +3586,30 @@
         <span class="faq-icon">+</span>
       </button>
       <div class="faq-a">Sim. O plano base R$ 199/mês é dimensionado pra clínicas solo. Escalamos automaticamente via créditos conforme o volume — sem tier forçado. Módulo veterinário cobre pequenos animais, equinos e bovinos com agentes específicos por espécie.</div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-q" onclick="toggleFaq(this)">
+        O co-piloto de IA durante a consulta substitui o médico?
+        <span class="faq-icon">+</span>
+      </button>
+      <div class="faq-a">Não. O co-piloto SUGERE hipóteses diagnósticas (com CID-10 e probabilidade), exames recomendados e sinais de alarme — mas o médico decide. Toda saída tem disclaimer "⚕ Sugestões da IA. Médico decide." A linguagem é sempre de sugestão (considere/investigue/exclua), nunca afirmação. A responsabilidade clínica permanece com o profissional, que mantém autonomia total sobre conduta e prescrição.</div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-q" onclick="toggleFaq(this)">
+        Posso enviar foto do laudo impresso pelo celular?
+        <span class="faq-icon">+</span>
+      </button>
+      <div class="faq-a">Sim. Aceitamos PDF, DICOM, JPG/PNG/TIFF e fotos do laudo impresso tiradas com o celular. A IA classifica automaticamente: imagem médica (RX, ECG, ultrassom, RM) entra no pipeline de imaging; foto de laudo impresso vai para OCR via Vision e processamento como texto. Você não precisa escanear — só fotografar.</div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-q" onclick="toggleFaq(this)">
+        Como funciona o follow-up automatizado?
+        <span class="faq-icon">+</span>
+      </button>
+      <div class="faq-a">3 tipos de mensagem automática via WhatsApp: (1) <strong>7 dias após consulta</strong> finalizada — "Como está se sentindo?", (2) <strong>30 dias após exame com alerta crítico</strong> — sugere reavaliação, (3) <strong>antes da próxima dose de vacina</strong> (T-7d e T-1d) com data e nome da vacina. Tudo idempotente (não duplica), opt-in configurável por tenant, paciente pode opt-out. Aproveita o número WhatsApp da clínica via Z-API oficial.</div>
     </div>
 
   </div>
