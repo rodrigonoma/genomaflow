@@ -108,8 +108,10 @@ interface DialogData {
     </mat-dialog-actions>
   `,
   styles: [`
-    :host { display: block; min-width: 540px; color: #dae2fd; }
+    :host { display: block; color: #dae2fd; min-width: min(540px, 95vw); }
     :host ::ng-deep h2.mat-mdc-dialog-title { color: #dae2fd; }
+    /* padding 1.25rem pra cima evita clip do floating label (feedback_material_modal_padding.md) */
+    mat-dialog-content { padding: 1.25rem 1.5rem 0.5rem !important; max-height: 70vh; overflow-x: auto; }
     .muted { color: #a09fb2; font-size: 0.875rem; margin: 4px 0 12px; }
     h3 { margin: 24px 0 8px; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.08em; color: #c0c1ff; }
 

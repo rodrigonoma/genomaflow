@@ -2099,6 +2099,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
       : profile?.crm_number ?? null;
     const ref = this.dialog.open(ClinicalDocumentDialogComponent, {
       width: '760px',
+      maxWidth: '95vw',
       panelClass: 'dark-dialog',
       data: {
         subject_id: subj.id,
@@ -2114,7 +2115,11 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   }
 
   openTemplatesModal(): void {
-    this.dialog.open(ClinicalDocumentTemplatesModalComponent, { width: '1000px' });
+    this.dialog.open(ClinicalDocumentTemplatesModalComponent, {
+      width: '1000px',
+      maxWidth: '95vw',
+      panelClass: 'dark-dialog',
+    });
   }
 
   async reprintDocument(d: ClinicalDocument): Promise<void> {

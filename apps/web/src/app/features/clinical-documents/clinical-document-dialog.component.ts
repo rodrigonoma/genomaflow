@@ -107,15 +107,18 @@ const DEFAULTS: Record<DocType, string> = {
     </mat-dialog-actions>
   `,
   styles: [`
-    :host { display: block; min-width: 640px; color: #dae2fd; }
-    h2 { display: flex; align-items: center; gap: 8px; color: #dae2fd; }
+    :host { display: block; color: #dae2fd; }
+    h2 { display: flex; align-items: center; gap: 8px; color: #dae2fd; margin-bottom: 0; }
     h2 mat-icon { color: #c0c1ff; }
-    .row { display: flex; gap: 12px; }
-    .col { flex: 1; }
+    /* padding 1.25rem pra cima evita clip do floating label do mat-form-field outline.
+       Lição aprendida em feedback_material_modal_padding.md (incidente 2026-04-24). */
+    mat-dialog-content { padding: 1.25rem 1.5rem 0.5rem !important; max-height: 70vh; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .col { flex: 1 1 240px; min-width: 0; }
     .full { width: 100%; }
-    mat-dialog-content { padding-bottom: 8px; }
-    textarea { font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; line-height: 1.5; color: #dae2fd; }
     mat-form-field { width: 100%; }
+    textarea { font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; line-height: 1.5; color: #dae2fd; }
+    mat-dialog-actions { flex-wrap: wrap; gap: 8px; padding: 0.75rem 1.5rem 1rem; }
     ::ng-deep .mat-mdc-form-field-hint { color: #a09fb2 !important; }
   `],
 })

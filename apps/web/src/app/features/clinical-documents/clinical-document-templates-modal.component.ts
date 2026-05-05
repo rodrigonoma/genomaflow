@@ -123,14 +123,17 @@ import {
     </mat-dialog-actions>
   `,
   styles: [`
-    :host { display: block; min-width: 920px; max-width: 1100px; color: #dae2fd; }
-    h2 { display: flex; align-items: center; gap: 8px; color: #dae2fd; }
+    :host { display: block; color: #dae2fd; }
+    h2 { display: flex; align-items: center; gap: 8px; color: #dae2fd; margin-bottom: 0; }
     h2 mat-icon { color: #c0c1ff; }
     .muted { color: #a09fb2; font-size: 0.875rem; }
     .center { text-align: center; padding: 24px; }
     .full { width: 100%; }
+    /* padding 1.25rem pra cima evita clip do floating label (feedback_material_modal_padding.md) */
+    mat-dialog-content.content { padding: 1.25rem 1.5rem 0.5rem !important; max-height: 70vh; }
 
-    .layout { display: grid; grid-template-columns: 320px 1fr; gap: 16px; min-height: 460px; }
+    .layout { display: grid; grid-template-columns: minmax(220px, 320px) 1fr; gap: 16px; min-height: 460px; }
+    @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
 
     .list-pane { border: 1px solid rgba(70,69,84,0.25); background: #0b1326; border-radius: 4px; padding: 12px; display: flex; flex-direction: column; }
     .filters { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
