@@ -80,6 +80,13 @@ module.exports = async function (fastify) {
         nps_enabled: false,
         nps_via: 'email',
         nps_delay_hours: 4,
+        // Phase 4.2 follow-ups (defaults da migration 076)
+        post_consultation_followup_enabled: true,
+        post_consultation_followup_days: 7,
+        exam_alert_followup_enabled: true,
+        exam_alert_followup_days: 30,
+        vaccine_dose_reminder_enabled: true,
+        vaccine_dose_reminder_hours_before: [168, 24],
         is_default: true,
       };
     }
@@ -100,17 +107,18 @@ module.exports = async function (fastify) {
         `INSERT INTO notification_preferences (
            tenant_id, appointment_reminder_enabled, reminder_hours_before,
            reminder_via, send_window_start, send_window_end,
-           nps_enabled, nps_via, nps_delay_hours
+           nps_enabled, nps_via, nps_delay_hours,
+           post_consultation_followup_enabled, post_consultation_followup_days,
+           exam_alert_followup_enabled, exam_alert_followup_days,
+           vaccine_dose_reminder_enabled, vaccine_dose_reminder_hours_before
          ) VALUES (
            $1,
-           COALESCE($2, TRUE),
-           COALESCE($3, ARRAY[24, 2]),
-           COALESCE($4, 'whatsapp'),
-           COALESCE($5, '08:00'),
-           COALESCE($6, '20:00'),
-           COALESCE($7, FALSE),
-           COALESCE($8, 'email'),
-           COALESCE($9, 4)
+           COALESCE($2, TRUE), COALESCE($3, ARRAY[24, 2]),
+           COALESCE($4, 'whatsapp'), COALESCE($5, '08:00'), COALESCE($6, '20:00'),
+           COALESCE($7, FALSE), COALESCE($8, 'email'), COALESCE($9, 4),
+           COALESCE($10, TRUE), COALESCE($11, 7),
+           COALESCE($12, TRUE), COALESCE($13, 30),
+           COALESCE($14, TRUE), COALESCE($15, ARRAY[168, 24])
          )
          ON CONFLICT (tenant_id) DO UPDATE SET
            appointment_reminder_enabled = COALESCE($2, notification_preferences.appointment_reminder_enabled),
@@ -121,6 +129,12 @@ module.exports = async function (fastify) {
            nps_enabled = COALESCE($7, notification_preferences.nps_enabled),
            nps_via = COALESCE($8, notification_preferences.nps_via),
            nps_delay_hours = COALESCE($9, notification_preferences.nps_delay_hours),
+           post_consultation_followup_enabled = COALESCE($10, notification_preferences.post_consultation_followup_enabled),
+           post_consultation_followup_days = COALESCE($11, notification_preferences.post_consultation_followup_days),
+           exam_alert_followup_enabled = COALESCE($12, notification_preferences.exam_alert_followup_enabled),
+           exam_alert_followup_days = COALESCE($13, notification_preferences.exam_alert_followup_days),
+           vaccine_dose_reminder_enabled = COALESCE($14, notification_preferences.vaccine_dose_reminder_enabled),
+           vaccine_dose_reminder_hours_before = COALESCE($15, notification_preferences.vaccine_dose_reminder_hours_before),
            updated_at = NOW()
          RETURNING *`,
         [tenant_id,
@@ -131,7 +145,13 @@ module.exports = async function (fastify) {
          b.send_window_end ?? null,
          b.nps_enabled ?? null,
          b.nps_via ?? null,
-         b.nps_delay_hours ?? null]
+         b.nps_delay_hours ?? null,
+         b.post_consultation_followup_enabled ?? null,
+         b.post_consultation_followup_days ?? null,
+         b.exam_alert_followup_enabled ?? null,
+         b.exam_alert_followup_days ?? null,
+         b.vaccine_dose_reminder_enabled ?? null,
+         b.vaccine_dose_reminder_hours_before ?? null]
       );
       return rows[0];
     }, { userId: user_id, channel: 'ui' });

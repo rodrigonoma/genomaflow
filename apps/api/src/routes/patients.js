@@ -586,13 +586,15 @@ module.exports = async function (fastify) {
     return { cached, expired };
   });
 
-  // POST /:id/ai-suggestions/refresh — gera (ou regenera) sugestões
+  // POST /:id/ai-suggestions/refresh — gera (ou regenera) sugestões.
+  // Qualquer profissional autenticado do tenant pode pedir refresh — RLS
+  // protege dados. Antes era admin-only por engano (clínica com múltiplos
+  // médicos não conseguia regerar pra próprios pacientes).
   fastify.post('/:id/ai-suggestions/refresh', {
     preHandler: [fastify.authenticate],
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
   }, async (request, reply) => {
-    const { tenant_id, user_id, role } = request.user;
-    if (role !== 'admin' && role !== 'master') return reply.status(403).send({ error: 'Apenas admin/profissional' });
+    const { tenant_id, user_id } = request.user;
     const { id: subject_id } = request.params;
     try {
       const result = await withTenant(fastify.pg, tenant_id, async (client) => {
@@ -602,6 +604,19 @@ module.exports = async function (fastify) {
           tenant_id, subject_id, user_id, module: moduleName,
         });
       }, { userId: user_id, channel: 'ui' });
+
+      // Debita 1 crédito por refresh (cache 24h ameniza recorrência).
+      // Best-effort — não derruba a request se billing falhar.
+      try {
+        await fastify.pg.query(
+          `INSERT INTO credit_ledger (tenant_id, amount, kind, description)
+           VALUES ($1, -1, 'ai_suggestion', 'Sugestões pró-ativas IA (paciente)')`,
+          [tenant_id]
+        );
+      } catch (billingErr) {
+        request.log.warn({ err: billingErr.message }, 'ai_suggestion: billing debit failed');
+      }
+
       return result;
     } catch (err) {
       if (err.code === 'NOT_FOUND') return reply.status(404).send({ error: 'subject not found' });

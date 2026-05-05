@@ -556,6 +556,20 @@ module.exports = async function (fastify) {
         sex: ctx.sex,
         chief_complaint, anamnesis, physical_exam, hypothesis, vital_signs,
       });
+
+      // Debita 0.5 crédito por análise (custo intermediário entre chat 0.25
+      // e ai_suggestion 1.0 — co-piloto pode ser usado várias vezes durante
+      // construção do prontuário). Best-effort.
+      try {
+        await fastify.pg.query(
+          `INSERT INTO credit_ledger (tenant_id, amount, kind, description)
+           VALUES ($1, -0.5, 'encounter_copilot', 'Co-piloto IA durante consulta')`,
+          [tenant_id]
+        );
+      } catch (billingErr) {
+        request.log.warn({ err: billingErr.message }, 'encounter_copilot: billing debit failed');
+      }
+
       return result;
     } catch (err) {
       if (err.code === 'INPUT_TOO_SHORT') {

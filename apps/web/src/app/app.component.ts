@@ -21,6 +21,7 @@ import { ChatPanelComponent } from './features/chat/chat-panel.component';
 import { ProductHelpPanelComponent } from './features/product-help/product-help-panel.component';
 import { HesitationDetectorService } from './core/help-context/hesitation-detector.service';
 import { ClinicProfileModalComponent } from './features/clinic/profile/clinic-profile-modal.component';
+import { NotificationPreferencesModalComponent } from './features/notifications/notification-preferences-modal.component';
 import { QuickSearchComponent } from './shared/components/quick-search/quick-search.component';
 
 @Component({
@@ -349,6 +350,9 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
             <button mat-menu-item (click)="openClinicProfile()">
               <mat-icon>business</mat-icon> Editar Perfil da Clínica
             </button>
+            <button mat-menu-item (click)="openNotificationPreferences()">
+              <mat-icon>notifications</mat-icon> Comunicações automáticas
+            </button>
           }
           <button mat-menu-item (click)="auth.logout()">
             <mat-icon>logout</mat-icon> Sair
@@ -465,6 +469,14 @@ export class AppComponent implements OnInit, OnDestroy {
 
   openClinicProfile(): void {
     this.dialog.open(ClinicProfileModalComponent, { width: '480px', panelClass: 'dark-dialog' });
+  }
+
+  openNotificationPreferences(): void {
+    this.dialog.open(NotificationPreferencesModalComponent, {
+      width: '600px',
+      maxWidth: '95vw',
+      panelClass: 'dark-dialog',
+    });
   }
 
   private friendlyExamError(msg: string): string {
