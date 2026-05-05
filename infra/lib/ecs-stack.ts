@@ -62,6 +62,18 @@ export class EcsStack extends cdk.Stack {
     const stripeSecretKey      = ssmParam('stripe-secret-key');
     const stripeWebhookSecret  = ssmParam('stripe-webhook-secret');
 
+    // Z-API (WhatsApp via intermediário) — Phase 3 PMS expansion (2026-05-05).
+    // Antes do cdk deploy:
+    // aws ssm put-parameter --name /genomaflow/prod/zapi-instance-id   --value "..."  --type SecureString --overwrite
+    // aws ssm put-parameter --name /genomaflow/prod/zapi-token         --value "..."  --type SecureString --overwrite
+    // aws ssm put-parameter --name /genomaflow/prod/zapi-client-token  --value "..."  --type SecureString --overwrite
+    // Webhook receiver (configurar no painel Z-API após deploy):
+    //   https://app.genomaflow.com.br/api/notifications/whatsapp/inbound
+    //   Header X-Token = ZAPI_CLIENT_TOKEN (mesmo valor da SSM)
+    const zapiInstanceId   = ssmParam('zapi-instance-id');
+    const zapiToken        = ssmParam('zapi-token');
+    const zapiClientToken  = ssmParam('zapi-client-token');
+
     // ── EFS — armazenamento compartilhado para uploads de PDFs ──
     const fileSystem = new efs.FileSystem(this, 'Uploads', {
       vpc,
@@ -151,6 +163,9 @@ export class EcsStack extends cdk.Stack {
       OPENAI_API_KEY:        ecs.Secret.fromSsmParameter(openaiKey),
       STRIPE_SECRET_KEY:     ecs.Secret.fromSsmParameter(stripeSecretKey),
       STRIPE_WEBHOOK_SECRET: ecs.Secret.fromSsmParameter(stripeWebhookSecret),
+      ZAPI_INSTANCE_ID:      ecs.Secret.fromSsmParameter(zapiInstanceId),
+      ZAPI_TOKEN:            ecs.Secret.fromSsmParameter(zapiToken),
+      ZAPI_CLIENT_TOKEN:     ecs.Secret.fromSsmParameter(zapiClientToken),
       DB_HOST:               ecs.Secret.fromSecretsManager(rdsSecret, 'host'),
       DB_PORT:               ecs.Secret.fromSecretsManager(rdsSecret, 'port'),
       DB_NAME:               ecs.Secret.fromSecretsManager(rdsSecret, 'dbname'),
