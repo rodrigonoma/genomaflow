@@ -39,3 +39,35 @@ export function formatCep(value: string | null | undefined): string {
   if (d.length <= 5) return d;
   return `${d.slice(0,5)}-${d.slice(5)}`;
 }
+
+/**
+ * Validador BR pra telefone com DDD obrigatório.
+ * Aceita 10 (fixo) ou 11 (celular com 9) dígitos com DDD válido.
+ * Aceita também com DDI 55 (12-13 dígitos total).
+ *
+ * Vazio = válido (caller usa required separado se exigir não-vazio).
+ *
+ * @returns true se válido OU vazio
+ */
+const VALID_DDDS_BR = new Set([
+  11,12,13,14,15,16,17,18,19, 21,22,24, 27,28, 31,32,33,34,35,37,38,
+  41,42,43,44,45,46, 47,48,49, 51,53,54,55, 61, 62,64, 63, 65,66, 67,
+  68, 69, 71,73,74,75,77, 79, 81,87, 82, 83, 84, 85,88, 86,89,
+  91,93,94, 92,97, 95, 96, 98,99,
+]);
+
+export function isValidPhoneBR(value: string | null | undefined): boolean {
+  if (value === null || value === undefined || value === '') return true;
+  const digits = unmask(String(value));
+  let local = digits;
+  if (digits.length === 12 || digits.length === 13) {
+    if (!digits.startsWith('55')) return false;
+    local = digits.slice(2);
+  }
+  if (local.length !== 10 && local.length !== 11) return false;
+  const ddd = parseInt(local.slice(0, 2), 10);
+  if (!VALID_DDDS_BR.has(ddd)) return false;
+  if (local.length === 11 && local[2] !== '9') return false;
+  if (local.length === 10 && !'2345'.includes(local[2])) return false;
+  return true;
+}

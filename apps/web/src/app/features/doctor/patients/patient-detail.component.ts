@@ -28,6 +28,7 @@ import { EncounterListComponent } from '../../encounters/encounter-list.componen
 import { TimelineComponent } from '../../encounters/timeline.component';
 import { VaccinesTabComponent } from '../../vaccines/vaccines-tab.component';
 import { AuthService } from '../../../core/auth/auth.service';
+import { isValidPhoneBR } from '../../../shared/utils/mask';
 import { shortId, examTypeLabel } from '../../../shared/utils/id-format';
 import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
 import { Subscription } from 'rxjs';
@@ -743,8 +744,12 @@ interface ComparisonBlock {
                         <input matInput type="date" [(ngModel)]="editForm.birth_date"/>
                       </mat-form-field>
                       <mat-form-field appearance="outline">
-                        <mat-label>Telefone</mat-label>
-                        <input matInput [(ngModel)]="editForm.phone"/>
+                        <mat-label>Telefone (com DDD)</mat-label>
+                        <input matInput [(ngModel)]="editForm.phone" placeholder="(11) 99999-9999"/>
+                        @if (editForm.phone && !isPhoneValid(editForm.phone)) {
+                          <mat-error>Use formato com DDD: (11) 99999-9999</mat-error>
+                          <mat-hint style="color:#ffb4ab">DDD obrigatório</mat-hint>
+                        }
                       </mat-form-field>
                     </div>
                     @if (whatsappLink(editForm.phone)) {
@@ -1945,7 +1950,13 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     return `${years} anos`;
   }
 
+  isPhoneValid(v: string | null | undefined): boolean { return isValidPhoneBR(v); }
+
   saveProfile(): void {
+    if (this.editForm.phone && !isValidPhoneBR(this.editForm.phone)) {
+      this.snack.open('Telefone inválido. Use formato com DDD: (11) 99999-9999', 'Fechar', { duration: 5000 });
+      return;
+    }
     const id = this.subject()!.id;
     this.http.put<Subject>(`${environment.apiUrl}/patients/${id}`, this.editForm).subscribe({
       next: s => {
@@ -1953,7 +1964,10 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
         this.editForm = { ...s, birth_date: s.birth_date ? s.birth_date.toString().slice(0, 10) : undefined };
         this.snack.open('Perfil salvo com sucesso.', 'OK', { duration: 3000 });
       },
-      error: () => this.snack.open('Erro ao salvar perfil. Tente novamente.', 'Fechar', { duration: 5000 })
+      error: (err) => {
+        const msg = err?.error?.error || 'Erro ao salvar perfil. Tente novamente.';
+        this.snack.open(msg, 'Fechar', { duration: 5000 });
+      }
     });
   }
 
