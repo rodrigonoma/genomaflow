@@ -438,3 +438,43 @@ cd apps/web && npm start
 2. Após aprovação, invocar `superpowers:writing-plans` pra detalhar o plano de implementação task-by-task
 3. Implementar via subagent-driven-development
 4. Smoke local com Stripe CLI antes de pedir aprovação humana pra merge
+
+---
+
+## Amendments post-implementação (2026-05-05)
+
+Os pontos abaixo foram acordados após o smoke prod inicial revelar problemas de fluxo/UX que não estavam no spec original. Implementados direto na `main`.
+
+### A1. Option E — defer DB writes até pagamento confirmado
+
+**Problema:** spec previa `/auth/register` criando tenant `pending_payment` antes do checkout. No smoke prod o usuário desistiu várias vezes do Stripe e ficaram tenants órfãos no banco. Bloqueava retry com mesmo email ("Email já cadastrado") e poluía audit log.
+
+**Decisão:** rota nova `POST /onboarding/checkout` (público) que **não grava nada** no banco — só valida, hasha senha e cria Stripe Customer + Checkout Session com toda a info na metadata da Session (`origin`, `email`, `clinic_name`, `password_hash`, `module`, `specialties`).
+
+**Webhook:** `handleCheckoutCompleted` detecta `metadata.origin === 'onboarding'` e dispara `handleOnboardingSubscriptionCompleted` que cria `tenants` + `users` + `tenant_specialties` + `subscriptions` + `credit_ledger` + `payment_events` em uma transação `withTenant(newTenantId)`. Idempotência via `payment_events UNIQUE(gateway, gateway_event_id)` (race vencedora).
+
+**Considerações:**
+- Email é **auto-verificado** no webhook (paid signup = ID via Stripe + cartão real)
+- Stripe metadata limits OK (50 keys / 40 char keys / 500 char values; bcrypt = 60 chars)
+- Cleanup: `/auth/register` continua existindo para a rota legada `/register` (que não passa por pagamento), mas auto-login (token + jti + Redis session) foi **removido** — não era usado por mais ninguém
+- Frontend: `goToPayment()` agora é single-shot pra `/onboarding/checkout`; `nextStep3()` virou só transição de UI
+
+**Commit:** `11be1b85`
+
+### A2. Bônus de 122 créditos só no 1º mês
+
+**Problema:** spec original concedia 122 créditos `topup_recurring` em todo `invoice.paid` mensal. PO revisou: faz mais sentido o bônus ser apenas no 1º mês (onboarding) — renovações mensais não precisam de bônus extra; assinante que precisar compra topup avulso.
+
+**Decisão:** `handleInvoicePaid` agora só atualiza `current_period_end` + `billing_status='active'` + grava `payment_events` (audit). **NÃO** insere mais em `credit_ledger`.
+
+**Cleanup:** constante `RECURRING_BONUS_CREDITS` removida (não usada em lugar nenhum).
+
+**Test atualizado:** `tests/routes/webhooks-stripe.test.js` — assertion mudou de `{credits: 122}` pra `{handled: true, idempotent: false}` + `expect(... 'INSERT INTO credit_ledger' ...).toBe(false)`.
+
+**Commit:** `00fe3405`
+
+### A3. Schema fixes descobertos no smoke prod 2026-05-04
+
+Migrations 063 e 064 (já aplicadas em prod manualmente):
+- 063: `subscriptions` + `updated_at` / `cancelled_at` + `gateway_subscription_id` NULLABLE (registro `pending_payment` ainda não tem subscription_id)
+- 064: `subscriptions` UNIQUE(`tenant_id`) (código usava ON CONFLICT) + `payment_events.amount_brl` e `credits_granted` NULLABLE (handlers de failed/cancelled não têm valor associado)
