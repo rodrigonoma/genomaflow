@@ -33,6 +33,7 @@ import { PortalTokenDialogComponent } from '../../portal/portal-token-dialog.com
 import { ClinicalDocumentDialogComponent } from '../../clinical-documents/clinical-document-dialog.component';
 import { ClinicalDocumentTemplatesModalComponent } from '../../clinical-documents/clinical-document-templates-modal.component';
 import { ClinicalDocumentsService, ClinicalDocument, DOC_TYPE_LABELS, DOC_TYPE_ICONS } from '../../clinical-documents/clinical-documents.service';
+import { AiSuggestionsCardComponent } from '../../ai-suggestions/ai-suggestions-card.component';
 import { shortId, examTypeLabel } from '../../../shared/utils/id-format';
 import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
 import { Subscription } from 'rxjs';
@@ -62,6 +63,7 @@ interface ComparisonBlock {
     PrescriptionModalComponent,
     EncounterFormComponent, EncounterListComponent, TimelineComponent,
     VaccinesTabComponent,
+    AiSuggestionsCardComponent,
   ],
   styles: [`
     :host { display: block; background: #0b1326; min-height: 100vh; }
@@ -747,6 +749,11 @@ interface ComparisonBlock {
         <!-- ── PERFIL ── -->
         <mat-tab label="Perfil">
           @if (subject()) {
+            <!-- IA pró-ativa: sugestões clínicas baseadas no histórico (4.3) -->
+            <div style="padding: 0 1rem 0;">
+              <app-ai-suggestions-card [subjectId]="subject()!.id"></app-ai-suggestions-card>
+            </div>
+
             <div class="profile-grid">
 
               <!-- Dados pessoais -->

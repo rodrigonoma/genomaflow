@@ -2,6 +2,7 @@ const { withTenant } = require('../db/tenant');
 const crypto = require('crypto');
 const { validatePhoneBR } = require('../utils/phone');
 const { validateCPF, validateCpfOrCnpj } = require('../utils/documents');
+const aiSuggestions = require('../services/ai-suggestions');
 
 /**
  * Validador único pra phone — DDD obrigatório.
@@ -570,5 +571,62 @@ module.exports = async function (fastify) {
     });
     if (!plan) return reply.status(404).send({ error: 'Treatment plan not found' });
     return plan;
+  });
+
+  // ─── AI Suggestions (4.3) ─────────────────────────────────────────────
+  // GET /:id/ai-suggestions — retorna cache (ou null se nunca gerado)
+  fastify.get('/:id/ai-suggestions', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { tenant_id, user_id } = request.user;
+    const { id: subject_id } = request.params;
+    const cached = await withTenant(fastify.pg, tenant_id, async (client) =>
+      aiSuggestions.getCached(client, { tenant_id, subject_id })
+    , { userId: user_id, channel: 'ui' });
+    if (!cached) return { cached: null };
+    const expired = new Date(cached.expires_at) < new Date();
+    return { cached, expired };
+  });
+
+  // POST /:id/ai-suggestions/refresh — gera (ou regenera) sugestões
+  fastify.post('/:id/ai-suggestions/refresh', {
+    preHandler: [fastify.authenticate],
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const { tenant_id, user_id, role } = request.user;
+    if (role !== 'admin' && role !== 'master') return reply.status(403).send({ error: 'Apenas admin/profissional' });
+    const { id: subject_id } = request.params;
+    try {
+      const result = await withTenant(fastify.pg, tenant_id, async (client) => {
+        const { rows: tRows } = await client.query(`SELECT module FROM tenants WHERE id = $1`, [tenant_id]);
+        const moduleName = tRows[0]?.module || 'human';
+        return aiSuggestions.refreshSuggestions(client, {
+          tenant_id, subject_id, user_id, module: moduleName,
+        });
+      }, { userId: user_id, channel: 'ui' });
+      return result;
+    } catch (err) {
+      if (err.code === 'NOT_FOUND') return reply.status(404).send({ error: 'subject not found' });
+      if (err.code === 'BAD_LLM_OUTPUT') {
+        request.log.error({ err: err.message, raw: err.raw }, 'AI suggestions: bad LLM output');
+        return reply.status(502).send({ error: 'IA retornou resposta inválida. Tente novamente.' });
+      }
+      throw err;
+    }
+  });
+
+  // POST /:id/ai-suggestions/dismiss — marca uma sugestão como descartada
+  fastify.post('/:id/ai-suggestions/dismiss', {
+    preHandler: [fastify.authenticate],
+  }, async (request, reply) => {
+    const { tenant_id, user_id } = request.user;
+    const { id: subject_id } = request.params;
+    const { suggestion_id } = request.body || {};
+    if (!suggestion_id || typeof suggestion_id !== 'string') {
+      return reply.status(400).send({ error: 'suggestion_id obrigatório' });
+    }
+    const updated = await withTenant(fastify.pg, tenant_id, async (client) =>
+      aiSuggestions.dismissSuggestion(client, { tenant_id, subject_id, suggestion_id })
+    , { userId: user_id, channel: 'ui' });
+    if (!updated) return reply.status(404).send({ error: 'cache not found' });
+    return updated;
   });
 };
