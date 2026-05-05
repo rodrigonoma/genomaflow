@@ -147,30 +147,30 @@ async function generateRemindersForUpcoming() {
           }
         }
 
-        // Idempotência: skip se já existe
-        const { rows: existing } = await client.query(
-          `SELECT id FROM scheduled_notifications
-           WHERE appointment_id = $1 AND notification_type = 'appointment_reminder'
-             AND ABS(EXTRACT(EPOCH FROM (scheduled_for - $2::timestamptz))) < 60`,
-          [apt.id, scheduled_for.toISOString()]
-        );
-        if (existing.length > 0) continue;
-
         const tplKey = h >= 12 ? 'appointment_reminder_24h' : 'appointment_reminder_2h';
         const body = render(TEMPLATES[tplKey], {
           nome: recipient_name, hora: horaStr, tenant_name,
         });
 
-        await client.query(
+        // Idempotência via UNIQUE INDEX uniq_appt_reminder_hours em
+        // (appointment_id, hours_before) WHERE type='appointment_reminder'.
+        // ON CONFLICT DO NOTHING evita corrida e duplicação cross-ticks.
+        const insertResult = await client.query(
           `INSERT INTO scheduled_notifications (
              tenant_id, notification_type, appointment_id, subject_id,
-             channel, send_to, body, scheduled_for, status
-           ) VALUES ($1, 'appointment_reminder', $2, $3, $4, $5, $6, $7, 'pending')`,
+             channel, send_to, body, scheduled_for, hours_before, status
+           ) VALUES ($1, 'appointment_reminder', $2, $3, $4, $5, $6, $7, $8, 'pending')
+           ON CONFLICT (appointment_id, hours_before)
+             WHERE notification_type = 'appointment_reminder'
+                   AND appointment_id IS NOT NULL
+                   AND hours_before IS NOT NULL
+             DO NOTHING
+           RETURNING id`,
           [apt.tenant_id, apt.id, apt.subject_id,
            apt.via === 'email' ? 'email' : 'whatsapp',
-           phone, body, scheduled_for.toISOString()]
+           phone, body, scheduled_for.toISOString(), h]
         );
-        created++;
+        if (insertResult.rows.length > 0) created++;
       }
     }
     if (created > 0) console.log(`[notif] Generated ${created} new reminders`);
