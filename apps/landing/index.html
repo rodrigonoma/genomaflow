@@ -3856,13 +3856,8 @@
   <header class="d-nav">
     <div class="d-nav-inner">
       <a class="d-logo" data-cta="/" aria-label="GenomaFlow">
-        <span class="d-logo-mark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-            <path d="M4 12c0-4 3-7 7-7M20 12c0 4-3 7-7 7"/>
-            <path d="M8 6c1 1 1 3 0 4-1 1-1 3 0 4M16 6c-1 1-1 3 0 4 1 1 1 3 0 4"/>
-          </svg>
-        </span>
-        <span class="d-logo-text">GenomaFlow</span>
+        <img src="logo_genoma.png" width="44" height="44" alt="" class="d-logo-img"/>
+        <span class="d-logo-text">Genoma<span class="d-logo-text-em">Flow</span></span>
       </a>
       <nav class="d-nav-links">
         <a href="#d-features">Plataforma</a>
@@ -3950,6 +3945,32 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── STATS STRIP (impacto real) ──────────────────────────────── -->
+  <section class="d-stats-strip">
+    <div class="d-container d-stats-grid">
+      <div class="d-stat">
+        <div class="d-stat-num">−83<span class="d-stat-unit">%</span></div>
+        <div class="d-stat-label">tempo gasto por laudo</div>
+        <div class="d-stat-detail">de 40 min pra menos de 60s</div>
+      </div>
+      <div class="d-stat">
+        <div class="d-stat-num">+12</div>
+        <div class="d-stat-label">atendimentos / semana</div>
+        <div class="d-stat-detail">tempo liberado vira receita</div>
+      </div>
+      <div class="d-stat">
+        <div class="d-stat-num">0,94</div>
+        <div class="d-stat-label">confiança média da IA</div>
+        <div class="d-stat-detail">com cadeia de evidências auditável</div>
+      </div>
+      <div class="d-stat">
+        <div class="d-stat-num">100<span class="d-stat-unit">%</span></div>
+        <div class="d-stat-label">audit trail forense</div>
+        <div class="d-stat-detail">LGPD compliance desde o byte</div>
       </div>
     </div>
   </section>
@@ -4079,49 +4100,410 @@
     <div class="d-container">
       <div class="d-section-head">
         <span class="d-eyebrow"><span class="d-eyebrow-dot"></span>IA Clínica · Foso defensável</span>
-        <h2 class="d-headline">A IA <span class="d-headline-em">pensa junto</span><br/>com o profissional.</h2>
-        <p class="d-section-sub">Quatro features de IA que vão além de "interpretar exame". Sugestões pró-ativas, co-piloto durante consulta, OCR de foto do laudo, follow-up automatizado.</p>
+        <h2 class="d-headline">5 agentes IA + 4 features que <span class="d-headline-em">vão além de interpretar exame</span>.</h2>
+        <p class="d-section-sub">Análise multi-agente, co-piloto durante consulta, sugestões pró-ativas no prontuário, OCR de foto do laudo, retenção via WhatsApp. Toda saída com disclaimer e cadeia de evidências auditável.</p>
       </div>
 
-      <div class="d-ai-showcase">
-        <div class="d-ai-video">
+      <!-- ── 0. Análise Multi-agente (foundation) ───────────────── -->
+      <div class="d-feat">
+        <div class="d-feat-media">
           <div class="d-video-frame">
             <video autoplay muted loop playsinline preload="auto" aria-hidden="true">
               <source src="videos/demo2.mp4" type="video/mp4"/>
             </video>
-            <div class="d-video-badge">
-              <span class="d-video-badge-dot"></span>
-              análise em tempo real
+            <div class="d-video-badge"><span class="d-video-badge-dot"></span>análise em tempo real</div>
+          </div>
+        </div>
+        <div class="d-feat-text">
+          <span class="d-feat-tag">Foundation · Análise de exame</span>
+          <h3 class="d-feat-title">5 agentes em paralelo,<br/>1 só insight auditável.</h3>
+          <p class="d-feat-body">PDF, DICOM, JPG/PNG, ECG ou foto do laudo impresso. Em menos de 60 segundos: valores normalizados, alertas críticos, escore de risco e raciocínio clínico estruturado por especialidade.</p>
+          <ul class="d-feat-list">
+            <li><strong>Humano:</strong> metabólico · cardiovascular · hematologia · terapêutico · nutrição · correlação clínica</li>
+            <li><strong>Veterinário:</strong> pequenos animais · equinos · bovinos · terapêutico · nutrição (por espécie)</li>
+            <li><strong>Imagem:</strong> RX · ECG · ultrassom · ressonância (DICOM auto-classificado)</li>
+            <li><strong>RAG:</strong> diretrizes clínicas como fonte (ADA, SBC, BSAVA, Anvisa)</li>
+          </ul>
+          <div class="d-feat-stats">
+            <div><strong>40 min → 60s</strong><span>tempo por laudo</span></div>
+            <div><strong>0,94</strong><span>confiança média</span></div>
+            <div><strong>+12</strong><span>atendimentos/sem</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── 1. Co-piloto durante consulta ──────────────────────── -->
+      <div class="d-feat d-feat-rev">
+        <div class="d-feat-media">
+          <div class="d-mock-card">
+            <div class="d-mock-tag">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3l1.5 5h5l-4 3 1.5 5-4-3-4 3 1.5-5-4-3h5z" stroke-linejoin="round"/></svg>
+              Co-piloto IA · Análise em curso
+            </div>
+            <div class="d-mock-section-label">Hipóteses prováveis</div>
+            <div class="d-mock-row d-mock-row-primary">
+              <div>
+                <div class="d-mock-row-title">Síndrome coronariana aguda</div>
+                <div class="d-mock-row-meta">Dor torácica + fatores de risco</div>
+              </div>
+              <div class="d-mock-row-side">
+                <span class="d-mock-cid">I21.9</span>
+                <span class="d-mock-prob">72%</span>
+              </div>
+            </div>
+            <div class="d-mock-row">
+              <div>
+                <div class="d-mock-row-title">Angina instável</div>
+              </div>
+              <div class="d-mock-row-side">
+                <span class="d-mock-cid">I20.0</span>
+                <span class="d-mock-prob">48%</span>
+              </div>
+            </div>
+            <div class="d-mock-section-label d-mock-warn">⚠ Sinais de alarme</div>
+            <div class="d-mock-row d-mock-row-warn">
+              <div>
+                <div class="d-mock-row-title">Instabilidade hemodinâmica</div>
+                <div class="d-mock-row-meta">Encaminhar emergência</div>
+              </div>
+              <span class="d-mock-urgency">Imediata</span>
+            </div>
+            <div class="d-mock-disclaimer">⚕ Sugestões da IA. Médico decide.</div>
+          </div>
+        </div>
+        <div class="d-feat-text">
+          <span class="d-feat-tag d-feat-tag-secondary">Phase 4.4 · Live</span>
+          <h3 class="d-feat-title">A IA <span class="d-feat-em">pensa junto</span><br/>enquanto você escreve.</h3>
+          <p class="d-feat-body">Você digita queixa principal, anamnese, exame físico. Em uma sidebar discreta, a IA sugere top 3 hipóteses diagnósticas com CID-10, probabilidade subjetiva, exames recomendados pra confirmar/excluir cada uma, e red flags com urgência clara (imediata · hoje · esta semana).</p>
+          <ul class="d-feat-list">
+            <li>Hipóteses com CID-10 e probabilidade calibrada</li>
+            <li>Exames lab/imagem priorizados com indicação</li>
+            <li>Red flags com nível de urgência</li>
+            <li>"Falta investigar" — perguntas que afinariam diagnóstico</li>
+            <li>Disclaimer obrigatório · linguagem de sugestão (nunca afirmação)</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ── 2. Sugestões pró-ativas ────────────────────────────── -->
+      <div class="d-feat">
+        <div class="d-feat-media">
+          <div class="d-mock-card">
+            <div class="d-mock-tag">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01" stroke-linecap="round"/></svg>
+              Sugestões da IA · Anderson Martins
+            </div>
+            <div class="d-mock-row d-mock-row-alert">
+              <div class="d-mock-row-side-top">
+                <span class="d-mock-priority d-mock-priority-high">Alta</span>
+              </div>
+              <div class="d-mock-row-title">Solicitar HbA1c — sem coleta há 7 meses</div>
+              <div class="d-mock-row-meta">Diabético tipo 2 em uso de metformina; HbA1c última 7,8% (acima da meta).</div>
+              <div class="d-mock-row-action">→ Pedir HbA1c na próxima coleta</div>
+              <div class="d-mock-row-source">📖 ADA Standards of Care 2024, Cap. 6</div>
+            </div>
+            <div class="d-mock-row d-mock-row-medium">
+              <div class="d-mock-row-side-top">
+                <span class="d-mock-priority d-mock-priority-medium">Média</span>
+              </div>
+              <div class="d-mock-row-title">Avaliar perfil lipídico</div>
+              <div class="d-mock-row-meta">Sem lipidograma há 14 meses · paciente diabético + tabagista.</div>
+            </div>
+            <div class="d-mock-disclaimer">⚕ Sugestões da IA. Médico decide.</div>
+          </div>
+        </div>
+        <div class="d-feat-text">
+          <span class="d-feat-tag d-feat-tag-secondary">Phase 4.3 · Live</span>
+          <h3 class="d-feat-title">A IA <span class="d-feat-em">vê o que falta</span><br/>antes mesmo de você procurar.</h3>
+          <p class="d-feat-body">Toda vez que você abre o prontuário, a IA revisa silenciosamente o histórico inteiro do paciente — comorbidades, exames passados com alertas, prescrições ativas, intervalos entre consultas — e sugere ações pró-ativas baseadas em diretrizes clínicas atualizadas. Identifica lacunas: exames vencidos, follow-ups esquecidos, oportunidades de prevenção.</p>
+          <ul class="d-feat-list">
+            <li>Diretrizes (ADA, SBC, BSAVA…) como fonte citada</li>
+            <li>Priorização alta · média · baixa</li>
+            <li>Cache 24h pra não consumir tokens à toa</li>
+            <li>Dismiss individual — sugestão fica oculta sem regerar</li>
+            <li>Específico (não genérico) — trigger nos dados</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ── 3. Foto do laudo impresso ──────────────────────────── -->
+      <div class="d-feat d-feat-rev">
+        <div class="d-feat-media">
+          <div class="d-photo-card">
+            <div class="d-photo-icon">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke-linejoin="round"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+            </div>
+            <div class="d-photo-arrow">→</div>
+            <div class="d-photo-result">
+              <div class="d-photo-line"></div>
+              <div class="d-photo-line"></div>
+              <div class="d-photo-line short"></div>
+              <div class="d-photo-line"></div>
+              <div class="d-photo-line short"></div>
+            </div>
+            <div class="d-photo-stamp">OCR · Vision</div>
+          </div>
+        </div>
+        <div class="d-feat-text">
+          <span class="d-feat-tag d-feat-tag-secondary">Phase 4.1 · Live</span>
+          <h3 class="d-feat-title">Foto do papel impresso?<br/><span class="d-feat-em">A IA processa.</span></h3>
+          <p class="d-feat-body">Paciente chega com hemograma de papel? Tutor traz exame velho do labrador? Tire uma foto pelo celular ou faça upload da imagem. A IA classifica automaticamente: imagem médica (RX/ECG/US/RM) entra no pipeline imaging; foto de laudo impresso vai pra OCR via Vision e processamento como texto preservando estrutura (cabeçalho, tabela com valor + unidade + ref).</p>
+          <ul class="d-feat-list">
+            <li>Aceita PDF, DICOM, JPG, PNG, TIFF e foto do papel</li>
+            <li>Pré-classificação Vision: medical_image vs document</li>
+            <li>OCR preserva estrutura (não vira "texto cru")</li>
+            <li>Mesmo pipeline de agentes que PDF — zero impacto na qualidade</li>
+            <li>Fricção zero pro cliente — só fotografar</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ── 4. Follow-up automatizado ──────────────────────────── -->
+      <div class="d-feat">
+        <div class="d-feat-media">
+          <div class="d-whatsapp-card">
+            <div class="d-whatsapp-tag">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+              Lembretes WhatsApp · Z-API oficial
+            </div>
+            <div class="d-wa-msg d-wa-msg-green">
+              <div class="d-wa-msg-label">+ 7 dias após consulta</div>
+              <p>"Olá Maria! Como está se sentindo após a consulta? Se precisar de algo, é só responder."</p>
+            </div>
+            <div class="d-wa-msg d-wa-msg-yellow">
+              <div class="d-wa-msg-label">+ 30 dias após exame com alerta</div>
+              <p>"Faz 30 dias do seu último exame. Para acompanhar a evolução, vale conversar com a clínica."</p>
+            </div>
+            <div class="d-wa-msg d-wa-msg-blue">
+              <div class="d-wa-msg-label">7 dias antes da próxima dose</div>
+              <p>"Lembrete: próxima dose da V10 do Thor agendada para 12/06. Quer remarcar?"</p>
             </div>
           </div>
         </div>
-
-        <div class="d-ai-content">
-          <div class="d-ai-feature">
-            <div class="d-ai-feature-num">01</div>
-            <h3 class="d-ai-feature-title">Co-piloto durante consulta</h3>
-            <p>Você digita queixa, anamnese e exame físico — a IA sugere top 3 hipóteses diagnósticas com CID-10, exames recomendados e red flags. Sidebar discreta. Médico decide.</p>
-          </div>
-          <div class="d-ai-feature">
-            <div class="d-ai-feature-num">02</div>
-            <h3 class="d-ai-feature-title">Sugestões pró-ativas no prontuário</h3>
-            <p>A IA revisa silenciosamente o histórico do paciente — comorbidades, exames com alertas, prescrições, intervalos — e sugere ações com base em diretrizes. Cache 24h, não vicia.</p>
-          </div>
-          <div class="d-ai-feature">
-            <div class="d-ai-feature-num">03</div>
-            <h3 class="d-ai-feature-title">Foto do laudo impresso</h3>
-            <p>Tutor chega com exame de papel? Tire uma foto pelo celular. A IA reconhece automaticamente: imagem médica vs. documento — OCR via Vision pra texto preservando estrutura.</p>
-          </div>
-          <div class="d-ai-feature">
-            <div class="d-ai-feature-num">04</div>
-            <h3 class="d-ai-feature-title">Follow-up automatizado WhatsApp</h3>
-            <p>"Como está se sentindo?" 7 dias após consulta. "Vale reavaliar" 30 dias após exame com alerta. Próxima dose de vacina em T-7d e T-1d. Idempotente, opt-in granular.</p>
-          </div>
-          <div class="d-ai-disclaimer">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01" stroke-linecap="round"/></svg>
-            <span>Sugestões da IA, médico decide. Não substituem julgamento clínico — apenas evitam que algo fique invisível.</span>
-          </div>
+        <div class="d-feat-text">
+          <span class="d-feat-tag d-feat-tag-secondary">Phase 4.2 · Live</span>
+          <h3 class="d-feat-title">Pacientes lembrados <span class="d-feat-em">sem você lembrar</span> deles.</h3>
+          <p class="d-feat-body">A clínica não precisa mais ligar pra perguntar como o paciente está, marcar follow-up de exame com alerta, ou avisar do reforço da vacina. O sistema dispara mensagens automáticas no WhatsApp em 3 momentos críticos. Tudo idempotente (não duplica), opt-in granular, paciente pode opt-out.</p>
+          <ul class="d-feat-list">
+            <li>Pós-consulta: T+7d (configurável)</li>
+            <li>Pós-exame com alerta crítico: T+30d</li>
+            <li>Próxima dose de vacina: T-7d e T-1d (vet)</li>
+            <li>Lembretes de consulta: T-24h e T-2h (com confirmação 1/2)</li>
+            <li>Z-API oficial · número da clínica · sem fricção pro paciente</li>
+          </ul>
         </div>
+      </div>
+
+      <div class="d-ai-disclaimer-block">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01" stroke-linecap="round"/></svg>
+        <p>Toda saída de IA tem disclaimer obrigatório. Linguagem é sempre de <strong>sugestão</strong> ("considere", "investigue") — nunca afirmação. A IA não diagnostica nem substitui avaliação médica/veterinária. Apenas evita que algo fique invisível e dá tempo ao profissional pra cuidar do que importa.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── OPERAÇÃO DETALHADA ──────────────────────────────────────── -->
+  <section class="d-section d-section-alt" id="d-operacao">
+    <div class="d-container">
+      <div class="d-section-head">
+        <span class="d-eyebrow"><span class="d-eyebrow-dot"></span>Operação · Pilar 02</span>
+        <h2 class="d-headline">A clínica que <span class="d-headline-em">se organiza sozinha</span>.</h2>
+        <p class="d-section-sub">Da agenda à comunicação com o tutor, do prontuário ao portal do paciente. 9 features que conversam entre si e tiram trabalho do seu time.</p>
+      </div>
+
+      <div class="d-ops-grid">
+        <article class="d-ops-card">
+          <div class="d-ops-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg></div>
+          <h3>Agenda multi-profissional</h3>
+          <p>Filtro por profissional, tipo de agendamento, slot configurável. Constraint de exclusão impede overlap no banco. Cancelamentos liberam slot automaticamente.</p>
+        </article>
+
+        <article class="d-ops-card">
+          <div class="d-ops-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+          <h3>Prontuário estruturado</h3>
+          <p>Encontros assinados (24h pra editar, depois imutáveis), vital signs por módulo, evolução, retorno. Timeline unificada com exames + prescrições + análises.</p>
+        </article>
+
+        <article class="d-ops-card">
+          <div class="d-ops-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l1 3h4v13H4V7h4l1-3z"/></svg></div>
+          <h3>Prescrições inteligentes</h3>
+          <p>Templates por tenant, geração automática a partir de análise terapêutica/nutricional da IA, PDF assinado em 1 click. Receituário humano e veterinário.</p>
+        </article>
+
+        <article class="d-ops-card">
+          <div class="d-ops-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19.81 9.5L20.91 8.39C21.3 8 21.3 7.37 20.91 6.97L17.03 3.09C16.64 2.7 16 2.7 15.61 3.09L14.5 4.19L19.81 9.5M14.5 7L4 17.5V20H6.5L17 9.5"/></svg></div>
+          <h3>Vacinas (vet)</h3>
+          <p>Carteira de vacinação com protocolos default por espécie (cão, gato, equino). Próximas doses calculadas, vencidas destacadas, lembrete automático em T-7d e T-1d.</p>
+        </article>
+
+        <article class="d-ops-card">
+          <div class="d-ops-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM14 2v6h6"/></svg></div>
+          <h3>Documentos clínicos</h3>
+          <p>5 tipos: atestado, pedido de exame, encaminhamento, relatório, termo de consentimento. Templates editáveis com placeholders. PDF gerado client-side com logo da clínica.</p>
+        </article>
+
+        <article class="d-ops-card">
+          <div class="d-ops-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+          <h3>Portal do paciente / tutor</h3>
+          <p>Acesso read-only via token (TTL 90 dias). Tutor vet vê todos os animais. Mostra agenda, exames, prescrições, documentos e vacinas. Mobile-first com glassmorphism.</p>
+        </article>
+
+        <article class="d-ops-card">
+          <div class="d-ops-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+          <h3>Chat entre clínicas</h3>
+          <p>Conversa segura entre clínicas (humano↔humano ou vet↔vet). Anexos com PII anonimizada automaticamente. Cards de análise IA compartilháveis (sem dados sensíveis).</p>
+        </article>
+
+        <article class="d-ops-card">
+          <div class="d-ops-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l4-4 4 4 6-6 4 4M17 9h4v4"/></svg></div>
+          <h3>NPS automatizado</h3>
+          <p>Pesquisa de satisfação pós-consulta via email ou WhatsApp. Tutor responde em portal público. Dashboard com KPIs (NPS score, taxa resposta, distribuição) e tabela de feedback.</p>
+        </article>
+
+        <article class="d-ops-card">
+          <div class="d-ops-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg></div>
+          <h3>Dashboard real-time</h3>
+          <p>KPIs ao vivo via WebSocket — alertas críticos com deeplink, exames aguardando revisão, donut de risco da carteira, top 5 marcadores alterados, exames últimos 14 dias.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── VANTAGENS DIA-A-DIA (antes/depois) ──────────────────────── -->
+  <section class="d-section">
+    <div class="d-container">
+      <div class="d-section-head">
+        <span class="d-eyebrow"><span class="d-eyebrow-dot"></span>Vantagem real</span>
+        <h2 class="d-headline">O que muda no <span class="d-headline-em">dia a dia da clínica</span>.</h2>
+        <p class="d-section-sub">Não é só software bonito. É tempo liberado, pacientes melhor cuidados, equipe menos sobrecarregada.</p>
+      </div>
+
+      <div class="d-versus-grid">
+        <article class="d-versus-row">
+          <div class="d-versus-before">
+            <div class="d-versus-label">Antes</div>
+            <p>Médico passa 30-40 min interpretando cada laudo. Tabela espalhada, valores grifados à mão, conduta digitada de novo no prontuário.</p>
+          </div>
+          <div class="d-versus-arrow">→</div>
+          <div class="d-versus-after">
+            <div class="d-versus-label d-versus-label-after">Com GenomaFlow</div>
+            <p>Laudo entra como PDF/foto. Em 60s, retorna com valores estruturados, alertas, escore de risco e raciocínio clínico — pronto pra revisão.</p>
+          </div>
+        </article>
+
+        <article class="d-versus-row">
+          <div class="d-versus-before">
+            <div class="d-versus-label">Antes</div>
+            <p>Recepção liga 1 dia antes pra confirmar. Paciente esquece, falta de consulta, slot vazio.</p>
+          </div>
+          <div class="d-versus-arrow">→</div>
+          <div class="d-versus-after">
+            <div class="d-versus-label d-versus-label-after">Com GenomaFlow</div>
+            <p>WhatsApp automático em T-24h e T-2h. Paciente confirma com "1" ou cancela com "2". Slot livre vai pra fila de espera.</p>
+          </div>
+        </article>
+
+        <article class="d-versus-row">
+          <div class="d-versus-before">
+            <div class="d-versus-label">Antes</div>
+            <p>Atestado, receita, encaminhamento — papel timbrado, carimbo, assinatura. Paciente perde, clínica nem sabe que emitiu.</p>
+          </div>
+          <div class="d-versus-arrow">→</div>
+          <div class="d-versus-after">
+            <div class="d-versus-label d-versus-label-after">Com GenomaFlow</div>
+            <p>5 tipos de documento com template editável. PDF assinado em 1 click, salvo no prontuário, paciente recebe link no portal.</p>
+          </div>
+        </article>
+
+        <article class="d-versus-row">
+          <div class="d-versus-before">
+            <div class="d-versus-label">Antes</div>
+            <p>"Será que pedi HbA1c desse paciente recentemente?" Médico abre prontuário, scroll, scroll, decide pelo achismo.</p>
+          </div>
+          <div class="d-versus-arrow">→</div>
+          <div class="d-versus-after">
+            <div class="d-versus-label d-versus-label-after">Com GenomaFlow</div>
+            <p>"Sugestões da IA" mostra: "HbA1c sem coleta há 7 meses · diretriz ADA 2024". Decisão informada em 2 segundos.</p>
+          </div>
+        </article>
+
+        <article class="d-versus-row">
+          <div class="d-versus-before">
+            <div class="d-versus-label">Antes</div>
+            <p>Tutor vet liga: "quando é a próxima dose da Bella?" Recepção procura na ficha, calcula manualmente, marca de novo.</p>
+          </div>
+          <div class="d-versus-arrow">→</div>
+          <div class="d-versus-after">
+            <div class="d-versus-label d-versus-label-after">Com GenomaFlow</div>
+            <p>Carteira de vacinação automática · próxima dose calculada · tutor recebe WhatsApp T-7d e T-1d. Recepção foca em receber, não em lembrar.</p>
+          </div>
+        </article>
+
+        <article class="d-versus-row">
+          <div class="d-versus-before">
+            <div class="d-versus-label">Antes</div>
+            <p>Audit "quem editou a receita do paciente X?" — ninguém sabe. Backup do banco em PDF dois meses atrasado.</p>
+          </div>
+          <div class="d-versus-arrow">→</div>
+          <div class="d-versus-after">
+            <div class="d-versus-label d-versus-label-after">Com GenomaFlow</div>
+            <p>Audit log append-only registra todo INSERT/UPDATE/DELETE em tabelas críticas (appointments, prescriptions, exams, subjects). Master panel com filtro por usuário e data.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FAQ ─────────────────────────────────────────────────────── -->
+  <section class="d-section d-section-alt">
+    <div class="d-container">
+      <div class="d-section-head">
+        <span class="d-eyebrow"><span class="d-eyebrow-dot"></span>Perguntas frequentes</span>
+        <h2 class="d-headline">Tudo o que você precisa saber<br/>antes de criar conta.</h2>
+      </div>
+
+      <div class="d-faq">
+        <details class="d-faq-item">
+          <summary>O co-piloto de IA durante a consulta substitui o médico?<span class="d-faq-arrow">+</span></summary>
+          <div class="d-faq-body">Não. O co-piloto SUGERE hipóteses diagnósticas (com CID-10 e probabilidade), exames recomendados e sinais de alarme — mas o médico decide. Toda saída tem disclaimer "⚕ Sugestões da IA. Médico decide." A linguagem é sempre de sugestão (considere/investigue/exclua), nunca afirmação. A responsabilidade clínica permanece com o profissional, que mantém autonomia total sobre conduta e prescrição.</div>
+        </details>
+
+        <details class="d-faq-item">
+          <summary>Posso enviar foto do laudo impresso pelo celular?<span class="d-faq-arrow">+</span></summary>
+          <div class="d-faq-body">Sim. Aceitamos PDF, DICOM, JPG/PNG/TIFF e fotos do laudo impresso tiradas com o celular. A IA classifica automaticamente: imagem médica (RX, ECG, ultrassom, RM) entra no pipeline de imaging; foto de laudo impresso vai para OCR via Vision e processamento como texto preservando estrutura. Você não precisa escanear — só fotografar.</div>
+        </details>
+
+        <details class="d-faq-item">
+          <summary>Como funciona o follow-up automatizado?<span class="d-faq-arrow">+</span></summary>
+          <div class="d-faq-body">3 tipos de mensagem automática via WhatsApp: <strong>(1) 7 dias após consulta</strong> finalizada — "Como está se sentindo?", <strong>(2) 30 dias após exame com alerta crítico</strong> — sugere reavaliação, <strong>(3) antes da próxima dose de vacina</strong> (T-7d e T-1d) com data e nome da vacina. Tudo idempotente (não duplica), opt-in configurável por tenant, paciente pode opt-out. Aproveita o número WhatsApp da clínica via Z-API oficial.</div>
+        </details>
+
+        <details class="d-faq-item">
+          <summary>Atendem clínicas humanas e veterinárias?<span class="d-faq-arrow">+</span></summary>
+          <div class="d-faq-body">Sim — em módulos separados. Humano: paciente, especialidades médicas, agentes IA (metabólico, cardiovascular, hematologia). Veterinário: tutor + animal, espécie, raça, microchip, agentes IA por espécie (pequenos animais, equinos, bovinos), carteira de vacinação. Você escolhe o módulo no onboarding. Cross-module é bloqueado intencionalmente — humano só conversa com humano, vet só com vet.</div>
+        </details>
+
+        <details class="d-faq-item">
+          <summary>Como funciona a anonimização de PII (LGPD)?<span class="d-faq-arrow">+</span></summary>
+          <div class="d-faq-body">Pra PDFs com text layer: extraímos texto e posições com pdfjs-dist, identificamos PII (nome, CPF, telefone, microchip, data) com regex + IA, e desenhamos retângulos pretos sobre as posições com pd-lib — tudo client-side antes do upload. Pra PDFs escaneados ou imagens: canvas editor com Tesseract+IA detecta texto sensível pra você confirmar redação manual. Anexo só sai com PII redigida. Audit log registra cada redação.</div>
+        </details>
+
+        <details class="d-faq-item">
+          <summary>Quanto custa? Tem trial?<span class="d-faq-arrow">+</span></summary>
+          <div class="d-faq-body">R$ 199/mês inclui 50 créditos de IA + tudo o que aparece nesta página: pacientes ilimitados, profissionais ilimitados, agenda, prontuário, prescrições, vacinas, documentos, portal do paciente, WhatsApp, NPS, audit log, multi-tenant RLS. Pacotes de créditos extras a partir de R$ 79 (100 créditos). Sem cartão pra começar — você configura, importa pacientes, testa, e só decide quando estiver convencido.</div>
+        </details>
+
+        <details class="d-faq-item">
+          <summary>Onde os dados ficam armazenados?<span class="d-faq-arrow">+</span></summary>
+          <div class="d-faq-body">AWS São Paulo (us-east-1 com transferência intra-região). PostgreSQL com FORCE ROW LEVEL SECURITY em todas as tabelas tenant-scoped — isolamento estrito por clínica. S3 privado com IAM role mínima. Audit log append-only. Backups diários encriptados. SES com configuration set + suppression list pra emails. Conformidade LGPD desde a arquitetura, não como checkbox.</div>
+        </details>
+
+        <details class="d-faq-item">
+          <summary>Como é o onboarding?<span class="d-faq-arrow">+</span></summary>
+          <div class="d-faq-body">5 minutos: (1) email + senha + escolha do módulo (humano ou vet); (2) dados básicos da clínica (nome, CNPJ, telefone, logo); (3) confirma dados profissionais (CRM/CRMV); (4) aceita termos LGPD; (5) entra na tela. Você importa pacientes via CSV ou cadastro manual. Setup do WhatsApp e templates de prescrição é opcional — pode usar a plataforma sem.</div>
+        </details>
       </div>
     </div>
   </section>
@@ -4211,13 +4593,8 @@
     <div class="d-container d-footer-inner">
       <div class="d-footer-brand">
         <a class="d-logo" href="#" aria-label="GenomaFlow">
-          <span class="d-logo-mark">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-              <path d="M4 12c0-4 3-7 7-7M20 12c0 4-3 7-7 7"/>
-              <path d="M8 6c1 1 1 3 0 4-1 1-1 3 0 4M16 6c-1 1-1 3 0 4 1 1 1 3 0 4"/>
-            </svg>
-          </span>
-          <span class="d-logo-text">GenomaFlow</span>
+          <img src="logo_genoma.png" width="44" height="44" alt="" class="d-logo-img"/>
+          <span class="d-logo-text">Genoma<span class="d-logo-text-em">Flow</span></span>
         </a>
         <p class="d-footer-tagline">Inteligência Clínica Assistiva para clínicas humanas e veterinárias.</p>
       </div>
@@ -4389,17 +4766,16 @@
     display: flex; align-items: center; gap: 32px;
   }
   .d-logo { display: inline-flex; align-items: center; gap: 10px; }
-  .d-logo-mark {
-    width: 36px; height: 36px; border-radius: 8px;
-    background: var(--d-primary);
-    color: #fff;
-    display: inline-flex; align-items: center; justify-content: center;
-  }
+  .d-logo-img { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
   .d-logo-text {
     font-family: 'Manrope', sans-serif;
-    font-size: 18px; font-weight: 700;
+    font-size: 18px; font-weight: 600;
     letter-spacing: -0.02em;
     color: var(--d-on-surface);
+  }
+  .d-logo-text-em {
+    font-weight: 800;
+    color: var(--d-secondary);
   }
   .d-nav-links {
     display: flex; align-items: center; gap: 28px;
@@ -5032,6 +5408,468 @@
     .d-footer-cols { grid-template-columns: 1fr; }
     .d-container { padding: 0 20px; }
   }
+
+  /* ── STATS STRIP ──────────────────────────────────────────────── */
+  .d-stats-strip {
+    background: var(--d-primary);
+    color: #fff;
+    padding: 56px 0;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .d-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 32px;
+  }
+  .d-stat { display: flex; flex-direction: column; gap: 4px; }
+  .d-stat-num {
+    font-family: 'Manrope', sans-serif;
+    font-size: clamp(36px, 4vw, 52px);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    color: #fff;
+  }
+  .d-stat-unit { font-size: 0.6em; font-weight: 700; color: rgba(255,255,255,0.6); margin-left: 2px; }
+  .d-stat-label {
+    font-size: 14px; font-weight: 500;
+    color: rgba(255,255,255,0.85);
+    margin-top: 4px;
+  }
+  .d-stat-detail {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.01em;
+  }
+  @media (max-width: 920px) {
+    .d-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 540px) {
+    .d-stats-grid { grid-template-columns: 1fr; gap: 24px; }
+  }
+
+  /* ── FEATURE BLOCKS (alternados) ──────────────────────────────── */
+  .d-feat {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 64px;
+    align-items: center;
+    padding: 48px 0;
+    border-bottom: 1px solid var(--d-outline-variant);
+  }
+  .d-feat:last-of-type { border-bottom: none; }
+  .d-feat-rev { grid-template-columns: 1fr 1.1fr; }
+  .d-feat-rev .d-feat-media { order: 2; }
+  .d-feat-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    background: rgba(4, 13, 28, 0.06);
+    border-radius: 100px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--d-primary);
+  }
+  .d-feat-tag-secondary {
+    background: rgba(0,106,99,0.1);
+    color: var(--d-secondary);
+  }
+  .d-feat-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: clamp(28px, 3.5vw, 40px);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--d-on-surface);
+    margin: 16px 0 16px;
+  }
+  .d-feat-em { color: var(--d-secondary); }
+  .d-feat-body {
+    font-size: 16px; line-height: 1.6;
+    color: var(--d-on-surface-variant);
+    margin: 0 0 20px;
+  }
+  .d-feat-list {
+    list-style: none; padding: 0; margin: 0 0 20px;
+    display: flex; flex-direction: column; gap: 8px;
+    font-size: 14px;
+    color: var(--d-on-surface);
+  }
+  .d-feat-list li {
+    position: relative;
+    padding-left: 22px;
+    line-height: 1.5;
+  }
+  .d-feat-list li::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 8px;
+    width: 14px; height: 1.5px;
+    background: var(--d-secondary);
+  }
+  .d-feat-list li strong { color: var(--d-on-surface); font-weight: 700; }
+  .d-feat-stats {
+    display: flex; gap: 24px; flex-wrap: wrap;
+    padding-top: 16px;
+    border-top: 1px solid var(--d-outline-variant);
+  }
+  .d-feat-stats > div {
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .d-feat-stats strong {
+    font-family: 'Manrope', sans-serif;
+    font-size: 18px; font-weight: 700;
+    color: var(--d-secondary);
+    letter-spacing: -0.01em;
+  }
+  .d-feat-stats span {
+    font-size: 11px;
+    color: var(--d-on-surface-variant);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  /* Mock cards for AI features */
+  .d-mock-card, .d-photo-card, .d-whatsapp-card {
+    background: var(--d-surface);
+    border: 1px solid var(--d-outline-variant);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 12px 40px rgba(4,13,28,0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .d-mock-tag, .d-whatsapp-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px; font-weight: 600;
+    color: var(--d-secondary);
+    margin-bottom: 4px;
+  }
+  .d-whatsapp-tag { color: #25D366; }
+  .d-mock-section-label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--d-on-surface-variant);
+    margin-top: 4px;
+  }
+  .d-mock-warn { color: var(--d-cross); }
+  .d-mock-row {
+    background: var(--d-bg);
+    border: 1px solid var(--d-outline-variant);
+    border-left: 3px solid var(--d-outline-variant);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 10px;
+  }
+  .d-mock-row-primary { border-left-color: var(--d-secondary); }
+  .d-mock-row-warn { border-left-color: var(--d-cross); background: rgba(255,59,47,0.04); }
+  .d-mock-row-alert { border-left-color: var(--d-cross); display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+  .d-mock-row-medium { border-left-color: #f5c14a; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+  .d-mock-row-side-top { display: flex; justify-content: flex-end; width: 100%; }
+  .d-mock-row-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 14px; font-weight: 700;
+    color: var(--d-on-surface);
+    line-height: 1.3;
+  }
+  .d-mock-row-meta {
+    font-size: 12px;
+    color: var(--d-on-surface-variant);
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+  .d-mock-row-action {
+    font-size: 12px; font-weight: 600;
+    color: var(--d-secondary);
+    margin-top: 6px;
+  }
+  .d-mock-row-source {
+    font-size: 11px;
+    color: var(--d-on-surface-variant);
+    margin-top: 4px;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .d-mock-row-side {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+  }
+  .d-mock-cid {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px; font-weight: 700;
+    color: var(--d-primary);
+    background: rgba(4,13,28,0.06);
+    padding: 2px 8px;
+    border-radius: 100px;
+  }
+  .d-mock-prob {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px; font-weight: 700;
+    color: var(--d-secondary);
+  }
+  .d-mock-urgency {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px; font-weight: 700;
+    color: var(--d-cross);
+    background: rgba(255,59,47,0.1);
+    padding: 4px 10px;
+    border-radius: 100px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .d-mock-priority {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 3px 8px;
+    border-radius: 100px;
+  }
+  .d-mock-priority-high { background: rgba(255,59,47,0.12); color: var(--d-cross); }
+  .d-mock-priority-medium { background: rgba(245,193,74,0.18); color: #b88010; }
+  .d-mock-disclaimer {
+    text-align: center;
+    font-size: 10px;
+    color: var(--d-on-surface-variant);
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--d-outline-variant);
+  }
+
+  /* Photo card (4.1 OCR) */
+  .d-photo-card {
+    align-items: center;
+    flex-direction: row;
+    justify-content: center;
+    padding: 40px;
+    gap: 20px;
+    background: linear-gradient(135deg, rgba(0,106,99,0.04), rgba(4,13,28,0.02));
+  }
+  .d-photo-icon {
+    width: 80px; height: 80px;
+    border-radius: 16px;
+    background: var(--d-primary);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .d-photo-arrow {
+    font-family: 'Manrope', sans-serif;
+    font-size: 28px; font-weight: 700;
+    color: var(--d-secondary);
+  }
+  .d-photo-result {
+    flex: 1;
+    background: var(--d-surface);
+    border: 1px solid var(--d-outline-variant);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex; flex-direction: column; gap: 6px;
+    min-width: 140px;
+  }
+  .d-photo-line {
+    height: 8px;
+    background: linear-gradient(90deg, var(--d-secondary) 0%, rgba(0,106,99,0.2) 60%, transparent 100%);
+    border-radius: 4px;
+  }
+  .d-photo-line.short { width: 65%; }
+  .d-photo-stamp {
+    position: absolute;
+    margin: -20px 0 0 80px;
+    padding: 4px 12px;
+    background: var(--d-secondary);
+    color: #fff;
+    border-radius: 100px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    align-self: flex-end;
+  }
+
+  /* WhatsApp messages mock (4.2) */
+  .d-wa-msg {
+    border-radius: 12px;
+    padding: 12px 14px;
+    border: 1px solid;
+  }
+  .d-wa-msg-green { background: rgba(74,214,160,0.06); border-color: rgba(74,214,160,0.3); }
+  .d-wa-msg-yellow { background: rgba(245,193,74,0.06); border-color: rgba(245,193,74,0.3); }
+  .d-wa-msg-blue { background: rgba(0,106,99,0.06); border-color: rgba(0,106,99,0.3); }
+  .d-wa-msg-label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .d-wa-msg-green .d-wa-msg-label { color: #2a8757; }
+  .d-wa-msg-yellow .d-wa-msg-label { color: #b88010; }
+  .d-wa-msg-blue .d-wa-msg-label { color: var(--d-secondary); }
+  .d-wa-msg p {
+    font-size: 13px;
+    color: var(--d-on-surface);
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  .d-ai-disclaimer-block {
+    margin-top: 56px;
+    padding: 20px 24px;
+    background: rgba(4,13,28,0.04);
+    border: 1px solid var(--d-outline-variant);
+    border-radius: 12px;
+    display: flex; align-items: flex-start; gap: 14px;
+    font-size: 14px;
+    color: var(--d-on-surface-variant);
+    line-height: 1.55;
+  }
+  .d-ai-disclaimer-block svg { flex-shrink: 0; margin-top: 2px; color: var(--d-secondary); }
+  .d-ai-disclaimer-block strong { color: var(--d-on-surface); }
+
+  @media (max-width: 920px) {
+    .d-feat, .d-feat-rev { grid-template-columns: 1fr; gap: 32px; padding: 32px 0; }
+    .d-feat-rev .d-feat-media { order: 0; }
+  }
+
+  /* ── OPS GRID (Operação detalhada — 9 features) ───────────────── */
+  .d-ops-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .d-ops-card {
+    background: var(--d-surface);
+    border: 1px solid var(--d-outline-variant);
+    border-radius: 12px;
+    padding: 24px;
+    transition: all 0.2s;
+  }
+  .d-ops-card:hover {
+    border-color: var(--d-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(4,13,28,0.06);
+  }
+  .d-ops-icon {
+    width: 40px; height: 40px;
+    border-radius: 8px;
+    background: rgba(0,106,99,0.08);
+    color: var(--d-secondary);
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-bottom: 16px;
+  }
+  .d-ops-card h3 {
+    font-family: 'Manrope', sans-serif;
+    font-size: 17px; font-weight: 700;
+    color: var(--d-on-surface);
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  .d-ops-card p {
+    font-size: 14px; line-height: 1.55;
+    color: var(--d-on-surface-variant);
+    margin: 0;
+  }
+  @media (max-width: 920px) {
+    .d-ops-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 540px) {
+    .d-ops-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── VERSUS (antes/depois) ───────────────────────────────────── */
+  .d-versus-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .d-versus-row {
+    display: grid;
+    grid-template-columns: 1fr 40px 1fr;
+    gap: 20px;
+    align-items: stretch;
+    background: var(--d-surface);
+    border: 1px solid var(--d-outline-variant);
+    border-radius: 12px;
+    padding: 20px 24px;
+  }
+  .d-versus-before, .d-versus-after {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 4px 0;
+  }
+  .d-versus-before { padding-right: 8px; }
+  .d-versus-after { padding-left: 8px; border-left: 2px solid var(--d-outline-variant); }
+  .d-versus-label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--d-on-surface-variant);
+  }
+  .d-versus-label-after { color: var(--d-secondary); }
+  .d-versus-before p, .d-versus-after p {
+    font-size: 14px; line-height: 1.5;
+    color: var(--d-on-surface);
+    margin: 0;
+  }
+  .d-versus-before p { color: var(--d-on-surface-variant); }
+  .d-versus-arrow {
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Manrope', sans-serif;
+    font-size: 24px; font-weight: 800;
+    color: var(--d-secondary);
+  }
+  @media (max-width: 720px) {
+    .d-versus-row { grid-template-columns: 1fr; gap: 12px; padding: 18px; }
+    .d-versus-after { padding-left: 0; padding-top: 12px; border-left: none; border-top: 2px solid var(--d-outline-variant); }
+    .d-versus-arrow { display: none; }
+  }
+
+  /* ── FAQ ──────────────────────────────────────────────────────── */
+  .d-faq {
+    max-width: 820px;
+    margin: 0 auto;
+    display: flex; flex-direction: column;
+    gap: 12px;
+  }
+  .d-faq-item {
+    background: var(--d-surface);
+    border: 1px solid var(--d-outline-variant);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .d-faq-item[open] { border-color: var(--d-primary); }
+  .d-faq-item summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 18px 24px;
+    font-family: 'Manrope', sans-serif;
+    font-size: 16px; font-weight: 600;
+    color: var(--d-on-surface);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px;
+    transition: color 0.15s;
+  }
+  .d-faq-item summary::-webkit-details-marker { display: none; }
+  .d-faq-item summary:hover { color: var(--d-secondary); }
+  .d-faq-arrow {
+    font-family: 'Manrope', sans-serif;
+    font-size: 20px; font-weight: 700;
+    color: var(--d-secondary);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .d-faq-item[open] .d-faq-arrow { transform: rotate(45deg); }
+  .d-faq-body {
+    padding: 0 24px 20px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--d-on-surface-variant);
+  }
+  .d-faq-body strong { color: var(--d-on-surface); font-weight: 700; }
 </style>
 
 <script>
