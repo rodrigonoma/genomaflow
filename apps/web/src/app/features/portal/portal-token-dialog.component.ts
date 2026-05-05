@@ -108,26 +108,27 @@ interface DialogData {
     </mat-dialog-actions>
   `,
   styles: [`
-    :host { display: block; min-width: 540px; }
-    .muted { color: rgba(0,0,0,0.6); font-size: 0.875rem; margin: 4px 0 12px; }
-    h3 { margin: 24px 0 8px; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(0,0,0,0.7); }
+    :host { display: block; min-width: 540px; color: #dae2fd; }
+    :host ::ng-deep h2.mat-mdc-dialog-title { color: #dae2fd; }
+    .muted { color: #a09fb2; font-size: 0.875rem; margin: 4px 0 12px; }
+    h3 { margin: 24px 0 8px; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.08em; color: #c0c1ff; }
 
-    .link-card { background: #e8f5e9; border-left: 3px solid #25D366; padding: 12px 16px; border-radius: 4px; margin-bottom: 16px; }
-    .link-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: #2e7d32; margin-bottom: 4px; font-weight: 600; }
-    .link-value { font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; word-break: break-all; padding: 8px; background: #fff; border-radius: 3px; margin-bottom: 8px; }
+    .link-card { background: rgba(74,214,160,0.08); border-left: 3px solid #25D366; padding: 12px 16px; border-radius: 4px; margin-bottom: 16px; }
+    .link-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: #4ad6a0; margin-bottom: 4px; font-weight: 600; }
+    .link-value { font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; word-break: break-all; padding: 8px; background: #0b1326; color: #dae2fd; border: 1px solid rgba(70,69,84,0.3); border-radius: 3px; margin-bottom: 8px; }
     .link-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .link-actions a.wa-btn { background: #25D366; color: #fff; border: none; }
-    .link-expires { margin-top: 8px; font-size: 0.75rem; }
+    .link-expires { margin-top: 8px; font-size: 0.75rem; color: #a09fb2; }
 
-    .tokens-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-    .tokens-table th, .tokens-table td { padding: 8px; text-align: left; border-bottom: 1px solid rgba(0,0,0,0.08); }
-    .tokens-table th { font-weight: 600; color: rgba(0,0,0,0.7); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .tokens-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; color: #dae2fd; }
+    .tokens-table th, .tokens-table td { padding: 8px; text-align: left; border-bottom: 1px solid rgba(70,69,84,0.25); }
+    .tokens-table th { font-weight: 600; color: #a09fb2; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
     .tokens-table tr.revoked, .tokens-table tr.expired { opacity: 0.5; }
 
     .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-    .badge.active { background: #e8f5e9; color: #2e7d32; }
-    .badge.revoked { background: #ffebee; color: #c62828; }
-    .badge.expired { background: #fff3e0; color: #e65100; }
+    .badge.active { background: rgba(74,214,160,0.15); color: #4ad6a0; }
+    .badge.revoked { background: rgba(255,107,107,0.15); color: #ff6b6b; }
+    .badge.expired { background: rgba(247,200,115,0.18); color: #f7c873; }
   `]
 })
 export class PortalTokenDialogComponent implements OnInit {

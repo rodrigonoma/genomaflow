@@ -237,6 +237,21 @@ html, body {
   box-shadow: 0 24px 80px rgba(0,0,0,0.6) !important;
 }
 
+/* Texto dentro de qualquer dialog — surface é dark, default Material é dark text */
+.mat-mdc-dialog-container .mdc-dialog__surface,
+.mat-mdc-dialog-container .mat-mdc-dialog-title,
+.mat-mdc-dialog-container .mat-mdc-dialog-content,
+.mat-mdc-dialog-container h1,
+.mat-mdc-dialog-container h2,
+.mat-mdc-dialog-container h3,
+.mat-mdc-dialog-container h4,
+.mat-mdc-dialog-container label,
+.mat-mdc-dialog-container p {
+  color: #dae2fd;
+}
+.mat-mdc-dialog-container .mat-mdc-dialog-title { color: #dae2fd !important; }
+.mat-mdc-dialog-container .mat-mdc-dialog-content { color: #c8cfe6 !important; }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }

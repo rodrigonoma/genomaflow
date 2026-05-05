@@ -107,13 +107,16 @@ const DEFAULTS: Record<DocType, string> = {
     </mat-dialog-actions>
   `,
   styles: [`
-    :host { display: block; min-width: 640px; }
-    h2 { display: flex; align-items: center; gap: 8px; }
+    :host { display: block; min-width: 640px; color: #dae2fd; }
+    h2 { display: flex; align-items: center; gap: 8px; color: #dae2fd; }
+    h2 mat-icon { color: #c0c1ff; }
     .row { display: flex; gap: 12px; }
     .col { flex: 1; }
     .full { width: 100%; }
     mat-dialog-content { padding-bottom: 8px; }
-    textarea { font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; line-height: 1.5; }
+    textarea { font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; line-height: 1.5; color: #dae2fd; }
+    mat-form-field { width: 100%; }
+    ::ng-deep .mat-mdc-form-field-hint { color: #a09fb2 !important; }
   `],
 })
 export class ClinicalDocumentDialogComponent implements OnInit {

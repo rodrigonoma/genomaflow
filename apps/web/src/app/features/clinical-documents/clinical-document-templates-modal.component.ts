@@ -123,30 +123,31 @@ import {
     </mat-dialog-actions>
   `,
   styles: [`
-    :host { display: block; min-width: 920px; max-width: 1100px; }
-    h2 { display: flex; align-items: center; gap: 8px; }
-    .muted { color: rgba(0,0,0,0.6); font-size: 0.875rem; }
+    :host { display: block; min-width: 920px; max-width: 1100px; color: #dae2fd; }
+    h2 { display: flex; align-items: center; gap: 8px; color: #dae2fd; }
+    h2 mat-icon { color: #c0c1ff; }
+    .muted { color: #a09fb2; font-size: 0.875rem; }
     .center { text-align: center; padding: 24px; }
     .full { width: 100%; }
 
     .layout { display: grid; grid-template-columns: 320px 1fr; gap: 16px; min-height: 460px; }
 
-    .list-pane { border: 1px solid rgba(0,0,0,0.08); border-radius: 4px; padding: 12px; display: flex; flex-direction: column; }
+    .list-pane { border: 1px solid rgba(70,69,84,0.25); background: #0b1326; border-radius: 4px; padding: 12px; display: flex; flex-direction: column; }
     .filters { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
     .filters mat-form-field { flex: 1; }
     .template-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; }
-    .template-list li { padding: 10px 12px; border-radius: 4px; cursor: pointer; transition: background 0.15s; border: 1px solid transparent; }
-    .template-list li:hover { background: rgba(192, 193, 255, 0.15); }
-    .template-list li.selected { background: rgba(192, 193, 255, 0.3); border-color: #c0c1ff; }
-    .t-name { font-weight: 500; font-size: 0.875rem; }
-    .t-type { font-size: 0.75rem; color: rgba(0,0,0,0.55); margin-top: 2px; }
+    .template-list li { padding: 10px 12px; border-radius: 4px; cursor: pointer; transition: background 0.15s; border: 1px solid transparent; color: #dae2fd; }
+    .template-list li:hover { background: rgba(192, 193, 255, 0.08); }
+    .template-list li.selected { background: rgba(192, 193, 255, 0.16); border-color: #c0c1ff; }
+    .t-name { font-weight: 500; font-size: 0.875rem; color: #dae2fd; }
+    .t-type { font-size: 0.75rem; color: #a09fb2; margin-top: 2px; }
 
-    .edit-pane { padding: 12px; border: 1px solid rgba(0,0,0,0.08); border-radius: 4px; display: flex; flex-direction: column; }
-    .edit-pane .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: rgba(0,0,0,0.5); }
+    .edit-pane { padding: 12px; border: 1px solid rgba(70,69,84,0.25); background: #0b1326; border-radius: 4px; display: flex; flex-direction: column; }
+    .edit-pane .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #7c7b8f; }
     .edit-pane .empty mat-icon { font-size: 56px; width: 56px; height: 56px; }
     .actions { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 12px; }
     .spacer { flex: 1; }
-    textarea { font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; line-height: 1.5; }
+    textarea { font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; line-height: 1.5; color: #dae2fd; }
   `],
 })
 export class ClinicalDocumentTemplatesModalComponent implements OnInit {
