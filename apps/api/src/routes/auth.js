@@ -145,7 +145,7 @@ module.exports = async function (fastify) {
     const { rows } = await fastify.pg.query(
       `SELECT u.id, u.email, u.role, u.specialty, u.created_at,
               u.crm_number, u.crm_uf, u.professional_data_confirmed_at,
-              t.module, t.name AS tenant_name
+              t.module, t.name AS tenant_name, t.billing_status
        FROM users u
        JOIN tenants t ON t.id = u.tenant_id
        WHERE u.id = $1 AND u.tenant_id = $2`,

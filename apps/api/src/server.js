@@ -3,6 +3,20 @@ const Fastify = require('fastify');
 
 const app = Fastify({ logger: true, trustProxy: true });
 
+// Raw body parser — necessário pra validação de signature do webhook Stripe.
+// Default Fastify parseia JSON automaticamente, mas Stripe valida sobre o
+// body bruto. Aqui guardamos os bytes originais em request.rawBody pra todas
+// as rotas (overhead negligível) e mantemos parsing JSON normal.
+app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+  req.rawBody = body;
+  try {
+    const json = body.length > 0 ? JSON.parse(body.toString('utf8')) : {};
+    done(null, json);
+  } catch (err) {
+    done(err, undefined);
+  }
+});
+
 app.register(require('./plugins/postgres'));
 app.register(require('./plugins/redis'));
 app.register(require('./plugins/auth'));
@@ -45,6 +59,7 @@ app.register((fastify, _opts, done) => {
   fastify.register(require('./routes/inter-tenant-chat'), { prefix: '/inter-tenant-chat' });
   fastify.register(require('./routes/product-help'),      { prefix: '/product-help' });
   fastify.register(require('./routes/agenda'),            { prefix: '/agenda' });
+  fastify.register(require('./routes/webhooks/stripe'),   { prefix: '' });
   done();
 }, { prefix: API_PREFIX });
 

@@ -1,6 +1,6 @@
 'use strict';
 
-const { VALID_AGENT_TYPES, VALID_CREDIT_PACKAGES } = require('../constants');
+const { VALID_AGENT_TYPES } = require('../constants');
 
 module.exports = async function billingRoutes(fastify) {
 
@@ -122,73 +122,148 @@ module.exports = async function billingRoutes(fastify) {
     }
   });
 
-  // POST /billing/subscribe
-  fastify.post('/billing/subscribe', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+  // POST /billing/checkout/subscription — admin-only
+  // Cria Stripe Customer (lazy) + Checkout Session subscription.
+  // NÃO concede crédito sincrono — webhook checkout.session.completed faz isso.
+  fastify.post('/billing/checkout/subscription', {
+    preHandler: [fastify.authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     const { tenant_id, role } = request.user;
-    if (role !== 'admin') return reply.status(403).send({ error: 'Admin only' });
-
-    const { gateway, plan, specialties } = request.body || {};
-    if (!gateway || !plan) return reply.status(400).send({ error: 'gateway e plan são obrigatórios' });
-    if (!['stripe','mercadopago'].includes(gateway)) return reply.status(400).send({ error: 'Gateway inválido' });
-
-    // Save specialties from onboarding metadata
-    if (Array.isArray(specialties) && specialties.length > 0) {
-      const client = await fastify.pg.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query('DELETE FROM tenant_specialties WHERE tenant_id = $1', [tenant_id]);
-        for (const agent_type of specialties) {
-          await client.query(
-            'INSERT INTO tenant_specialties (tenant_id, agent_type) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-            [tenant_id, agent_type]
-          );
-        }
-        await client.query('COMMIT');
-      } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-      } finally {
-        client.release();
-      }
+    if (role !== 'admin') {
+      return reply.status(403).send({ error: 'Admin only' });
     }
 
-    // Grant starter credits immediately (real gateway webhook will do this in production)
-    const starterCredits = 100;
+    const stripeClient = require('../services/stripe-client');
+    const priceId = process.env.STRIPE_PRICE_SUBSCRIPTION;
+    if (!priceId) {
+      fastify.log.error('STRIPE_PRICE_SUBSCRIPTION não configurada');
+      return reply.status(500).send({ error: 'Pagamento indisponível — configuração ausente' });
+    }
+    const frontendUrl = process.env.FRONTEND_URL || 'https://app.genomaflow.com.br';
+
+    // Pega dados do tenant pra criar Customer
+    const { rows } = await fastify.pg.query(
+      `SELECT t.name, u.email FROM tenants t
+       JOIN users u ON u.tenant_id = t.id AND u.role = 'admin'
+       WHERE t.id = $1 LIMIT 1`,
+      [tenant_id]
+    );
+    if (!rows[0]) return reply.status(404).send({ error: 'Tenant não encontrado' });
+
+    const customer = await stripeClient.findOrCreateCustomer({
+      tenantId: tenant_id,
+      email: rows[0].email,
+      name: rows[0].name,
+    });
+
+    // Persiste customer_id pra reuso futuro
     await fastify.pg.query(
-      `INSERT INTO credit_ledger (tenant_id, amount, kind, description)
-       VALUES ($1, $2, 'purchase', 'Créditos iniciais do plano')`,
-      [tenant_id, starterCredits]
+      `INSERT INTO subscriptions (tenant_id, gateway, gateway_customer_id, plan, status)
+       VALUES ($1, 'stripe', $2, 'starter', 'pending_payment')
+       ON CONFLICT (tenant_id) DO UPDATE
+       SET gateway_customer_id = EXCLUDED.gateway_customer_id, updated_at = NOW()`,
+      [tenant_id, customer.id]
     );
 
-    fastify.redis.publish(`billing:updated:${tenant_id}`, '{}').catch(() => {});
-    const appUrl = process.env.APP_URL || 'http://localhost:4200';
-    const checkout_url = `${appUrl}/login?activated=true`;
-    return reply.status(200).send({ checkout_url });
+    const session = await stripeClient.createSubscriptionCheckoutSession({
+      customerId: customer.id,
+      tenantId: tenant_id,
+      priceId,
+      successUrl: `${frontendUrl}/login?activated=true`,
+      cancelUrl: `${frontendUrl}/onboarding?cancelled=true`,
+    });
+
+    return { url: session.url, session_id: session.id };
   });
 
-  // POST /billing/topup
-  fastify.post('/billing/topup', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+  // POST /billing/checkout/topup — admin-only — { credits, payment_method }
+  fastify.post('/billing/checkout/topup', {
+    preHandler: [fastify.authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     const { tenant_id, role } = request.user;
     if (role !== 'admin') return reply.status(403).send({ error: 'Admin only' });
 
-    const { gateway, credits } = request.body || {};
-    if (!gateway || !credits) return reply.status(400).send({ error: 'gateway e credits são obrigatórios' });
+    const { VALID_CREDIT_PACKAGES, PRICE_BY_PACK, VALID_PAYMENT_METHODS } = require('../constants');
+    const credits = parseInt(request.body?.credits, 10);
+    const paymentMethod = request.body?.payment_method || 'card';
 
-    if (!VALID_CREDIT_PACKAGES.includes(Number(credits))) {
-      return reply.status(400).send({ error: 'Pacote inválido. Use: 100, 250 ou 500 créditos' });
+    if (!VALID_CREDIT_PACKAGES.includes(credits)) {
+      return reply.status(400).send({ error: `credits inválido — use ${VALID_CREDIT_PACKAGES.join('|')}` });
+    }
+    if (!VALID_PAYMENT_METHODS.includes(paymentMethod)) {
+      return reply.status(400).send({ error: `payment_method inválido — use ${VALID_PAYMENT_METHODS.join('|')}` });
     }
 
-    // Grant credits immediately (real gateway webhook will do this in production)
-    await fastify.pg.query(
-      `INSERT INTO credit_ledger (tenant_id, amount, kind, description)
-       VALUES ($1, $2, 'purchase', $3)`,
-      [tenant_id, Number(credits), `Recarga de ${credits} créditos`]
-    );
+    const unitAmount = PRICE_BY_PACK[credits];
+    const stripeClient = require('../services/stripe-client');
+    const frontendUrl = process.env.FRONTEND_URL || 'https://app.genomaflow.com.br';
 
-    fastify.redis.publish(`billing:updated:${tenant_id}`, '{}').catch(() => {});
-    const appUrl = process.env.APP_URL || 'http://localhost:4200';
-    const checkout_url = `${appUrl}/clinic/billing?topup_success=true`;
-    return reply.status(200).send({ checkout_url });
+    const { rows } = await fastify.pg.query(
+      `SELECT t.name, u.email, s.gateway_customer_id
+       FROM tenants t
+       JOIN users u ON u.tenant_id = t.id AND u.role = 'admin'
+       LEFT JOIN subscriptions s ON s.tenant_id = t.id
+       WHERE t.id = $1 LIMIT 1`,
+      [tenant_id]
+    );
+    if (!rows[0]) return reply.status(404).send({ error: 'Tenant não encontrado' });
+
+    let customerId = rows[0].gateway_customer_id;
+    if (!customerId) {
+      const customer = await stripeClient.findOrCreateCustomer({
+        tenantId: tenant_id,
+        email: rows[0].email,
+        name: rows[0].name,
+      });
+      customerId = customer.id;
+      await fastify.pg.query(
+        `INSERT INTO subscriptions (tenant_id, gateway, gateway_customer_id, plan, status)
+         VALUES ($1, 'stripe', $2, 'topup_only', 'pending_payment')
+         ON CONFLICT (tenant_id) DO UPDATE
+         SET gateway_customer_id = EXCLUDED.gateway_customer_id, updated_at = NOW()`,
+        [tenant_id, customerId]
+      );
+    }
+
+    const session = await stripeClient.createTopupCheckoutSession({
+      customerId,
+      tenantId: tenant_id,
+      credits,
+      unitAmount,
+      paymentMethod,
+      successUrl: `${frontendUrl}/clinic/billing?topup=success`,
+      cancelUrl: `${frontendUrl}/clinic/billing?topup=cancelled`,
+    });
+
+    return { url: session.url, session_id: session.id };
+  });
+
+  // POST /billing/portal — admin-only — abre Customer Portal pra gerenciar/cancelar
+  fastify.post('/billing/portal', {
+    preHandler: [fastify.authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const { tenant_id, role } = request.user;
+    if (role !== 'admin') return reply.status(403).send({ error: 'Admin only' });
+
+    const { rows } = await fastify.pg.query(
+      'SELECT gateway_customer_id FROM subscriptions WHERE tenant_id = $1 LIMIT 1',
+      [tenant_id]
+    );
+    const customerId = rows[0]?.gateway_customer_id;
+    if (!customerId) {
+      return reply.status(400).send({ error: 'Sem subscription Stripe — assine primeiro' });
+    }
+
+    const stripeClient = require('../services/stripe-client');
+    const frontendUrl = process.env.FRONTEND_URL || 'https://app.genomaflow.com.br';
+    const session = await stripeClient.createPortalSession({
+      customerId,
+      returnUrl: `${frontendUrl}/clinic/billing`,
+    });
+    return { url: session.url };
   });
 
   // GET /billing/usage?days=30

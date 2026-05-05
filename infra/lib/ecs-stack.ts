@@ -56,6 +56,11 @@ export class EcsStack extends cdk.Stack {
     const jwtSecret      = ssmParam('jwt-secret');
     const anthropicKey   = ssmParam('anthropic-api-key');
     const openaiKey      = ssmParam('openai-api-key');
+    // Stripe — antes do cdk deploy:
+    // aws ssm put-parameter --name /genomaflow/prod/stripe-secret-key      --value "sk_live_..."   --type SecureString --overwrite
+    // aws ssm put-parameter --name /genomaflow/prod/stripe-webhook-secret  --value "whsec_..."    --type SecureString --overwrite
+    const stripeSecretKey      = ssmParam('stripe-secret-key');
+    const stripeWebhookSecret  = ssmParam('stripe-webhook-secret');
 
     // ── EFS — armazenamento compartilhado para uploads de PDFs ──
     const fileSystem = new efs.FileSystem(this, 'Uploads', {
@@ -134,17 +139,23 @@ export class EcsStack extends cdk.Stack {
       // após split de subdomínios (apex agora serve só landing).
       FRONTEND_URL:                 'https://app.genomaflow.com.br',
       SES_FROM_EMAIL:               'noreply@genomaflow.com.br',
+      // Stripe Price ID do plano R$ 199/mês recurring (modo Live).
+      // Criado em 2026-05-04 no Stripe Dashboard ("GenomaFlow — Plano Mensal").
+      // Test mode tem price_id diferente — colocar no .env local separado.
+      STRIPE_PRICE_SUBSCRIPTION:    'price_1TTWG2DDCV02NXEwRssSGnPy',
     };
 
     const backendSecrets = {
-      JWT_SECRET:        ecs.Secret.fromSsmParameter(jwtSecret),
-      ANTHROPIC_API_KEY: ecs.Secret.fromSsmParameter(anthropicKey),
-      OPENAI_API_KEY:    ecs.Secret.fromSsmParameter(openaiKey),
-      DB_HOST:           ecs.Secret.fromSecretsManager(rdsSecret, 'host'),
-      DB_PORT:           ecs.Secret.fromSecretsManager(rdsSecret, 'port'),
-      DB_NAME:           ecs.Secret.fromSecretsManager(rdsSecret, 'dbname'),
-      DB_USER:           ecs.Secret.fromSecretsManager(rdsSecret, 'username'),
-      DB_PASSWORD:       ecs.Secret.fromSecretsManager(rdsSecret, 'password'),
+      JWT_SECRET:            ecs.Secret.fromSsmParameter(jwtSecret),
+      ANTHROPIC_API_KEY:     ecs.Secret.fromSsmParameter(anthropicKey),
+      OPENAI_API_KEY:        ecs.Secret.fromSsmParameter(openaiKey),
+      STRIPE_SECRET_KEY:     ecs.Secret.fromSsmParameter(stripeSecretKey),
+      STRIPE_WEBHOOK_SECRET: ecs.Secret.fromSsmParameter(stripeWebhookSecret),
+      DB_HOST:               ecs.Secret.fromSecretsManager(rdsSecret, 'host'),
+      DB_PORT:               ecs.Secret.fromSecretsManager(rdsSecret, 'port'),
+      DB_NAME:               ecs.Secret.fromSecretsManager(rdsSecret, 'dbname'),
+      DB_USER:               ecs.Secret.fromSecretsManager(rdsSecret, 'username'),
+      DB_PASSWORD:           ecs.Secret.fromSecretsManager(rdsSecret, 'password'),
     };
 
     // Volume EFS para uploads

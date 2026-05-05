@@ -11,6 +11,8 @@ const {
   VALID_DOCTOR_SPECIALTIES,
   VALID_AGENT_TYPES,
   VALID_CREDIT_PACKAGES,
+  PRICE_BY_PACK,
+  VALID_PAYMENT_METHODS,
   VALID_MODULES,
 } = require('../../src/constants');
 
@@ -48,12 +50,33 @@ describe('constants — VALID_AGENT_TYPES', () => {
 });
 
 describe('constants — VALID_CREDIT_PACKAGES', () => {
-  test('lista exata de pacotes [100, 250, 500]', () => {
-    expect(VALID_CREDIT_PACKAGES).toEqual([100, 250, 500]);
+  test('lista exata de pacotes [100, 250, 500, 1000]', () => {
+    expect(VALID_CREDIT_PACKAGES).toEqual([100, 250, 500, 1000]);
   });
 
   test('todos números positivos', () => {
     expect(VALID_CREDIT_PACKAGES.every(n => Number.isInteger(n) && n > 0)).toBe(true);
+  });
+});
+
+describe('constants — PRICE_BY_PACK', () => {
+  test('cobre todos os packs em VALID_CREDIT_PACKAGES', () => {
+    for (const credits of VALID_CREDIT_PACKAGES) {
+      expect(PRICE_BY_PACK[credits]).toBeGreaterThan(0);
+    }
+  });
+
+  test('valores em centavos (inteiros positivos)', () => {
+    for (const v of Object.values(PRICE_BY_PACK)) {
+      expect(Number.isInteger(v)).toBe(true);
+      expect(v).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('constants — VALID_PAYMENT_METHODS', () => {
+  test('lista exata [card, pix]', () => {
+    expect(VALID_PAYMENT_METHODS.sort()).toEqual(['card', 'pix'].sort());
   });
 });
 

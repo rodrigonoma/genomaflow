@@ -1,10 +1,12 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/auth/auth.service';
+import { BillingService } from '../clinic/billing/billing.service';
 
 interface OnboardingData {
   clinic_name: string;
@@ -13,7 +15,6 @@ interface OnboardingData {
   confirm_password: string;
   module: 'human' | 'veterinary' | '';
   specialties: string[];
-  gateway: 'stripe' | 'mercadopago' | '';
   tenant_id: string;
 }
 
@@ -188,23 +189,10 @@ interface OnboardingData {
           </p>
         </div>
 
-        <!-- Gateway -->
-        <div style="margin-bottom:1rem;">
-          <label style="font-size:0.625rem;letter-spacing:0.1em;text-transform:uppercase;color:#c7c5d0;display:block;margin-bottom:0.5rem;">Forma de Pagamento</label>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
-            <div (click)="data.gateway = 'stripe'" style="padding:1rem;border-radius:0.25rem;cursor:pointer;text-align:center;border:2px solid transparent;transition:all 0.2s;"
-                 [style.borderColor]="data.gateway === 'stripe' ? '#c0c1ff' : 'transparent'"
-                 [style.background]="data.gateway === 'stripe' ? '#171f33' : '#060d20'">
-              <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#c0c1ff;margin-bottom:0.25rem;">Stripe</div>
-              <div style="font-size:0.625rem;color:#c7c5d0;">Cartão de crédito</div>
-            </div>
-            <div (click)="data.gateway = 'mercadopago'" style="padding:1rem;border-radius:0.25rem;cursor:pointer;text-align:center;border:2px solid transparent;transition:all 0.2s;"
-                 [style.borderColor]="data.gateway === 'mercadopago' ? '#c0c1ff' : 'transparent'"
-                 [style.background]="data.gateway === 'mercadopago' ? '#171f33' : '#060d20'">
-              <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#c0c1ff;margin-bottom:0.25rem;">Mercado Pago</div>
-              <div style="font-size:0.625rem;color:#c7c5d0;">PIX / Boleto</div>
-            </div>
-          </div>
+        <!-- Pagamento via Stripe (cartão obrigatório pra subscription recorrente) -->
+        <div style="margin-bottom:1rem;padding:1rem;background:#060d20;border-radius:0.25rem;text-align:center;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#c0c1ff;margin-bottom:0.25rem;">Pagamento por Cartão</div>
+          <div style="font-size:0.625rem;color:#c7c5d0;">Processado com segurança pelo Stripe</div>
         </div>
 
         @if (errorMsg()) {
@@ -216,14 +204,6 @@ interface OnboardingData {
                 [style.opacity]="loading() ? '0.5' : '1'">
           {{ loading() ? 'Redirecionando...' : 'Ir para pagamento' }}
         </button>
-
-        @if (!isProd()) {
-          <button (click)="simulatePayment()" [disabled]="loading()"
-                  style="width:100%;padding:0.75rem;background:transparent;color:#c0c1ff;font-family:'JetBrains Mono',monospace;font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;border:1px solid rgba(192,193,255,0.2);border-radius:0.25rem;cursor:pointer;"
-                  [style.opacity]="loading() ? '0.5' : '1'">
-            Simular pagamento aprovado (dev)
-          </button>
-        }
       }
 
     }
@@ -236,6 +216,8 @@ export class OnboardingComponent implements OnInit {
   errorMsg = signal<string>('');
   loading = signal<boolean>(false);
 
+  private billing = inject(BillingService);
+
   data: OnboardingData = {
     clinic_name: '',
     email: '',
@@ -243,7 +225,6 @@ export class OnboardingComponent implements OnInit {
     confirm_password: '',
     module: '',
     specialties: [],
-    gateway: '',
     tenant_id: ''
   };
 
@@ -291,10 +272,6 @@ export class OnboardingComponent implements OnInit {
 
   isSpecialtySelected(key: string): boolean {
     return this.data.specialties.includes(key);
-  }
-
-  isProd(): boolean {
-    return environment.production;
   }
 
   nextStep1(): void {
@@ -348,36 +325,15 @@ export class OnboardingComponent implements OnInit {
     });
   }
 
-  goToPayment(): void {
+  async goToPayment(): Promise<void> {
     this.errorMsg.set('');
-    if (!this.data.gateway) return this.errorMsg.set('Selecione uma forma de pagamento.');
     this.loading.set(true);
-    this.http.post<{ checkout_url: string }>(
-      `${environment.apiUrl}/billing/subscribe`,
-      {
-        gateway: this.data.gateway,
-        plan: 'starter',
-        tenant_id: this.data.tenant_id,
-        specialties: this.data.specialties
-      }
-    ).subscribe({
-      next: (res) => { window.location.href = res.checkout_url; },
-      error: (err) => {
-        this.loading.set(false);
-        this.errorMsg.set(err.error?.error ?? 'Erro ao iniciar pagamento.');
-      }
-    });
-  }
-
-  simulatePayment(): void {
-    this.loading.set(true);
-    this.http.post(`${environment.apiUrl}/auth/activate`, { tenant_id: this.data.tenant_id })
-      .subscribe({
-        next: () => this.router.navigate(['/login'], { queryParams: { activated: 'true' } }),
-        error: () => {
-          this.loading.set(false);
-          this.errorMsg.set('Erro ao simular pagamento.');
-        }
-      });
+    try {
+      const { url } = await firstValueFrom(this.billing.checkoutSubscription());
+      window.location.href = url;
+    } catch (err: any) {
+      this.loading.set(false);
+      this.errorMsg.set(err?.error?.error ?? 'Erro ao iniciar pagamento.');
+    }
   }
 }
