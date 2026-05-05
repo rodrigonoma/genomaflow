@@ -1,4 +1,5 @@
 const { uploadFile } = require('../storage/s3');
+const { validatePhoneBR } = require('../utils/phone');
 
 module.exports = async function (fastify) {
 
@@ -27,11 +28,21 @@ module.exports = async function (fastify) {
         return reply.status(400).send({ error: 'E-mail de contato inválido' });
       }
     }
-    if (phone != null && String(phone).length > 40) {
-      return reply.status(400).send({ error: 'Telefone muito longo (máx 40 caracteres)' });
+    if (phone != null && String(phone).trim() !== '') {
+      if (String(phone).length > 40) {
+        return reply.status(400).send({ error: 'Telefone muito longo (máx 40 caracteres)' });
+      }
+      if (!validatePhoneBR(String(phone))) {
+        return reply.status(400).send({ error: 'Telefone inválido. Use formato com DDD: (11) 99999-9999' });
+      }
     }
-    if (whatsapp_phone != null && String(whatsapp_phone).length > 40) {
-      return reply.status(400).send({ error: 'WhatsApp muito longo (máx 40 caracteres)' });
+    if (whatsapp_phone != null && String(whatsapp_phone).trim() !== '') {
+      if (String(whatsapp_phone).length > 40) {
+        return reply.status(400).send({ error: 'WhatsApp muito longo (máx 40 caracteres)' });
+      }
+      if (!validatePhoneBR(String(whatsapp_phone))) {
+        return reply.status(400).send({ error: 'WhatsApp inválido. Use formato com DDD: (11) 99999-9999' });
+      }
     }
     if (address != null && String(address).length > 500) {
       return reply.status(400).send({ error: 'Endereço muito longo (máx 500 caracteres)' });

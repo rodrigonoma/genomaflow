@@ -1,5 +1,19 @@
 const { withTenant } = require('../db/tenant');
 const crypto = require('crypto');
+const { validatePhoneBR } = require('../utils/phone');
+
+/**
+ * Validador único pra phone — DDD obrigatório.
+ * Aceita null/undefined/string vazia (campo é opcional na maioria das rotas).
+ * Rejeita string não-vazia que não passa em validatePhoneBR.
+ */
+function checkPhone(value, fieldLabel = 'Telefone') {
+  if (value == null || String(value).trim() === '') return null;
+  if (!validatePhoneBR(String(value))) {
+    return `${fieldLabel} inválido. Use formato com DDD: (11) 99999-9999`;
+  }
+  return null;
+}
 
 function publishSubjectUpserted(fastify, tenant_id, subject_id) {
   try {
@@ -40,6 +54,8 @@ module.exports = async function (fastify) {
       cep, street, number, complement, neighborhood, city, state
     } = request.body;
     if (!name) return reply.status(400).send({ error: 'name is required' });
+    const phoneErr = checkPhone(phone, 'Telefone do tutor');
+    if (phoneErr) return reply.status(400).send({ error: phoneErr });
 
     const owner = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
@@ -68,6 +84,8 @@ module.exports = async function (fastify) {
       cep, street, number, complement, neighborhood, city, state,
       observations,
     } = request.body;
+    const phoneErr = checkPhone(phone, 'Telefone do tutor');
+    if (phoneErr) return reply.status(400).send({ error: phoneErr });
 
     const owner = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
@@ -109,6 +127,9 @@ module.exports = async function (fastify) {
       // veterinary
       species, owner_id, breed, color, microchip, neutered
     } = request.body;
+
+    const phoneErr = checkPhone(phone, 'Telefone do paciente');
+    if (phoneErr) return reply.status(400).send({ error: phoneErr });
 
     // Consentimento LGPD — se o profissional marcou, registra quem e quando.
     const consentAt = consent_given ? new Date() : null;
@@ -246,6 +267,11 @@ module.exports = async function (fastify) {
       allergies_text, current_weight_kg,
       emergency_contact_name, emergency_contact_phone, insurance_name,
     } = request.body;
+
+    const phoneErr = checkPhone(phone, 'Telefone do paciente');
+    if (phoneErr) return reply.status(400).send({ error: phoneErr });
+    const emergencyErr = checkPhone(emergency_contact_phone, 'Telefone de contato de emergência');
+    if (emergencyErr) return reply.status(400).send({ error: emergencyErr });
 
     // Consentimento LGPD: apenas seta se o campo vier true. Não aceita revogação por aqui.
     const consentAt = consent_given === true ? new Date() : null;

@@ -16,7 +16,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { environment } from '../../../../environments/environment';
 import { Subject, Owner } from '../../../shared/models/api.models';
 import { AuthService } from '../../../core/auth/auth.service';
-import { formatCpf, formatPhone, formatCep, unmask } from '../../../shared/utils/mask';
+import { formatCpf, formatPhone, formatCep, unmask, isValidPhoneBR } from '../../../shared/utils/mask';
 import { lookupCep } from '../../../shared/utils/viacep';
 import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
 
@@ -218,10 +218,14 @@ import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
           </div>
           <div class="field-pair">
             <mat-form-field appearance="outline">
-              <mat-label>Telefone</mat-label>
+              <mat-label>Telefone (com DDD)</mat-label>
               <input matInput [ngModel]="ownerForm.phone ?? ''"
                      (ngModelChange)="ownerForm.phone = onPhoneInput($event)"
                      placeholder="(00) 00000-0000" inputmode="tel"/>
+              @if (ownerForm.phone && !isPhoneValid(ownerForm.phone)) {
+                <mat-error>Use formato com DDD: (11) 99999-9999</mat-error>
+                <mat-hint style="color:#ffb4ab">DDD obrigatório</mat-hint>
+              }
             </mat-form-field>
             <mat-form-field appearance="outline">
               <mat-label>E-mail</mat-label>
@@ -314,10 +318,14 @@ import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
                   </mat-select>
                 </mat-form-field>
                 <mat-form-field appearance="outline">
-                  <mat-label>Telefone</mat-label>
+                  <mat-label>Telefone (com DDD)</mat-label>
                   <input matInput [ngModel]="patientForm.phone ?? ''"
                          (ngModelChange)="patientForm.phone = onPhoneInput($event)"
                          placeholder="(00) 00000-0000" inputmode="tel"/>
+                  @if (patientForm.phone && !isPhoneValid(patientForm.phone)) {
+                    <mat-error>Use formato com DDD: (11) 99999-9999</mat-error>
+                    <mat-hint style="color:#ffb4ab">DDD obrigatório</mat-hint>
+                  }
                 </mat-form-field>
                 <mat-form-field appearance="outline">
                   <mat-label>CPF</mat-label>
@@ -646,6 +654,7 @@ export class PatientListComponent implements OnInit, OnDestroy {
 
   onCpfInput(v: string): string   { return formatCpf(v); }
   onPhoneInput(v: string): string { return formatPhone(v); }
+  isPhoneValid(v: string | null | undefined): boolean { return isValidPhoneBR(v); }
   onCepInput(v: string): string   { return formatCep(v); }
 
   onCepBlur(): void {
@@ -668,6 +677,10 @@ export class PatientListComponent implements OnInit, OnDestroy {
 
   saveOwner(): void {
     if (!this.ownerForm.name) { return; }
+    if (!isValidPhoneBR(this.ownerForm.phone)) {
+      this.formError.set('Telefone do tutor inválido. Use formato com DDD: (11) 99999-9999');
+      return;
+    }
     const payload = {
       ...this.ownerForm,
       cpf:   this.ownerForm.cpf   ? unmask(this.ownerForm.cpf)   : null,
@@ -683,6 +696,10 @@ export class PatientListComponent implements OnInit, OnDestroy {
 
   savePatient(): void {
     this.formError.set('');
+    if (!isValidPhoneBR(this.patientForm.phone)) {
+      this.formError.set('Telefone do paciente inválido. Use formato com DDD: (11) 99999-9999');
+      return;
+    }
     const payload = {
       ...this.patientForm,
       cpf:   this.patientForm.cpf   ? unmask(this.patientForm.cpf)   : null,

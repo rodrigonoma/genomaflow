@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { FormsModule } from '@angular/forms';
+import { isValidPhoneBR, formatPhone } from '../../../shared/utils/mask';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { environment } from '../../../../environments/environment';
@@ -64,14 +65,27 @@ interface ChatSettings {
       </mat-form-field>
 
       <mat-form-field class="field" appearance="outline">
-        <mat-label>Telefone</mat-label>
-        <input matInput [(ngModel)]="phone" placeholder="(11) 99999-9999" />
+        <mat-label>Telefone (com DDD)</mat-label>
+        <input matInput [ngModel]="phone"
+               (ngModelChange)="phone = onPhoneInput($event)"
+               placeholder="(11) 99999-9999" inputmode="tel" />
+        @if (phone && !isPhoneValid(phone)) {
+          <mat-error>Use formato com DDD: (11) 99999-9999</mat-error>
+          <mat-hint style="color:#ffb4ab">DDD obrigatório</mat-hint>
+        }
       </mat-form-field>
 
       <mat-form-field class="field" appearance="outline">
-        <mat-label>WhatsApp (botão "Falar com a clínica" no portal do paciente)</mat-label>
-        <input matInput [(ngModel)]="whatsappPhone" placeholder="(11) 99999-9999" />
-        <mat-hint>Se vazio, usa o telefone acima. DDI 55 é adicionado automaticamente.</mat-hint>
+        <mat-label>WhatsApp (com DDD — botão "Falar com a clínica" no portal)</mat-label>
+        <input matInput [ngModel]="whatsappPhone"
+               (ngModelChange)="whatsappPhone = onPhoneInput($event)"
+               placeholder="(11) 99999-9999" inputmode="tel" />
+        @if (whatsappPhone && !isPhoneValid(whatsappPhone)) {
+          <mat-error>Use formato com DDD: (11) 99999-9999</mat-error>
+          <mat-hint style="color:#ffb4ab">DDD obrigatório</mat-hint>
+        } @else {
+          <mat-hint>Se vazio, usa o telefone acima.</mat-hint>
+        }
       </mat-form-field>
 
       <mat-form-field class="field" appearance="outline">
@@ -128,6 +142,9 @@ export class ClinicProfileModalComponent implements OnInit {
   private snack     = inject(MatSnackBar);
   private dialogRef = inject(MatDialogRef<ClinicProfileModalComponent>);
 
+  onPhoneInput(v: string): string { return formatPhone(v); }
+  isPhoneValid(v: string | null | undefined): boolean { return isValidPhoneBR(v); }
+
   name               = '';
   cnpj               = '';
   contactEmail       = '';
@@ -174,6 +191,14 @@ export class ClinicProfileModalComponent implements OnInit {
 
   save(): void {
     if (!this.name.trim()) { this.error.set('Nome da clínica é obrigatório'); return; }
+    if (this.phone.trim() && !isValidPhoneBR(this.phone)) {
+      this.error.set('Telefone inválido. Use formato com DDD: (11) 99999-9999');
+      return;
+    }
+    if (this.whatsappPhone.trim() && !isValidPhoneBR(this.whatsappPhone)) {
+      this.error.set('WhatsApp inválido. Use formato com DDD: (11) 99999-9999');
+      return;
+    }
     this.saving.set(true);
     this.error.set('');
 
