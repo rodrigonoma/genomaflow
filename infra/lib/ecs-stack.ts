@@ -11,6 +11,9 @@ import * as iam            from 'aws-cdk-lib/aws-iam';
 import * as logs           from 'aws-cdk-lib/aws-logs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as ssm            from 'aws-cdk-lib/aws-ssm';
+import * as sns            from 'aws-cdk-lib/aws-sns';
+import * as snsSubs        from 'aws-cdk-lib/aws-sns-subscriptions';
+import * as sesv2          from 'aws-cdk-lib/aws-ses';
 import { Construct } from 'constructs';
 
 interface Props extends cdk.StackProps {
@@ -61,6 +64,50 @@ export class EcsStack extends cdk.Stack {
     // aws ssm put-parameter --name /genomaflow/prod/stripe-webhook-secret  --value "whsec_..."    --type SecureString --overwrite
     const stripeSecretKey      = ssmParam('stripe-secret-key');
     const stripeWebhookSecret  = ssmParam('stripe-webhook-secret');
+
+    // SES Bounce/Complaint handling (Phase 3.5 — feedback_ses_bounce_handling.md)
+    // Tópico SNS recebe notifications do SES (bounce, complaint).
+    // Subscription HTTPS aponta pro endpoint /api/webhooks/ses no API.
+    // Configuration Set linka SES → SNS pra event publishing.
+    const sesEventsTopic = new sns.Topic(this, 'SesEventsTopic', {
+      topicName:   'genomaflow-ses-events',
+      displayName: 'GenomaFlow SES Events (Bounces, Complaints)',
+    });
+
+    // SES Configuration Set pra publicar eventos no SNS.
+    // Mailer adiciona ConfigurationSetName=genomaflow-events em cada SendEmail.
+    const sesConfigSet = new sesv2.CfnConfigurationSet(this, 'SesConfigSet', {
+      name: 'genomaflow-events',
+      reputationOptions: { reputationMetricsEnabled: true },
+    });
+
+    new sesv2.CfnConfigurationSetEventDestination(this, 'SesConfigSetSnsDest', {
+      configurationSetName: 'genomaflow-events',
+      eventDestination: {
+        enabled: true,
+        matchingEventTypes: ['BOUNCE', 'COMPLAINT', 'DELIVERY', 'REJECT'],
+        snsDestination: { topicArn: sesEventsTopic.topicArn },
+      },
+    });
+    sesConfigSet.node.addDependency(sesEventsTopic);
+
+    // SNS HTTPS subscription pro endpoint webhook em prod.
+    // AWS faz handshake (SubscriptionConfirmation) — endpoint chama SubscribeURL
+    // no primeiro POST. Já implementado em routes/webhooks/ses.js.
+    sesEventsTopic.addSubscription(new snsSubs.UrlSubscription(
+      'https://app.genomaflow.com.br/api/webhooks/ses',
+      { protocol: sns.SubscriptionProtocol.HTTPS },
+    ));
+
+    // Permite SES publicar no tópico (boilerplate AWS)
+    sesEventsTopic.addToResourcePolicy(new iam.PolicyStatement({
+      principals: [new iam.ServicePrincipal('ses.amazonaws.com')],
+      actions: ['sns:Publish'],
+      resources: [sesEventsTopic.topicArn],
+      conditions: {
+        StringEquals: { 'aws:SourceAccount': cdk.Stack.of(this).account },
+      },
+    }));
 
     // Z-API (WhatsApp via intermediário) — Phase 3 PMS expansion (2026-05-05).
     // Antes do cdk deploy:
@@ -155,6 +202,9 @@ export class EcsStack extends cdk.Stack {
       // Criado em 2026-05-04 no Stripe Dashboard ("GenomaFlow — Plano Mensal").
       // Test mode tem price_id diferente — colocar no .env local separado.
       STRIPE_PRICE_SUBSCRIPTION:    'price_1TTWG2DDCV02NXEwRssSGnPy',
+      // Mailer adiciona ConfigurationSetName em SendEmail pra eventos
+      // (bounce/complaint) chegarem no SNS topic acima.
+      SES_CONFIGURATION_SET:        'genomaflow-events',
     };
 
     const backendSecrets = {

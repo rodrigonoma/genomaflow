@@ -67,6 +67,7 @@ app.register((fastify, _opts, done) => {
   fastify.register(require('./routes/product-help'),      { prefix: '/product-help' });
   fastify.register(require('./routes/agenda'),            { prefix: '/agenda' });
   fastify.register(require('./routes/webhooks/stripe'),   { prefix: '' });
+  fastify.register(require('./routes/webhooks/ses'),      { prefix: '/webhooks' });
   done();
 }, { prefix: API_PREFIX });
 
