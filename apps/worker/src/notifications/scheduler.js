@@ -115,10 +115,25 @@ async function generateRemindersForUpcoming() {
       const start = new Date(apt.start_at);
       const horaStr = start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 
-      for (const h of apt.hours_before) {
-        const scheduled_for = new Date(start.getTime() - h * 60 * 60 * 1000);
-        // Skip se já passou
-        if (scheduled_for < new Date()) continue;
+      // Pra cobrir caso de appointment criado <T-h no futuro, ordenamos hours_before
+      // do menor pro maior. Pro MENOR h, se scheduled_for está no passado mas
+      // appointment ainda é futuro, agenda imediato (now). Pra h maiores que já
+      // passaram (ex: T-24h num appointment de daqui 5h), skip — cliente perdeu
+      // o lembrete antecipado, mas ainda recebe o T-h menor.
+      const hoursAsc = [...apt.hours_before].sort((a, b) => a - b);
+      const minH = hoursAsc[0];
+      const now = new Date();
+
+      for (const h of hoursAsc) {
+        let scheduled_for = new Date(start.getTime() - h * 60 * 60 * 1000);
+        if (scheduled_for < now) {
+          // Só pro menor h: se appointment é futuro, "envia agora" agendando pra now
+          if (h === minH) {
+            scheduled_for = new Date();
+          } else {
+            continue;
+          }
+        }
 
         // Idempotência: skip se já existe
         const { rows: existing } = await client.query(
