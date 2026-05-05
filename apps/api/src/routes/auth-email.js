@@ -166,7 +166,7 @@ module.exports = async function (fastify) {
     const resetUrl = `${frontendBase()}/reset-password?token=${plain}`;
     const { subject, text, html } = passwordReset({ resetUrl });
     try {
-      await sendEmail({ to: user.email, subject, text, html });
+      await sendEmail({ to: user.email, subject, text, html, pg: fastify.pg, log: request.log });
     } catch (err) {
       request.log.error({ err }, 'falha ao enviar email de reset');
       // Não vaza erro — usuário tenta de novo.

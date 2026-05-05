@@ -39,7 +39,8 @@ async function sendEmailVerification(pg, userId, email) {
 
   const verifyUrl = `${frontendBase()}/verify-email?token=${plain}`;
   const tmpl = emailVerification({ verifyUrl });
-  return sendEmail({ to: email, subject: tmpl.subject, text: tmpl.text, html: tmpl.html });
+  // Passa pg pra mailer checar suppression list antes de enviar
+  return sendEmail({ to: email, subject: tmpl.subject, text: tmpl.text, html: tmpl.html, pg });
 }
 
 module.exports = { sendEmailVerification, VERIFICATION_TTL_HOURS };
