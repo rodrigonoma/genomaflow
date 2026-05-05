@@ -39,7 +39,8 @@ import { NotificationPreferencesService, NotificationPreferences } from './notif
     <mat-dialog-content>
       @if (loading()) {
         <p class="muted">Carregando…</p>
-      } @else if (prefs(); as p) {
+      }
+      @if (prefs(); as p) {
         <div class="section">
           <div class="section-title">Lembretes de consulta</div>
           <p class="muted">WhatsApp/email pré-consulta. Confirma 1, cancela 2.</p>
