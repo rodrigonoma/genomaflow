@@ -3,6 +3,7 @@ const { Worker } = require('bullmq');
 const Redis = require('ioredis');
 const { processExam } = require('./processors/exam');
 const { indexSubject, indexAggregates } = require('./rag/indexer');
+const { startScheduler } = require('./notifications/scheduler');
 
 const connection  = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
 const subscriber  = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
@@ -39,5 +40,8 @@ subscriber.on('pmessage', async (_pattern, channel, message) => {
     console.error('[worker] Re-index error:', err.message);
   }
 });
+
+// Fase 3 PMS expansion — scheduler de lembretes WhatsApp/email
+startScheduler();
 
 console.log('[worker] Listening for exam-processing jobs and index events...');

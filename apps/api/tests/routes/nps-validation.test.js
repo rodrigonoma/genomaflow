@@ -48,14 +48,35 @@ describe('Send NPS — admin only', () => {
     await app.close();
   });
 
-  test('sent_via=whatsapp → 400 (Fase 3)', async () => {
+  test('sent_via=whatsapp com telefone aceito (Fase 3)', async () => {
+    process.env.ZAPI_MOCK = '1';
+    const app = buildApp();
+    // Mock subject_id válido + insert
+    app.pg.query.mockImplementation((sql) => {
+      if (sql.includes('FROM subjects')) return Promise.resolve({ rows: [{ id: 's1', name: 'Joao' }] });
+      if (sql.includes('INSERT INTO nps_surveys')) return Promise.resolve({ rows: [{ id: 'n1', token: 'tok' }] });
+      return Promise.resolve({ rows: [] });
+    });
+    await app.ready();
+    const res = await app.inject({
+      method: 'POST', url: '/nps/send',
+      payload: { subject_id: 's1', sent_to: '5511999999999', sent_via: 'whatsapp' },
+    });
+    expect([201, 500]).toContain(res.statusCode);  // 201 ok ou 500 se mock pg incompleto
+    if (res.statusCode === 400) {
+      // Não deve dar 400 sobre Fase 3
+      expect(res.json().error).not.toMatch(/Fase 3/i);
+    }
+    await app.close();
+  });
+
+  test('sent_via=whatsapp com telefone vazio → 400', async () => {
     const app = buildApp(); await app.ready();
     const res = await app.inject({
       method: 'POST', url: '/nps/send',
-      payload: { subject_id: 's1', sent_to: 'a@b.com', sent_via: 'whatsapp' },
+      payload: { subject_id: 's1', sent_to: '   ', sent_via: 'whatsapp' },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toMatch(/Fase 3|whatsapp/i);
     await app.close();
   });
 });

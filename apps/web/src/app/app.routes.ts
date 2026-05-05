@@ -101,6 +101,11 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/onboarding/onboarding.component').then(m => m.OnboardingComponent)
   },
+  {
+    path: 'portal/:token',
+    loadComponent: () =>
+      import('./features/portal/portal.component').then(m => m.PortalComponent)
+  },
   { path: '', canActivate: [rootRedirectGuard], children: [] },
   { path: '**', redirectTo: 'login' }
 ];
