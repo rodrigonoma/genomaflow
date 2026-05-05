@@ -1078,7 +1078,7 @@ interface ComparisonBlock {
                 Upload de Exame
               </button>
               <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6e6d80;letter-spacing:0.08em">
-                PDF · DICOM · JPG · PNG
+                PDF · DICOM · JPG · PNG · foto do laudo impresso
               </span>
               @if (uploadError()) {
                 <span class="upload-error">{{ uploadError() }}</span>

@@ -8,6 +8,7 @@ const { runImagingEcgAgent } = require('../agents/imaging-ecg');
 const { runImagingUltrasoundAgent } = require('../agents/imaging-ultrasound');
 const { runImagingMriAgent } = require('../agents/imaging-mri');
 const { extractText } = require('../parsers/pdf');
+const { classifyImageContent, ocrLabReport } = require('../parsers/image');
 const { anonymize } = require('../anonymizer/patient');
 const { scrubText } = require('../anonymizer/text');
 const { retrieveGuidelines } = require('../rag/retriever');
@@ -292,9 +293,61 @@ async function processImagingExam({ exam_id, tenant_id, file_path, file_type }) 
  * @param {{ exam_id: string, tenant_id: string, file_path: string, file_type: string }} jobData
  */
 async function processExam({ exam_id, tenant_id, file_path, file_type = 'pdf', selected_agents, chief_complaint, current_symptoms }) {
-  if (file_type === 'dicom' || file_type === 'image') {
+  if (file_type === 'dicom') {
     return processImagingExam({ exam_id, tenant_id, file_path, file_type });
   }
+
+  // Foto/scan de laudo impresso vs imagem médica:
+  // pré-classifica antes de rotear pra evitar mandar foto de hemograma pro
+  // pipeline imaging (que tentaria classificar modalidade RX/ECG/US/MRI e falharia).
+  if (file_type === 'image') {
+    try {
+      const imgBuffer = await downloadFile(keyFromPath(file_path));
+      const { detectImageMime } = require('../classifiers/imaging');
+      const mediaType = detectImageMime(imgBuffer);
+      const imageBase64 = imgBuffer.toString('base64');
+      const contentType = await classifyImageContent(imageBase64, mediaType);
+
+      if (contentType === 'document') {
+        // Foto de laudo impresso → OCR Vision + pipeline texto
+        const ocrText = await ocrLabReport(imageBase64, mediaType);
+        if (!ocrText || ocrText.length < 50) {
+          // OCR falhou ou texto vazio — tenta imaging como fallback
+          console.warn(`[processor] OCR returned empty/short text (${ocrText?.length || 0} chars), falling back to imaging`);
+          return processImagingExam({ exam_id, tenant_id, file_path, file_type });
+        }
+        // Persiste a imagem em exam-images/ pra preservar (como o imaging path faz)
+        const ext = (mediaType.split('/')[1] || 'png').replace('jpeg', 'jpg');
+        const imageS3Key = `exam-images/${tenant_id}/${exam_id}/image.${ext}`;
+        try { await uploadFile(imageS3Key, imgBuffer, mediaType); } catch (_) {}
+        return processTextExam({
+          exam_id, tenant_id, file_path,
+          selected_agents, chief_complaint, current_symptoms,
+          prefetchedText: ocrText,
+          ocrSource: 'image_vision',
+        });
+      }
+      // medical_image ou unknown → fallback pra imaging (mantém comportamento atual)
+      return processImagingExam({ exam_id, tenant_id, file_path, file_type });
+    } catch (err) {
+      // Se classificação falhar, segue pelo path imaging (comportamento legado)
+      console.warn('[processor] image content classification failed, falling back to imaging path:', err.message);
+      return processImagingExam({ exam_id, tenant_id, file_path, file_type });
+    }
+  }
+
+  // PDF (file_type 'pdf' ou default)
+  return processTextExam({
+    exam_id, tenant_id, file_path,
+    selected_agents, chief_complaint, current_symptoms,
+  });
+}
+
+/**
+ * Pipeline de texto compartilhado (PDF extraído OU OCR Vision).
+ * Quando `prefetchedText` é provido, pula download + extractText (caso OCR Vision).
+ */
+async function processTextExam({ exam_id, tenant_id, file_path, selected_agents, chief_complaint, current_symptoms, prefetchedText = null, ocrSource = null }) {
   const client = await pool.connect();
   let processingError = null;
 
@@ -334,22 +387,34 @@ async function processExam({ exam_id, tenant_id, file_path, file_type = 'pdf', s
       return;
     }
 
-    if (!file_path) throw new Error('exam has no file_path — PDF download may have failed during ingest');
-    let buffer;
-    try {
-      buffer = await downloadFile(keyFromPath(file_path));
-    } catch (s3Err) {
-      if (s3Err.name === 'NoSuchKey' || s3Err.$metadata?.httpStatusCode === 404) {
-        throw new Error('Arquivo do exame não encontrado. Reenvie o PDF para reprocessar.');
+    let rawText, usedOcr = false;
+    if (prefetchedText) {
+      // OCR Vision (foto de laudo impresso) — texto já extraído antes da chamada
+      rawText = prefetchedText;
+      usedOcr = true;
+    } else {
+      if (!file_path) throw new Error('exam has no file_path — PDF download may have failed during ingest');
+      let buffer;
+      try {
+        buffer = await downloadFile(keyFromPath(file_path));
+      } catch (s3Err) {
+        if (s3Err.name === 'NoSuchKey' || s3Err.$metadata?.httpStatusCode === 404) {
+          throw new Error('Arquivo do exame não encontrado. Reenvie o PDF para reprocessar.');
+        }
+        throw s3Err;
       }
-      throw s3Err;
+      const extracted = await extractText(buffer);
+      rawText = extracted.text;
+      usedOcr = extracted.usedOcr;
     }
-    const { text: rawText, usedOcr } = await extractText(buffer);
     if (usedOcr) {
+      const desc = ocrSource === 'image_vision'
+        ? 'OCR: foto de laudo impresso (Vision)'
+        : 'OCR: scanned PDF text extraction';
       await client.query(
         `INSERT INTO credit_ledger (tenant_id, amount, kind, exam_id, description)
-         VALUES ($1, -1, 'ocr_usage', $2, 'OCR: scanned PDF text extraction')`,
-        [tenant_id, exam_id]
+         VALUES ($1, -1, 'ocr_usage', $2, $3)`,
+        [tenant_id, exam_id, desc]
       );
     }
     const examText = scrubText(rawText);
