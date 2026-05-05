@@ -118,7 +118,12 @@ Patient-detail integration:
 
 ## Estado em prod (deploy 2026-05-05)
 
-A preencher após pipeline rodar.
+- Pipeline run `25375360300` ✅ success (Unit tests gate + deploy + migrations)
+- Migrations 069-071 applied em prod (confirmado via log da task ECS migrate `d51fab84150c462794189394f13fe58b`)
+- ECS api + web `rolloutState=COMPLETED`, 1/1 running
+- Branch `feat/phase-2-vaccines-documents-nps` deletada (local + remote)
+- HEAD em main: `ec23943d` (merge commit) com `20e7941a` como commit do Phase 2
+- 4 vaccine_protocols default seedados em prod automaticamente (V8/Antirrábica cães; Tríplice/Antirrábica gatos)
 
 ## Próximos passos (Fase 3+)
 
