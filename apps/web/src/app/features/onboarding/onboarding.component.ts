@@ -16,6 +16,12 @@ interface OnboardingData {
   module: 'human' | 'veterinary' | '';
   specialties: string[];
   tenant_id: string;
+  // Token retornado pelo /auth/register. Mantido em memória (NÃO no localStorage)
+  // até o click final em goToPayment(). Se gravarmos cedo, o ngOnInit do
+  // OnboardingComponent (que faz resetSession se há token) pode matar a sessão
+  // entre re-renders e o usuário volta pro step 1. Salvar só no momento do
+  // window.location.href pra Stripe garante que o reset não corre.
+  token: string;
 }
 
 @Component({
@@ -225,7 +231,8 @@ export class OnboardingComponent implements OnInit {
     confirm_password: '',
     module: '',
     specialties: [],
-    tenant_id: ''
+    tenant_id: '',
+    token: ''
   };
 
   ngOnInit(): void {
@@ -315,9 +322,11 @@ export class OnboardingComponent implements OnInit {
     ).subscribe({
       next: (res) => {
         this.data.tenant_id = res.tenant_id;
-        // Auto-login com o token retornado pelo register pra próxima request
-        // (POST /billing/checkout/subscription) já ir autenticada.
-        if (res.token) this.auth.setSession(res.token);
+        // Token guardado em memória do componente. Só vira sessão ativa
+        // (localStorage + observable) quando o user clicar "Ir para pagamento"
+        // no step 4 — vide goToPayment(). Salvar agora dispara resetSession
+        // do ngOnInit em qualquer re-mount → state perdido.
+        this.data.token = res.token || '';
         this.loading.set(false);
         this.step.set(4);
       },
@@ -332,6 +341,16 @@ export class OnboardingComponent implements OnInit {
     this.errorMsg.set('');
     this.loading.set(true);
     try {
+      // Ativa a sessão APENAS aqui — imediatamente antes do redirect pra Stripe.
+      // window.location.href sai da SPA, então qualquer re-mount do
+      // OnboardingComponent (e seu ngOnInit que limpa sessão) é evitado.
+      if (this.data.token) {
+        this.auth.setSession(this.data.token);
+      } else {
+        this.errorMsg.set('Sessão expirou. Recarregue a página e refaça o cadastro.');
+        this.loading.set(false);
+        return;
+      }
       const { url } = await firstValueFrom(this.billing.checkoutSubscription());
       window.location.href = url;
     } catch (err: any) {
