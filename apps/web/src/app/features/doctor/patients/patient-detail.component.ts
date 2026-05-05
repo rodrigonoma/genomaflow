@@ -795,16 +795,6 @@ interface ComparisonBlock {
                         Abrir WhatsApp do paciente
                       </a>
                     }
-                    <button mat-stroked-button class="portal-link-btn" (click)="openPortalTokenDialog('subject')">
-                      <span class="material-icons">link</span>
-                      Gerar link do portal
-                    </button>
-                    @if (subject()?.subject_type === 'animal' && subject()?.owner_id) {
-                      <button mat-stroked-button class="portal-link-btn" (click)="openPortalTokenDialog('owner')">
-                        <span class="material-icons">groups</span>
-                        Link portal do tutor (todos animais)
-                      </button>
-                    }
                   }
                   @if (subject()!.subject_type === 'animal') {
                     <div class="field-pair">
@@ -830,6 +820,18 @@ interface ComparisonBlock {
                         </mat-select>
                       </mat-form-field>
                     </div>
+                  }
+
+                  <!-- Portal tokens — funciona pra paciente humano E animal vet -->
+                  <button mat-stroked-button class="portal-link-btn" (click)="openPortalTokenDialog('subject')">
+                    <span class="material-icons">link</span>
+                    {{ subject()!.subject_type === 'animal' ? 'Gerar link do portal do animal' : 'Gerar link do portal' }}
+                  </button>
+                  @if (subject()!.subject_type === 'animal' && subject()!.owner_id) {
+                    <button mat-stroked-button class="portal-link-btn" (click)="openPortalTokenDialog('owner')">
+                      <span class="material-icons">groups</span>
+                      Link portal do tutor (todos animais)
+                    </button>
                   }
                 </div>
               </div>
