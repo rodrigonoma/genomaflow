@@ -139,10 +139,10 @@ export class EcsStack extends cdk.Stack {
       // após split de subdomínios (apex agora serve só landing).
       FRONTEND_URL:                 'https://app.genomaflow.com.br',
       SES_FROM_EMAIL:               'noreply@genomaflow.com.br',
-      // Stripe Price ID do plano R$ 199/mês recurring. SUBSTITUIR pelo
-      // price_id real do Stripe Dashboard (Products → "Plano Mensal R$ 199")
-      // ANTES de cdk deploy. Test e prod têm price_ids diferentes.
-      STRIPE_PRICE_SUBSCRIPTION:    'price_REPLACE_WITH_PROD_PRICE_ID',
+      // Stripe Price ID do plano R$ 199/mês recurring (modo Live).
+      // Criado em 2026-05-04 no Stripe Dashboard ("GenomaFlow — Plano Mensal").
+      // Test mode tem price_id diferente — colocar no .env local separado.
+      STRIPE_PRICE_SUBSCRIPTION:    'price_1TTWG2DDCV02NXEwRssSGnPy',
     };
 
     const backendSecrets = {
