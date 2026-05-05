@@ -17,6 +17,19 @@ app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, 
   }
 });
 
+// AWS SNS posta notifications com Content-Type: text/plain (body é JSON puro
+// mesmo assim — quirk da AWS). Webhook /webhooks/ses precisa parsear.
+// Parser tenta JSON; se falhar, retorna o body como string (caller decide).
+app.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done) => {
+  if (!body) return done(null, {});
+  try {
+    done(null, JSON.parse(body));
+  } catch (_err) {
+    // Não é JSON — passa string mesmo. Callers devem tratar.
+    done(null, body);
+  }
+});
+
 app.register(require('./plugins/postgres'));
 app.register(require('./plugins/redis'));
 app.register(require('./plugins/auth'));

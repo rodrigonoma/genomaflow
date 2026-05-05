@@ -81,14 +81,17 @@ export class EcsStack extends cdk.Stack {
       reputationOptions: { reputationMetricsEnabled: true },
     });
 
-    new sesv2.CfnConfigurationSetEventDestination(this, 'SesConfigSetSnsDest', {
-      configurationSetName: 'genomaflow-events',
+    const sesEventDest = new sesv2.CfnConfigurationSetEventDestination(this, 'SesConfigSetSnsDest', {
+      configurationSetName: sesConfigSet.ref,  // ref garante dependency implícita
       eventDestination: {
+        name: 'sns-events',                    // nome estável dentro do destination
         enabled: true,
         matchingEventTypes: ['BOUNCE', 'COMPLAINT', 'DELIVERY', 'REJECT'],
         snsDestination: { topicArn: sesEventsTopic.topicArn },
       },
     });
+    // Dependency explícita: aguarda ConfigSet existir antes de criar EventDestination
+    sesEventDest.addDependency(sesConfigSet);
     sesConfigSet.node.addDependency(sesEventsTopic);
 
     // SNS HTTPS subscription pro endpoint webhook em prod.
