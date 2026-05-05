@@ -1,5 +1,6 @@
 const { uploadFile } = require('../storage/s3');
 const { validatePhoneBR } = require('../utils/phone');
+const { validateCNPJ } = require('../utils/documents');
 
 module.exports = async function (fastify) {
 
@@ -26,6 +27,11 @@ module.exports = async function (fastify) {
       const email = String(contact_email).trim();
       if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return reply.status(400).send({ error: 'E-mail de contato inválido' });
+      }
+    }
+    if (cnpj != null && String(cnpj).trim() !== '') {
+      if (!validateCNPJ(String(cnpj))) {
+        return reply.status(400).send({ error: 'CNPJ inválido. Verifique os dígitos.' });
       }
     }
     if (phone != null && String(phone).trim() !== '') {
