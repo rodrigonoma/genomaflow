@@ -21,6 +21,7 @@
  */
 
 const { withTenant } = require('../db/tenant');
+const copilot = require('../services/encounter-copilot');
 
 const VALID_ENCOUNTER_TYPES = ['consulta', 'retorno', 'evolucao', 'procedimento', 'telemedicina', 'outro'];
 const VALID_HYDRATION = ['normal', 'leve', 'moderada', 'severa'];
@@ -513,6 +514,60 @@ module.exports = async function (fastify) {
       if (err.code === 'NOT_FOUND') return reply.status(404).send({ error: 'encounter not found' });
       if (err.code === 'ALREADY_SIGNED') return reply.status(409).send({ error: 'encontro já assinado' });
       if (err.code === 'FORBIDDEN') return reply.status(403).send({ error: 'apenas o autor pode assinar' });
+      throw err;
+    }
+  });
+
+  // POST /encounters/copilot — IA analisa rascunho do prontuário e sugere
+  // hipóteses + exames + red flags (4.4). Não persiste — só análise on-demand.
+  fastify.post('/copilot', {
+    preHandler: [fastify.authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const { tenant_id } = request.user;
+    const { subject_id, chief_complaint, anamnesis, physical_exam, hypothesis, vital_signs } = request.body || {};
+    if (!subject_id || typeof subject_id !== 'string') {
+      return reply.status(400).send({ error: 'subject_id obrigatório' });
+    }
+
+    // Pega contexto demográfico mínimo do paciente (idade + sexo + species + módulo)
+    const ctx = await withTenant(fastify.pg, tenant_id, async (client) => {
+      const { rows } = await client.query(
+        `SELECT s.subject_type, s.sex, s.species, s.birth_date, t.module
+         FROM subjects s JOIN tenants t ON t.id = s.tenant_id
+         WHERE s.id = $1 AND s.tenant_id = $2 AND s.deleted_at IS NULL`,
+        [subject_id, tenant_id]
+      );
+      return rows[0] || null;
+    });
+    if (!ctx) return reply.status(404).send({ error: 'subject not found' });
+
+    let age_years = null;
+    if (ctx.birth_date) {
+      const ms = Date.now() - new Date(ctx.birth_date).getTime();
+      age_years = Math.floor(ms / (365.25 * 24 * 3600 * 1000));
+    }
+
+    try {
+      const result = await copilot.analyze({
+        module: ctx.module || 'human',
+        species: ctx.species,
+        age_years,
+        sex: ctx.sex,
+        chief_complaint, anamnesis, physical_exam, hypothesis, vital_signs,
+      });
+      return result;
+    } catch (err) {
+      if (err.code === 'INPUT_TOO_SHORT') {
+        return reply.status(400).send({
+          error: `Preencha mais campos antes de pedir análise (mínimo ${err.minChars} caracteres totais).`,
+          code: 'INPUT_TOO_SHORT',
+        });
+      }
+      if (err.code === 'BAD_LLM_OUTPUT') {
+        request.log.error({ err: err.message, raw: err.raw }, 'Copilot: bad LLM output');
+        return reply.status(502).send({ error: 'IA retornou resposta inválida. Tente novamente.' });
+      }
       throw err;
     }
   });

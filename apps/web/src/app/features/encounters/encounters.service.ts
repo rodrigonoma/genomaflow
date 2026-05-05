@@ -122,4 +122,47 @@ export class EncountersService {
     if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
     return this.http.get<TimelineResponse>(url);
   }
+
+  /** Co-piloto IA: analisa rascunho e sugere hipóteses + exames + red flags. */
+  copilot(payload: CopilotRequest): Observable<CopilotResponse> {
+    return this.http.post<CopilotResponse>(`${this.api}/encounters/copilot`, payload);
+  }
+}
+
+// ── Co-piloto types (4.4) ────────────────────────────────────────────────
+export interface CopilotRequest {
+  subject_id: string;
+  chief_complaint?: string | null;
+  anamnesis?: string | null;
+  physical_exam?: string | null;
+  hypothesis?: string | null;
+  vital_signs?: VitalSigns | null;
+}
+
+export interface CopilotHypothesis {
+  name: string;
+  icd10: string | null;
+  prob_score: number;
+  rationale: string;
+}
+
+export interface CopilotExam {
+  name: string;
+  type: 'lab' | 'imaging' | 'other';
+  priority: 'high' | 'medium' | 'low';
+  indication: string;
+}
+
+export interface CopilotRedFlag {
+  signal: string;
+  urgency: 'imediata' | 'hoje' | 'esta_semana';
+  recommendation: string;
+}
+
+export interface CopilotResponse {
+  hypotheses: CopilotHypothesis[];
+  recommended_exams: CopilotExam[];
+  red_flags: CopilotRedFlag[];
+  needs_more_info: string[];
+  model_version: string;
 }
