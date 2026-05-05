@@ -1,7 +1,23 @@
 ---
 name: GenomaFlow Project Context
-description: Frontend + backend em produção — stack, arquitetura, estado atual (atualizado 2026-04-28 — pós split landing×app, master broadcasts read-only, mobile responsive)
+description: Frontend + backend em produção — stack, arquitetura, estado atual (atualizado 2026-05-05 — Phase 4 IA clínica entregue: OCR foto, follow-up, IA pró-ativa, co-piloto)
 type: project
+---
+
+## Estado em 2026-05-05 — Phase 4 IA clínica entregue
+
+Após análise vs SimplesVet identificar que o gap clínico fechou, decisão estratégica de **dobrar no foso defensável (IA + UX)** em vez de construir ERP comercial nativo.
+
+**Phase 4 (4 features):**
+- 4.1 Foto de laudo impresso → OCR Vision + pipeline texto (`a97eb259`)
+- 4.2 Follow-up automatizado WhatsApp pós-consulta/exame/vacina (`7850429d`)
+- 4.3 IA pró-ativa no patient-detail (sugestões com cache 24h) (`a11d7b93`)
+- 4.4 Co-piloto durante consulta (sidebar com hipóteses + exames + red flags) (`0afab7b3`)
+
+Detalhes técnicos: `project_phase_4_ai_features.md`. Spec formal: `docs/superpowers/specs/2026-05-05-phase-4-ai-clinical-deepening-design.md`.
+
+**Não na Phase 4 (deferred):** Bling/PDV, recibo+PIX inline, Memed/BirdID assinatura digital ICP-Brasil.
+
 ---
 
 ## Domínios em produção (desde 2026-04-27)
