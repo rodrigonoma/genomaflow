@@ -75,6 +75,14 @@ type: feedback
 
 ---
 
+**Angular `@else if (signal(); as alias)` perde escopo em `@if` aninhado sob strict template type-checking.**
+
+**Why:** Em 2026-05-05, `notification-preferences-modal.component.ts` usava `} @else if (prefs(); as p) {` no nível externo + `@if (p.foo) { ... p.bar ... }` aninhado. Dev build (`--configuration=development`) compilou OK; production build falhou com `Property 'p' does not exist on type 'NotificationPreferencesModalComponent'` apesar do `p` estar dentro do bloco. Deploy `25401692297` falhou no Build & push Web.
+
+**How to apply:** Pra alias de signal/observable num modal/lista, **não usar `@else if (...; as alias)`** pra introduzir o alias. Usar `@if (...; as alias) { ... }` separado (mesmo que duplique o `@if (loading())` antes). Cada `@if (...; as alias)` cria escopo próprio bem definido. Rule of thumb: `as alias` só em `@if`, nunca em `@else if`.
+
+---
+
 **Defesa em profundidade multi-tenant: toda query em tabela tenant-scoped precisa de `AND tenant_id = $X` EXPLÍCITO — nunca confiar só em RLS.**
 
 **Why:** 2026-04-23, usuário criou nova conta (`rafaela.noma@hotmail.com`, tenant human) e viu "Amendoim" (animal do tenant `rafaelanoma@hotmail.com`, vet). Investigação provou que RLS em produção está OK (`genomaflow_app` sem BYPASSRLS/SUPERUSER, dados nos tenants corretos). Causa mais provável: JWT antigo em localStorage + ausência de indicador visual de qual tenant o usuário estava logado. MAS a auditoria expôs bugs reais que teriam causado vazamento se RLS falhasse: (1) queries sem filtro explícito de tenant em `patients.js`, `exams.js`, `prescriptions.js` etc., (2) SQL injection em `exams.js:257` via template literal em `SET LOCAL app.tenant_id`, (3) ACL trocada em `feedback.js`/`error-log.js` (checava `role !== 'admin'` mas todo admin de clínica é 'admin' — qualquer admin via feedback de todos os tenants).
