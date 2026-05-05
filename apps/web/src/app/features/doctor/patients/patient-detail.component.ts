@@ -30,6 +30,9 @@ import { VaccinesTabComponent } from '../../vaccines/vaccines-tab.component';
 import { AuthService } from '../../../core/auth/auth.service';
 import { isValidPhoneBR } from '../../../shared/utils/mask';
 import { PortalTokenDialogComponent } from '../../portal/portal-token-dialog.component';
+import { ClinicalDocumentDialogComponent } from '../../clinical-documents/clinical-document-dialog.component';
+import { ClinicalDocumentTemplatesModalComponent } from '../../clinical-documents/clinical-document-templates-modal.component';
+import { ClinicalDocumentsService, ClinicalDocument, DOC_TYPE_LABELS, DOC_TYPE_ICONS } from '../../clinical-documents/clinical-documents.service';
 import { shortId, examTypeLabel } from '../../../shared/utils/id-format';
 import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
 import { Subscription } from 'rxjs';
@@ -526,6 +529,29 @@ interface ComparisonBlock {
       font-size: 13px; color: #7c7b8f; padding: 1rem; margin: 0;
       font-style: italic;
     }
+
+    /* ── DOCUMENTOS ── */
+    .section-actions { display: inline-flex; gap: 8px; margin-left: auto; }
+    .section-help { color: #a09fb2; font-size: 12px; padding: 0 1rem 1rem; margin: 0; }
+    .docs-list { display: flex; flex-direction: column; gap: 8px; padding: 0 1rem 1rem; }
+    .doc-card {
+      display: flex; align-items: center; gap: 12px;
+      background: #111929; border: 1px solid rgba(70,69,84,0.2);
+      border-left: 3px solid #c0c1ff; border-radius: 6px;
+      padding: 0.875rem 1rem;
+    }
+    .doc-icon mat-icon { color: #c0c1ff; font-size: 28px; width: 28px; height: 28px; }
+    .doc-main { flex: 1; min-width: 0; }
+    .doc-title { color: #dae2fd; font-weight: 500; font-size: 0.9375rem; margin-bottom: 4px; }
+    .doc-meta { color: #7c7b8f; font-size: 0.75rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .badge-signed {
+      background: rgba(74,214,160,0.15); color: #4ad6a0;
+      padding: 1px 8px; border-radius: 12px; font-size: 0.6875rem;
+      letter-spacing: 0.04em;
+    }
+    .doc-actions { display: flex; gap: 4px; }
+    .doc-actions button { color: #a09fb2; }
+    .doc-actions button:hover { color: #dae2fd; }
 
     /* ── PRESCRIPTION CARD ── */
     .prescription-card {
@@ -1639,6 +1665,67 @@ interface ComparisonBlock {
           }
         </mat-tab>
 
+        <!-- ── DOCUMENTOS ── -->
+        <mat-tab [label]="'Documentos (' + clinicalDocuments().length + ')'">
+          <div class="treatments-section">
+            <div class="section-header">
+              <span class="section-title">Documentos clínicos</span>
+              <span class="section-actions">
+                <button mat-flat-button color="primary" (click)="openClinicalDocumentDialog()">
+                  <mat-icon>add</mat-icon> Novo documento
+                </button>
+                @if (auth.currentProfile?.role === 'admin' || auth.currentProfile?.role === 'master') {
+                  <button mat-stroked-button (click)="openTemplatesModal()">
+                    <mat-icon>library_books</mat-icon> Modelos
+                  </button>
+                }
+              </span>
+            </div>
+
+            <p class="section-help">
+              Atestados, pedidos de exame, encaminhamentos, relatórios e termos de consentimento.
+              Documentos assinados ficam imutáveis. Janela de edição: 24h.
+            </p>
+
+            @if (clinicalDocuments().length === 0) {
+              <p class="empty-state-small">
+                Nenhum documento emitido. Clique em <strong>Novo documento</strong> para gerar atestado, pedido de exame, encaminhamento, relatório ou termo de consentimento.
+              </p>
+            } @else {
+              <div class="docs-list">
+                @for (d of clinicalDocuments(); track d.id) {
+                  <div class="doc-card">
+                    <div class="doc-icon">
+                      <mat-icon>{{ docIcon(d.doc_type) }}</mat-icon>
+                    </div>
+                    <div class="doc-main">
+                      <div class="doc-title">{{ d.title }}</div>
+                      <div class="doc-meta">
+                        {{ docLabel(d.doc_type) }}
+                        · {{ d.created_at | date:'dd/MM/yyyy HH:mm' }}
+                        @if (d.professional_email) { · {{ d.professional_email }} }
+                        @if (d.signed_at) {
+                          <span class="badge-signed">Assinado em {{ d.signed_at | date:'dd/MM/yyyy' }}</span>
+                        }
+                      </div>
+                    </div>
+                    <div class="doc-actions">
+                      <button mat-icon-button matTooltip="Imprimir/baixar PDF" (click)="reprintDocument(d)">
+                        <mat-icon>print</mat-icon>
+                      </button>
+                      @if (!d.signed_at && d.professional_user_id === auth.currentProfile?.id) {
+                        <button mat-icon-button matTooltip="Assinar (vira imutável)" (click)="signDocument(d)">
+                          <mat-icon>task_alt</mat-icon>
+                        </button>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </mat-tab>
+
       </mat-tab-group>
     </div>
   `
@@ -1650,6 +1737,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   private dialog = inject(MatDialog);
   private ws     = inject(WsService);
   protected auth = inject(AuthService);
+  private docsService = inject(ClinicalDocumentsService);
   private wsSub?: Subscription;
   private pollInterval?: ReturnType<typeof setInterval>;
 
@@ -1658,6 +1746,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   aiResults = signal<Exam[]>([]);
   plans     = signal<TreatmentPlan[]>([]);
   prescriptions = signal<Prescription[]>([]);
+  clinicalDocuments = signal<ClinicalDocument[]>([]);
   owners    = signal<Owner[]>([]);
   ownerQuery = signal('');
 
@@ -1776,6 +1865,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     this.loadExams(id);
     this.loadPlans(id);
     this.loadPrescriptions(id);
+    this.loadClinicalDocuments(id);
     this.loadOwners();
     this.http.get<{ specialty: string | null }>(`${environment.apiUrl}/auth/me`)
       .subscribe({ next: me => this.doctorSpecialty.set(me.specialty ?? null), error: () => {} });
@@ -1987,6 +2077,132 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
           phone: this.editForm.phone || subj.phone || null,
         };
     this.dialog.open(PortalTokenDialogComponent, { width: '640px', data });
+  }
+
+  // ── DOCUMENTOS CLÍNICOS ──────────────────────────────────────────────
+  private loadClinicalDocuments(subjectId: string): void {
+    this.docsService.listDocuments(subjectId).subscribe({
+      next: r => this.clinicalDocuments.set(r.items),
+      error: () => this.clinicalDocuments.set([]),
+    });
+  }
+
+  docLabel(t: keyof typeof DOC_TYPE_LABELS): string { return DOC_TYPE_LABELS[t]; }
+  docIcon(t: keyof typeof DOC_TYPE_ICONS): string { return DOC_TYPE_ICONS[t]; }
+
+  openClinicalDocumentDialog(): void {
+    const subj = this.subject();
+    if (!subj) return;
+    const profile = this.auth.currentProfile;
+    const crm = profile?.crm_number && profile?.crm_uf
+      ? `${profile.crm_number}/${profile.crm_uf}`
+      : profile?.crm_number ?? null;
+    const ref = this.dialog.open(ClinicalDocumentDialogComponent, {
+      width: '760px',
+      panelClass: 'dark-dialog',
+      data: {
+        subject_id: subj.id,
+        subject_name: subj.name,
+        subject_type: subj.subject_type,
+        professional_name: profile?.email ?? null,
+        professional_crm: crm,
+      },
+    });
+    ref.afterClosed().subscribe(result => {
+      if (result?.created) this.loadClinicalDocuments(subj.id);
+    });
+  }
+
+  openTemplatesModal(): void {
+    this.dialog.open(ClinicalDocumentTemplatesModalComponent, { width: '1000px' });
+  }
+
+  async reprintDocument(d: ClinicalDocument): Promise<void> {
+    // Re-render PDF a partir do body. Carrega documento completo se faltar body.
+    if (!d.body) {
+      this.docsService.getDocument(d.id).subscribe({
+        next: full => this.renderDocumentPdf(full),
+        error: () => this.snack.open('Erro ao carregar documento', 'Fechar', { duration: 3000 }),
+      });
+      return;
+    }
+    await this.renderDocumentPdf(d);
+  }
+
+  private async renderDocumentPdf(d: ClinicalDocument): Promise<void> {
+    const subj = this.subject();
+    if (!subj) return;
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    // Cabeçalho via /clinic/profile (best-effort, async pra não bloquear)
+    let profile: any = null;
+    try {
+      profile = await new Promise((resolve, reject) =>
+        this.http.get(`${environment.apiUrl}/clinic/profile`).subscribe({
+          next: p => resolve(p), error: () => resolve(null),
+        })
+      );
+    } catch (_) { profile = null; }
+
+    const dateStr = new Date(d.created_at).toLocaleDateString('pt-BR');
+    let headerY = 20;
+    if (profile?.clinic_logo_url && !profile.clinic_logo_url.startsWith('s3://')) {
+      try { doc.addImage(profile.clinic_logo_url, 'PNG', 15, 10, 30, 30); } catch (_) {}
+      headerY = 15;
+    }
+    doc.setFont('helvetica', 'bold').setFontSize(14).setTextColor(11, 19, 38);
+    doc.text(profile?.name ?? 'Clínica', 105, headerY, { align: 'center' });
+    if (profile?.cnpj) {
+      doc.setFontSize(9).setFont('helvetica', 'normal').setTextColor(80, 80, 100);
+      doc.text(`CNPJ: ${profile.cnpj}`, 105, headerY + 6, { align: 'center' });
+    }
+    doc.setFontSize(9).setFont('helvetica', 'normal').setTextColor(120, 120, 140);
+    doc.text(dateStr, 195, headerY, { align: 'right' });
+    doc.setDrawColor(192, 193, 255).line(15, 45, 195, 45);
+
+    doc.setFont('helvetica', 'bold').setFontSize(13).setTextColor(27, 27, 100);
+    doc.text(d.title.toUpperCase(), 105, 55, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal').setFontSize(10).setTextColor(40, 40, 60);
+    let y = 70;
+    const lines = doc.splitTextToSize(d.body || '', 180);
+    for (const line of lines) {
+      if (y > 260) { doc.addPage(); y = 20; }
+      doc.text(line, 15, y);
+      y += 6;
+    }
+
+    y = Math.max(y + 20, 240);
+    doc.line(15, y, 95, y);
+    doc.setFontSize(9).setTextColor(80, 80, 100);
+    doc.text(d.professional_email || 'Profissional responsável', 15, y + 5);
+
+    if (d.signed_at) {
+      doc.setFontSize(8).setTextColor(60, 140, 100);
+      doc.text(`Assinado em ${new Date(d.signed_at).toLocaleDateString('pt-BR')}`, 15, y + 10);
+    }
+
+    doc.setFontSize(7).setTextColor(120, 120, 140);
+    doc.text(
+      `${DOC_TYPE_LABELS[d.doc_type]} · GenomaFlow Clinical AI · ${dateStr}`,
+      105, 285, { align: 'center' }
+    );
+
+    const fileName = `${d.doc_type}-${subj.name.replace(/\s+/g, '-').toLowerCase()}-${new Date(d.created_at).toISOString().slice(0, 10)}.pdf`;
+    doc.save(fileName);
+  }
+
+  signDocument(d: ClinicalDocument): void {
+    if (!confirm(`Assinar documento "${d.title}"? Após assinado vira imutável.`)) return;
+    this.docsService.signDocument(d.id).subscribe({
+      next: () => {
+        this.snack.open('Documento assinado.', 'OK', { duration: 2000 });
+        const subj = this.subject();
+        if (subj) this.loadClinicalDocuments(subj.id);
+      },
+      error: (err) => this.snack.open(err?.error?.error ?? 'Erro ao assinar', 'Fechar', { duration: 4000 }),
+    });
   }
 
   saveProfile(): void {
