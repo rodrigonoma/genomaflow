@@ -153,8 +153,11 @@ async function generateRemindersForUpcoming() {
         });
 
         // Idempotência via UNIQUE INDEX uniq_appt_reminder_hours em
-        // (appointment_id, hours_before) WHERE type='appointment_reminder'.
+        // (appointment_id, hours_before) WHERE type='appointment_reminder'
+        //   AND status IN ('pending','sent').
         // ON CONFLICT DO NOTHING evita corrida e duplicação cross-ticks.
+        // Como o ON CONFLICT exige expressão exata do índice, repetimos o
+        // WHERE incluindo status — só conflita com pending/sent existente.
         const insertResult = await client.query(
           `INSERT INTO scheduled_notifications (
              tenant_id, notification_type, appointment_id, subject_id,
@@ -164,6 +167,7 @@ async function generateRemindersForUpcoming() {
              WHERE notification_type = 'appointment_reminder'
                    AND appointment_id IS NOT NULL
                    AND hours_before IS NOT NULL
+                   AND status IN ('pending', 'sent')
              DO NOTHING
            RETURNING id`,
           [apt.tenant_id, apt.id, apt.subject_id,

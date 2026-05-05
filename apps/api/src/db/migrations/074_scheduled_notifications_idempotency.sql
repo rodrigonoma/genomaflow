@@ -44,9 +44,14 @@ SET status = 'cancelled',
 FROM ranked r
 WHERE sn.id = r.id AND r.rn > 1 AND sn.status IN ('pending', 'sent');
 
--- UNIQUE INDEX partial — só aplica em appointment_reminder com NN
+-- UNIQUE INDEX partial — só aplica em appointment_reminder ATIVO
+-- (status IN pending/sent). Cancelled/failed NÃO conta — preserva histórico
+-- de duplicatas que foram cancelled pela query acima sem violar a constraint.
+-- Permite também recriar reminder se appointment foi reagendado após
+-- cancelamento prévio.
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_appt_reminder_hours
   ON scheduled_notifications(appointment_id, hours_before)
   WHERE notification_type = 'appointment_reminder'
     AND appointment_id IS NOT NULL
-    AND hours_before IS NOT NULL;
+    AND hours_before IS NOT NULL
+    AND status IN ('pending', 'sent');
