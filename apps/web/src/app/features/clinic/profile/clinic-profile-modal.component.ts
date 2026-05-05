@@ -8,7 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { FormsModule } from '@angular/forms';
-import { isValidPhoneBR, formatPhone } from '../../../shared/utils/mask';
+import { isValidPhoneBR, formatPhone, isValidCNPJ, formatCnpj } from '../../../shared/utils/mask';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { environment } from '../../../../environments/environment';
@@ -53,7 +53,13 @@ interface ChatSettings {
 
       <mat-form-field class="field" appearance="outline">
         <mat-label>CNPJ</mat-label>
-        <input matInput [(ngModel)]="cnpj" placeholder="00.000.000/0000-00" />
+        <input matInput [ngModel]="cnpj"
+               (ngModelChange)="cnpj = onCnpjInput($event)"
+               placeholder="00.000.000/0000-00" inputmode="numeric" />
+        @if (cnpj && !isCnpjValid(cnpj)) {
+          <mat-error>CNPJ inválido</mat-error>
+          <mat-hint style="color:#ffb4ab">Verifique os dígitos</mat-hint>
+        }
       </mat-form-field>
 
       <div class="section-divider"></div>
@@ -144,6 +150,8 @@ export class ClinicProfileModalComponent implements OnInit {
 
   onPhoneInput(v: string): string { return formatPhone(v); }
   isPhoneValid(v: string | null | undefined): boolean { return isValidPhoneBR(v); }
+  onCnpjInput(v: string): string { return formatCnpj(v); }
+  isCnpjValid(v: string | null | undefined): boolean { return isValidCNPJ(v); }
 
   name               = '';
   cnpj               = '';
@@ -191,6 +199,10 @@ export class ClinicProfileModalComponent implements OnInit {
 
   save(): void {
     if (!this.name.trim()) { this.error.set('Nome da clínica é obrigatório'); return; }
+    if (this.cnpj.trim() && !isValidCNPJ(this.cnpj)) {
+      this.error.set('CNPJ inválido. Verifique os dígitos.');
+      return;
+    }
     if (this.phone.trim() && !isValidPhoneBR(this.phone)) {
       this.error.set('Telefone inválido. Use formato com DDD: (11) 99999-9999');
       return;

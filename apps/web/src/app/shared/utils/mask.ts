@@ -71,3 +71,69 @@ export function isValidPhoneBR(value: string | null | undefined): boolean {
   if (local.length === 10 && !'2345'.includes(local[2])) return false;
   return true;
 }
+
+/**
+ * CNPJ format: 00.000.000/0000-00 (14 dígitos)
+ */
+export function formatCnpj(value: string | null | undefined): string {
+  const d = unmask(value).slice(0, 14);
+  if (d.length <= 2)  return d;
+  if (d.length <= 5)  return `${d.slice(0,2)}.${d.slice(2)}`;
+  if (d.length <= 8)  return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5)}`;
+  if (d.length <= 12) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8)}`;
+  return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
+}
+
+/**
+ * Valida CPF via dígitos verificadores. Vazio = válido (campo opcional).
+ */
+export function isValidCPF(value: string | null | undefined): boolean {
+  if (value === null || value === undefined || value === '') return true;
+  const digits = unmask(String(value));
+  if (digits.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(digits)) return false;
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += parseInt(digits[i], 10) * (10 - i);
+  let rem = (sum * 10) % 11;
+  if (rem === 10) rem = 0;
+  if (rem !== parseInt(digits[9], 10)) return false;
+  sum = 0;
+  for (let i = 0; i < 10; i++) sum += parseInt(digits[i], 10) * (11 - i);
+  rem = (sum * 10) % 11;
+  if (rem === 10) rem = 0;
+  return rem === parseInt(digits[10], 10);
+}
+
+/**
+ * Valida CNPJ via dígitos verificadores. Vazio = válido (campo opcional).
+ */
+export function isValidCNPJ(value: string | null | undefined): boolean {
+  if (value === null || value === undefined || value === '') return true;
+  const digits = unmask(String(value));
+  if (digits.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(digits)) return false;
+  const w1 = [5,4,3,2,9,8,7,6,5,4,3,2];
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += parseInt(digits[i], 10) * w1[i];
+  let rem = sum % 11;
+  const dv1 = rem < 2 ? 0 : 11 - rem;
+  if (dv1 !== parseInt(digits[12], 10)) return false;
+  const w2 = [6,5,4,3,2,9,8,7,6,5,4,3,2];
+  sum = 0;
+  for (let i = 0; i < 13; i++) sum += parseInt(digits[i], 10) * w2[i];
+  rem = sum % 11;
+  const dv2 = rem < 2 ? 0 : 11 - rem;
+  return dv2 === parseInt(digits[13], 10);
+}
+
+/**
+ * Aceita CPF (11 dígitos) OU CNPJ (14 dígitos). Útil em cadastro de tutor
+ * (pode ser pessoa física ou jurídica). Vazio = válido.
+ */
+export function isValidCpfOrCnpj(value: string | null | undefined): boolean {
+  if (value === null || value === undefined || value === '') return true;
+  const digits = unmask(String(value));
+  if (digits.length === 11) return isValidCPF(digits);
+  if (digits.length === 14) return isValidCNPJ(digits);
+  return false;
+}

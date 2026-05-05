@@ -1,6 +1,7 @@
 const { withTenant } = require('../db/tenant');
 const crypto = require('crypto');
 const { validatePhoneBR } = require('../utils/phone');
+const { validateCPF, validateCpfOrCnpj } = require('../utils/documents');
 
 /**
  * Validador único pra phone — DDD obrigatório.
@@ -11,6 +12,22 @@ function checkPhone(value, fieldLabel = 'Telefone') {
   if (value == null || String(value).trim() === '') return null;
   if (!validatePhoneBR(String(value))) {
     return `${fieldLabel} inválido. Use formato com DDD: (11) 99999-9999`;
+  }
+  return null;
+}
+
+function checkCPF(value, fieldLabel = 'CPF') {
+  if (value == null || String(value).trim() === '') return null;
+  if (!validateCPF(String(value))) {
+    return `${fieldLabel} inválido. Verifique os dígitos.`;
+  }
+  return null;
+}
+
+function checkCpfOrCnpj(value, fieldLabel = 'CPF/CNPJ') {
+  if (value == null || String(value).trim() === '') return null;
+  if (!validateCpfOrCnpj(String(value))) {
+    return `${fieldLabel} inválido. Verifique os dígitos.`;
   }
   return null;
 }
@@ -56,6 +73,8 @@ module.exports = async function (fastify) {
     if (!name) return reply.status(400).send({ error: 'name is required' });
     const phoneErr = checkPhone(phone, 'Telefone do tutor');
     if (phoneErr) return reply.status(400).send({ error: phoneErr });
+    const cpfErr = checkCpfOrCnpj(cpf, 'CPF/CNPJ do tutor');
+    if (cpfErr) return reply.status(400).send({ error: cpfErr });
 
     const owner = await withTenant(fastify.pg, tenant_id, async (client) => {
       const { rows } = await client.query(
@@ -130,6 +149,10 @@ module.exports = async function (fastify) {
 
     const phoneErr = checkPhone(phone, 'Telefone do paciente');
     if (phoneErr) return reply.status(400).send({ error: phoneErr });
+    // Em humano: apenas CPF (11). Em vet: subjects raramente têm CPF (animal),
+    // mas o code aceita por extensão pra dono digitar; validamos como CPF.
+    const cpfErr = checkCPF(cpf, 'CPF do paciente');
+    if (cpfErr) return reply.status(400).send({ error: cpfErr });
 
     // Consentimento LGPD — se o profissional marcou, registra quem e quando.
     const consentAt = consent_given ? new Date() : null;

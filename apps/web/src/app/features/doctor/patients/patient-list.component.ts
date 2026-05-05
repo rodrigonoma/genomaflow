@@ -16,7 +16,10 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { environment } from '../../../../environments/environment';
 import { Subject, Owner } from '../../../shared/models/api.models';
 import { AuthService } from '../../../core/auth/auth.service';
-import { formatCpf, formatPhone, formatCep, unmask, isValidPhoneBR } from '../../../shared/utils/mask';
+import {
+  formatCpf, formatPhone, formatCep, formatCnpj, unmask,
+  isValidPhoneBR, isValidCPF, isValidCpfOrCnpj,
+} from '../../../shared/utils/mask';
 import { lookupCep } from '../../../shared/utils/viacep';
 import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
 
@@ -210,10 +213,14 @@ import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
               <input matInput [(ngModel)]="ownerForm.name"/>
             </mat-form-field>
             <mat-form-field appearance="outline">
-              <mat-label>CPF</mat-label>
+              <mat-label>CPF ou CNPJ</mat-label>
               <input matInput [ngModel]="ownerForm.cpf ?? ''"
-                     (ngModelChange)="ownerForm.cpf = onCpfInput($event)"
-                     placeholder="000.000.000-00" inputmode="numeric"/>
+                     (ngModelChange)="ownerForm.cpf = onCpfOrCnpjInput($event)"
+                     placeholder="000.000.000-00 ou 00.000.000/0000-00" inputmode="numeric"/>
+              @if (ownerForm.cpf && !isCpfOrCnpjValid(ownerForm.cpf)) {
+                <mat-error>CPF/CNPJ inválido</mat-error>
+                <mat-hint style="color:#ffb4ab">Verifique os dígitos</mat-hint>
+              }
             </mat-form-field>
           </div>
           <div class="field-pair">
@@ -332,6 +339,10 @@ import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
                   <input matInput [ngModel]="patientForm.cpf ?? ''"
                          (ngModelChange)="patientForm.cpf = onCpfInput($event)"
                          placeholder="000.000.000-00" inputmode="numeric"/>
+                  @if (patientForm.cpf && !isCpfValid(patientForm.cpf)) {
+                    <mat-error>CPF inválido</mat-error>
+                    <mat-hint style="color:#ffb4ab">Verifique os dígitos</mat-hint>
+                  }
                 </mat-form-field>
               </div>
               <div class="section-divider">Dados clínicos (opcional)</div>
@@ -655,6 +666,18 @@ export class PatientListComponent implements OnInit, OnDestroy {
   onCpfInput(v: string): string   { return formatCpf(v); }
   onPhoneInput(v: string): string { return formatPhone(v); }
   isPhoneValid(v: string | null | undefined): boolean { return isValidPhoneBR(v); }
+
+  /**
+   * Detecta CPF (≤11 dígitos) ou CNPJ (>11) e formata conforme:
+   * Aplicado no input de owners.cpf que aceita PF ou PJ.
+   */
+  onCpfOrCnpjInput(v: string): string {
+    const d = unmask(v);
+    if (d.length <= 11) return formatCpf(v);
+    return formatCnpj(v);
+  }
+  isCpfValid(v: string | null | undefined): boolean { return isValidCPF(v); }
+  isCpfOrCnpjValid(v: string | null | undefined): boolean { return isValidCpfOrCnpj(v); }
   onCepInput(v: string): string   { return formatCep(v); }
 
   onCepBlur(): void {
@@ -681,6 +704,10 @@ export class PatientListComponent implements OnInit, OnDestroy {
       this.formError.set('Telefone do tutor inválido. Use formato com DDD: (11) 99999-9999');
       return;
     }
+    if (!isValidCpfOrCnpj(this.ownerForm.cpf)) {
+      this.formError.set('CPF/CNPJ do tutor inválido. Verifique os dígitos.');
+      return;
+    }
     const payload = {
       ...this.ownerForm,
       cpf:   this.ownerForm.cpf   ? unmask(this.ownerForm.cpf)   : null,
@@ -698,6 +725,10 @@ export class PatientListComponent implements OnInit, OnDestroy {
     this.formError.set('');
     if (!isValidPhoneBR(this.patientForm.phone)) {
       this.formError.set('Telefone do paciente inválido. Use formato com DDD: (11) 99999-9999');
+      return;
+    }
+    if (!isValidCPF(this.patientForm.cpf)) {
+      this.formError.set('CPF do paciente inválido. Verifique os dígitos.');
       return;
     }
     const payload = {
