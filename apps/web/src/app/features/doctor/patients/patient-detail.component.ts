@@ -29,6 +29,7 @@ import { TimelineComponent } from '../../encounters/timeline.component';
 import { VaccinesTabComponent } from '../../vaccines/vaccines-tab.component';
 import { AuthService } from '../../../core/auth/auth.service';
 import { isValidPhoneBR } from '../../../shared/utils/mask';
+import { PortalTokenDialogComponent } from '../../portal/portal-token-dialog.component';
 import { shortId, examTypeLabel } from '../../../shared/utils/id-format';
 import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
 import { Subscription } from 'rxjs';
@@ -125,12 +126,15 @@ interface ComparisonBlock {
     .field-row { display: flex; flex-direction: column; gap: 1rem; }
     .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .wa-quick-btn { display: inline-flex; align-items: center; gap: 8px;
-                    padding: 8px 14px; margin-top: -0.5rem; margin-bottom: 1rem;
+                    padding: 8px 14px; margin-top: -0.5rem; margin-bottom: 0.5rem;
                     background: #25D366; color: #fff; text-decoration: none;
                     border-radius: 4px; font-size: 0.8125rem; font-weight: 600;
                     transition: opacity 0.15s; }
     .wa-quick-btn:hover { opacity: 0.9; }
     .wa-quick-btn .material-icons { font-size: 18px; }
+    .portal-link-btn { display: inline-flex; align-items: center; gap: 8px;
+                       margin-bottom: 1rem; font-size: 0.8125rem; }
+    .portal-link-btn .material-icons { font-size: 18px; }
     mat-form-field { width: 100%; }
     .save-row { display: flex; justify-content: flex-end; margin-top: 1rem; }
 
@@ -757,6 +761,16 @@ interface ComparisonBlock {
                         <span class="material-icons">chat</span>
                         Abrir WhatsApp do paciente
                       </a>
+                    }
+                    <button mat-stroked-button class="portal-link-btn" (click)="openPortalTokenDialog('subject')">
+                      <span class="material-icons">link</span>
+                      Gerar link do portal
+                    </button>
+                    @if (subject()?.subject_type === 'animal' && subject()?.owner_id) {
+                      <button mat-stroked-button class="portal-link-btn" (click)="openPortalTokenDialog('owner')">
+                        <span class="material-icons">groups</span>
+                        Link portal do tutor (todos animais)
+                      </button>
                     }
                   }
                   @if (subject()!.subject_type === 'animal') {
@@ -1951,6 +1965,29 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   }
 
   isPhoneValid(v: string | null | undefined): boolean { return isValidPhoneBR(v); }
+
+  /**
+   * Abre dialog de gerenciamento de portal token.
+   * scope='subject' (default): token cobre 1 paciente/animal.
+   * scope='owner': token cobre TODOS os animais do tutor (vet only — quando
+   * subject é animal e tem owner_id).
+   */
+  openPortalTokenDialog(scope: 'subject' | 'owner' = 'subject'): void {
+    const subj = this.subject();
+    if (!subj) return;
+    const data: any = scope === 'owner' && subj.owner_id
+      ? {
+          owner_id: subj.owner_id,
+          owner_name: (subj as any).owner_name || 'Tutor',
+          phone: (subj as any).owner_phone || null,
+        }
+      : {
+          subject_id: subj.id,
+          subject_name: subj.name,
+          phone: this.editForm.phone || subj.phone || null,
+        };
+    this.dialog.open(PortalTokenDialogComponent, { width: '640px', data });
+  }
 
   saveProfile(): void {
     if (this.editForm.phone && !isValidPhoneBR(this.editForm.phone)) {
