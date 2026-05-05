@@ -166,14 +166,25 @@ module.exports = async function (fastify) {
     };
   });
 
-  // ── Inbound webhook (público, validado via X-Token) ───────────────
+  // ── Inbound webhook (público, validado via segmento do PATH) ──────
 
-  // Z-API postar aqui. Auth via header X-Token = ZAPI_CLIENT_TOKEN.
-  // Processa "1" = confirma appointment, "2" = cancela.
-  fastify.post('/whatsapp/inbound', async (request, reply) => {
-    if (!whatsapp.verifyWebhook(request.headers)) {
-      return reply.status(401).send({ error: 'invalid signature' });
+  // Z-API panel não permite custom headers (descoberto 2026-05-05).
+  // Solução: token vai no PATH como segmento. URL configurada no painel Z-API:
+  //   https://app.genomaflow.com.br/api/notifications/whatsapp/inbound/<ZAPI_CLIENT_TOKEN>
+  // Segurança equivalente a header X-Token (TLS protege ambos; Z-API server→server,
+  // path não vaza em logs de browser).
+  // Path antigo /whatsapp/inbound mantido pra retrocompat — retorna 401 sem token.
+  async function handleInboundWebhook(request, reply, secretInPath = null) {
+    const expected = process.env.ZAPI_CLIENT_TOKEN;
+    const isMock = whatsapp.isMock();
+
+    if (!isMock && expected) {
+      const provided = secretInPath || request.headers['x-token'] || request.headers['X-Token'];
+      if (provided !== expected) {
+        return reply.status(401).send({ error: 'invalid signature' });
+      }
     }
+    // Em mock OU sem ZAPI_CLIENT_TOKEN setado → degrade gracefully (dev)
 
     const body = request.body || {};
     // Z-API payload (varia por config; usamos formato comum):
@@ -249,5 +260,16 @@ module.exports = async function (fastify) {
     }, { userId: null, channel: 'system' });
 
     return { ok: true, processed: true, action };
+  }
+
+  // Path com token (preferido — Z-API painel não permite custom headers)
+  fastify.post('/whatsapp/inbound/:secret', async (request, reply) => {
+    return handleInboundWebhook(request, reply, request.params.secret);
+  });
+
+  // Path sem token (retrocompat / valida via header X-Token se setar manualmente
+  // por algum cliente custom). Em prod com ZAPI_CLIENT_TOKEN setado, retorna 401.
+  fastify.post('/whatsapp/inbound', async (request, reply) => {
+    return handleInboundWebhook(request, reply, null);
   });
 };
