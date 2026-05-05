@@ -26,6 +26,7 @@ import { WsService } from '../../../core/ws/ws.service';
 import { EncounterFormComponent } from '../../encounters/encounter-form.component';
 import { EncounterListComponent } from '../../encounters/encounter-list.component';
 import { TimelineComponent } from '../../encounters/timeline.component';
+import { VaccinesTabComponent } from '../../vaccines/vaccines-tab.component';
 import { AuthService } from '../../../core/auth/auth.service';
 import { shortId, examTypeLabel } from '../../../shared/utils/id-format';
 import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
@@ -55,6 +56,7 @@ interface ComparisonBlock {
     MatChipsModule, MatDialogModule, MatCheckboxModule, MatMenuModule, MatAutocompleteModule, MatSnackBarModule, MatTooltipModule, ExamCardComponent,
     PrescriptionModalComponent,
     EncounterFormComponent, EncounterListComponent, TimelineComponent,
+    VaccinesTabComponent,
   ],
   styles: [`
     :host { display: block; background: #0b1326; min-height: 100vh; }
@@ -992,6 +994,18 @@ interface ComparisonBlock {
             }
           </div>
         </mat-tab>
+
+        <!-- ── VACINAS (vet only — Fase 2 PMS) ── -->
+        @if (moduleHint() === 'veterinary') {
+          <mat-tab label="Vacinas">
+            <div class="tab-content">
+              <app-vaccines-tab
+                [subjectId]="patientId"
+                [species]="subject()?.species ?? null"
+              ></app-vaccines-tab>
+            </div>
+          </mat-tab>
+        }
 
         <!-- ── EXAMES ── -->
         <mat-tab [label]="'Exames (' + exams().length + ')'">
