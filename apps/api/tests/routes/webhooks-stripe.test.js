@@ -129,7 +129,7 @@ describe('handleInvoicePaid', () => {
   beforeEach(() => jest.clearAllMocks());
   const { handleInvoicePaid } = require('../../src/services/billing-events');
 
-  test('grant 122 créditos recurring + atualiza period_end', async () => {
+  test('renovação atualiza period_end + ativa billing_status — NÃO concede créditos', async () => {
     const pgMock = buildPgMock();
     const redisMock = buildRedisMock();
     const event = {
@@ -146,8 +146,12 @@ describe('handleInvoicePaid', () => {
       },
     };
     const result = await handleInvoicePaid(pgMock.pool, event, redisMock);
-    expect(result).toEqual({ handled: true, idempotent: false, credits: 122 });
+    expect(result).toEqual({ handled: true, idempotent: false });
     expect(redisMock.publish).toHaveBeenCalledWith('billing:renewed:tenant-uuid-1', expect.any(String));
+    // Confirma que NÃO chamou INSERT INTO credit_ledger (bônus só no 1º mês)
+    expect(pgMock.client.query.mock.calls.some(c => /INSERT INTO credit_ledger/i.test(c[0]))).toBe(false);
+    // Confirma que atualizou current_period_end
+    expect(pgMock.client.query.mock.calls.some(c => /current_period_end/.test(c[0]))).toBe(true);
   });
 
   test('event sem subscription → no-op', async () => {

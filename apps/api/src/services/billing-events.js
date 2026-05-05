@@ -262,8 +262,10 @@ async function handleTopupCompleted(pg, event, session, tenantId, redis) {
   }, { userId: null, channel: 'system' });
 }
 
-const RECURRING_BONUS_CREDITS = 122; // mesmo bônus mensal de subscriber ativo
-
+// Política de créditos (2026-05-04): bônus 122 só no 1º mês (subscription_bonus
+// no checkout). Renovações mensais NÃO concedem créditos novos — assinante usa
+// 122 do onboarding + topups quando precisar. invoice.paid ainda processa pra
+// manter current_period_end + billing_status='active' atualizados.
 async function handleInvoicePaid(pg, event, redis) {
   const invoice = event.data.object;
   // Subscription invoices têm subscription_id; one-off não
@@ -283,7 +285,7 @@ async function handleInvoicePaid(pg, event, redis) {
       kind: 'invoice_paid',
       tenantId,
       amountBrl: invoice.amount_paid ? invoice.amount_paid / 100 : null,
-      creditsGranted: RECURRING_BONUS_CREDITS,
+      creditsGranted: null,
     });
     if (!isNew) return { handled: true, idempotent: true };
 
@@ -298,17 +300,11 @@ async function handleInvoicePaid(pg, event, redis) {
       [tenantId]
     );
 
-    await client.query(
-      `INSERT INTO credit_ledger (tenant_id, amount, kind, description)
-       VALUES ($1, $2, 'topup_recurring', 'Renovação mensal Stripe')`,
-      [tenantId, RECURRING_BONUS_CREDITS]
-    );
-
     if (redis) {
-      await redis.publish(`billing:renewed:${tenantId}`, JSON.stringify({ credits: RECURRING_BONUS_CREDITS }));
+      await redis.publish(`billing:renewed:${tenantId}`, JSON.stringify({}));
     }
 
-    return { handled: true, idempotent: false, credits: RECURRING_BONUS_CREDITS };
+    return { handled: true, idempotent: false };
   }, { userId: null, channel: 'system' });
 }
 
@@ -381,5 +377,4 @@ module.exports = {
   handleSubscriptionDeleted,
   recordPaymentEvent,
   ONBOARDING_BONUS_CREDITS,
-  RECURRING_BONUS_CREDITS,
 };
