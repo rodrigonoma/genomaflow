@@ -107,12 +107,18 @@ async function handleSubscriptionCompleted(pg, event, session, tenantId, redis) 
  */
 async function handleOnboardingSubscriptionCompleted(pg, event, session, redis) {
   const meta = session.metadata || {};
-  const { email, clinic_name, password_hash, module: mod, specialties } = meta;
+  const { email, clinic_name, password_hash, module: mod, specialties, professional_type: ptype } = meta;
 
   if (!email || !clinic_name || !password_hash || !mod) {
     throw new Error(`onboarding metadata incompleta (session ${session.id})`);
   }
   const specialtiesArr = (specialties || '').split(',').filter(Boolean);
+
+  // professional_type valida contra whitelist — metadata Stripe não é trusted
+  // input. Default 'medico' se ausente (compat retro com sessions antigas) ou
+  // inválida (gate só libera prescrição pra medico/dentista — fail-closed).
+  const { VALID_PROFESSIONAL_TYPES } = require('../constants');
+  const professional_type = ptype && VALID_PROFESSIONAL_TYPES.includes(ptype) ? ptype : 'medico';
 
   // Pré-check de idempotência: se evento já foi processado, já temos tenant.
   // Evita recriar tenant + user numa retry. Pega antes do INSERT em tenants
@@ -171,9 +177,9 @@ async function handleOnboardingSubscriptionCompleted(pg, event, session, redis) 
   return withTenant(pg, newTenantId, async (client) => {
     // User admin com email auto-verificado (paid signup = ID verificada via Stripe)
     await client.query(
-      `INSERT INTO users (tenant_id, email, password_hash, role, email_verified_at)
-       VALUES ($1, $2, $3, 'admin', NOW())`,
-      [newTenantId, email, password_hash]
+      `INSERT INTO users (tenant_id, email, password_hash, role, professional_type, email_verified_at)
+       VALUES ($1, $2, $3, 'admin', $4, NOW())`,
+      [newTenantId, email, password_hash, professional_type]
     );
 
     // Specialties (whitelist já validada em /onboarding/checkout, valida de novo aqui

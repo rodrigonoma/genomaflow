@@ -125,6 +125,129 @@ describe('handleCheckoutCompleted — subscription mode', () => {
   });
 });
 
+describe('handleCheckoutCompleted — onboarding (Option E) propaga professional_type', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  // Restaura mock original do Stripe (com mockConstructEvent) ao final pra não vazar
+  // pra os testes de "POST /webhooks/stripe — signature validation" que vêm depois.
+  afterAll(() => {
+    Stripe.mockImplementation(() => ({
+      webhooks: { constructEvent: Stripe.mockConstructEvent },
+    }));
+  });
+
+  function buildOnboardingPgMock() {
+    // Pré-check de idempotência (payment_events) e pré-check de email — ambos vazios
+    // Então INSERT INTO tenants RETURNING id retorna o novo id
+    // Dentro do withTenant, INSERT INTO users vira a query crítica que queremos inspecionar
+    const queries = [];
+    const client = {
+      query: jest.fn(async (sql, params) => {
+        queries.push({ sql, params });
+        if (/INSERT INTO payment_events/i.test(sql)) {
+          return { rows: [{ id: 1 }] };
+        }
+        return { rows: [] };
+      }),
+      release: jest.fn(),
+    };
+    const pool = {
+      connect: jest.fn(async () => client),
+      query: jest.fn(async (sql) => {
+        if (/SELECT tenant_id FROM payment_events/i.test(sql)) return { rows: [] }; // não duplicado
+        if (/SELECT id, tenant_id FROM users/i.test(sql)) return { rows: [] };       // email livre
+        if (/INSERT INTO tenants/i.test(sql)) return { rows: [{ id: 'tenant-new-1' }] };
+        return { rows: [] };
+      }),
+    };
+    return { pool, client, queries };
+  }
+
+  function buildOnboardingEvent(metadata) {
+    return {
+      id: 'evt_onb_001',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_onb_001',
+          mode: 'subscription',
+          customer: 'cus_onb_001',
+          subscription: 'sub_onb_001',
+          amount_total: 19900,
+          metadata: {
+            origin: 'onboarding',
+            email: 'admin@clinica.com',
+            clinic_name: 'Clínica Teste',
+            password_hash: '$2b$12$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMN0123',
+            module: 'estetica',
+            specialties: 'metabolic',
+            ...metadata,
+          },
+        },
+      },
+    };
+  }
+
+  test('professional_type=esteticista vai pra INSERT users', async () => {
+    // Mock stripe.customers.update + subscriptions.update (best-effort no handler)
+    Stripe.mockImplementation(() => ({
+      customers: { update: jest.fn(async () => ({})) },
+      subscriptions: { update: jest.fn(async () => ({})) },
+      webhooks: { constructEvent: jest.fn() },
+    }));
+    require('../../src/services/stripe-client')._resetClient();
+
+    const pgMock = buildOnboardingPgMock();
+    const event = buildOnboardingEvent({ professional_type: 'esteticista' });
+
+    const result = await handleCheckoutCompleted(pgMock.pool, event, null);
+    expect(result.handled).toBe(true);
+    expect(result.tenant_id).toBe('tenant-new-1');
+
+    const userInsert = pgMock.client.query.mock.calls.find(c => /INSERT INTO users/i.test(c[0]));
+    expect(userInsert).toBeDefined();
+    // INSERT users (tenant_id, email, password_hash, role, professional_type, email_verified_at)
+    expect(userInsert[0]).toMatch(/professional_type/);
+    // params [newTenantId, email, password_hash, professional_type]
+    expect(userInsert[1][3]).toBe('esteticista');
+  });
+
+  test('professional_type ausente → default medico (compat retro)', async () => {
+    Stripe.mockImplementation(() => ({
+      customers: { update: jest.fn(async () => ({})) },
+      subscriptions: { update: jest.fn(async () => ({})) },
+      webhooks: { constructEvent: jest.fn() },
+    }));
+    require('../../src/services/stripe-client')._resetClient();
+
+    const pgMock = buildOnboardingPgMock();
+    // não passa professional_type na metadata
+    const event = buildOnboardingEvent({});
+
+    await handleCheckoutCompleted(pgMock.pool, event, null);
+
+    const userInsert = pgMock.client.query.mock.calls.find(c => /INSERT INTO users/i.test(c[0]));
+    expect(userInsert[1][3]).toBe('medico');
+  });
+
+  test('professional_type inválido na metadata → fallback medico (defesa em profundidade)', async () => {
+    Stripe.mockImplementation(() => ({
+      customers: { update: jest.fn(async () => ({})) },
+      subscriptions: { update: jest.fn(async () => ({})) },
+      webhooks: { constructEvent: jest.fn() },
+    }));
+    require('../../src/services/stripe-client')._resetClient();
+
+    const pgMock = buildOnboardingPgMock();
+    const event = buildOnboardingEvent({ professional_type: 'hacker' });
+
+    await handleCheckoutCompleted(pgMock.pool, event, null);
+
+    const userInsert = pgMock.client.query.mock.calls.find(c => /INSERT INTO users/i.test(c[0]));
+    expect(userInsert[1][3]).toBe('medico');
+  });
+});
+
 describe('handleInvoicePaid', () => {
   beforeEach(() => jest.clearAllMocks());
   const { handleInvoicePaid } = require('../../src/services/billing-events');

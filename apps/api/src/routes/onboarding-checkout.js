@@ -19,14 +19,14 @@
 // tem dados muito piores.
 
 const bcrypt = require('bcrypt');
-const { VALID_MODULES, VALID_AGENT_TYPES } = require('../constants');
+const { VALID_MODULES, VALID_AGENT_TYPES, VALID_PROFESSIONAL_TYPES } = require('../constants');
 const stripeClient = require('../services/stripe-client');
 
 module.exports = async function (fastify) {
   fastify.post('/onboarding/checkout', {
     config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
   }, async (request, reply) => {
-    const { clinic_name, email: rawEmail, password, module: mod, specialties } = request.body || {};
+    const { clinic_name, email: rawEmail, password, module: mod, specialties, professional_type: ptype } = request.body || {};
 
     if (!clinic_name || !rawEmail || !password || !mod || !Array.isArray(specialties)) {
       return reply.status(400).send({ error: 'Campos obrigatórios: clinic_name, email, password, module, specialties' });
@@ -53,6 +53,11 @@ module.exports = async function (fastify) {
     if (!cleanClinicName || cleanClinicName.length > 100) {
       return reply.status(400).send({ error: 'Nome da clínica deve ter entre 1 e 100 caracteres' });
     }
+
+    // professional_type opcional — default 'medico' (compat com onboarding human/vet
+    // que ainda não manda o campo). Validado contra whitelist; valor inválido cai
+    // no default em vez de 400 pra não quebrar fluxo de quem não precisa do gate.
+    const professional_type = ptype && VALID_PROFESSIONAL_TYPES.includes(ptype) ? ptype : 'medico';
 
     // Pré-checagem antes do Stripe — evita usuário pagar e ficar travado no
     // login depois (webhook abortaria por email duplicado).
@@ -101,6 +106,7 @@ module.exports = async function (fastify) {
         password_hash,
         module: mod,
         specialties: specialtiesStr,
+        professional_type,
       },
       // Subscription metadata replicada pra invoice.paid futuro encontrar tenant.
       // Mas tenant_id ainda não existe — preenchemos depois via Stripe Update API
