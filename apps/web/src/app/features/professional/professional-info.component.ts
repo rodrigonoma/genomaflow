@@ -89,20 +89,25 @@ const UFS = [
         <img class="logo" src="logo_genoma.png" alt="GenomaFlow"/>
         <div>
           <h1 class="title">Dados profissionais</h1>
-          @if ((auth.currentUser$ | async); as user) {
+          @if ((auth.currentProfile$ | async); as profile) {
             <p class="subtitle">
-              Para liberar o acesso à plataforma, informe seu número de registro profissional
-              ({{ user.module === 'veterinary' ? 'CRMV' : 'CRM' }}) e confirme a veracidade das informações.
+              @if (requiresCrm(profile)) {
+                Para liberar o acesso à plataforma, informe seu número de registro profissional
+                ({{ crmLabel(profile) }}) e confirme a veracidade das informações.
+              } @else {
+                Para liberar o acesso à plataforma, confirme a veracidade das informações
+                profissionais. Registro CFT/conselho técnico é opcional.
+              }
             </p>
           }
         </div>
       </div>
 
-      @if ((auth.currentUser$ | async); as user) {
+      @if ((auth.currentProfile$ | async); as profile) {
         <div class="card">
           <div class="form-grid">
             <mat-form-field appearance="outline">
-              <mat-label>{{ user.module === 'veterinary' ? 'Número do CRMV' : 'Número do CRM' }} *</mat-label>
+              <mat-label>{{ crmFieldLabel(profile) }}</mat-label>
               <input matInput
                      [(ngModel)]="crmNumber"
                      (input)="onCrmInput($event)"
@@ -112,8 +117,9 @@ const UFS = [
             </mat-form-field>
 
             <mat-form-field appearance="outline">
-              <mat-label>UF *</mat-label>
+              <mat-label>{{ requiresCrm(profile) ? 'UF *' : 'UF' }}</mat-label>
               <mat-select [(ngModel)]="crmUf">
+                <mat-option [value]="''">—</mat-option>
                 @for (uf of UFS; track uf) {
                   <mat-option [value]="uf">{{ uf }}</mat-option>
                 }
@@ -124,18 +130,25 @@ const UFS = [
           <div class="truthfulness-box">
             <mat-checkbox color="primary" [(ngModel)]="truthConfirmed">
               <span class="truth-text">
-                Declaro, sob minha responsabilidade pessoal, que as informações
-                prestadas são verdadeiras e correspondem a registro profissional
-                ativo junto ao {{ user.module === 'veterinary' ? 'CRMV' : 'CRM' }}.
-                Estou ciente de que a prestação de informação falsa constitui
-                infração ética e pode acarretar responsabilização civil e penal.
+                @if (requiresCrm(profile)) {
+                  Declaro, sob minha responsabilidade pessoal, que as informações
+                  prestadas são verdadeiras e correspondem a registro profissional
+                  ativo junto ao {{ crmLabel(profile) }}.
+                  Estou ciente de que a prestação de informação falsa constitui
+                  infração ética e pode acarretar responsabilização civil e penal.
+                } @else {
+                  Declaro, sob minha responsabilidade pessoal, que sou profissional
+                  habilitado pra atuar em estética avançada e que as informações
+                  prestadas são verdadeiras. Estou ciente de que a prestação de
+                  informação falsa pode acarretar responsabilização civil.
+                }
               </span>
             </mat-checkbox>
           </div>
 
           <div class="actions">
             <button mat-flat-button class="submit-btn"
-                    [disabled]="!canSubmit() || submitting()"
+                    [disabled]="!canSubmit(profile) || submitting()"
                     (click)="submit()">
               {{ submitting() ? 'Salvando...' : 'Confirmar e continuar' }}
             </button>
@@ -165,10 +178,35 @@ export class ProfessionalInfoComponent implements OnInit {
   truthConfirmed = false;
   submitting = signal(false);
 
-  canSubmit(): boolean {
-    return /^\d{3,10}$/.test(this.crmNumber.trim()) &&
-           UFS.includes(this.crmUf) &&
-           this.truthConfirmed;
+  /** Médico/dentista exigem CRM/CRO + UF. Esteticista/biomedico/outro: opcional. */
+  requiresCrm(profile: { professional_type?: string } | null | undefined): boolean {
+    const ptype = profile?.professional_type;
+    return ptype === 'medico' || ptype === 'dentista';
+  }
+
+  crmLabel(profile: { professional_type?: string; module?: string } | null | undefined): string {
+    if (profile?.professional_type === 'dentista') return 'CRO';
+    return profile?.module === 'veterinary' ? 'CRMV' : 'CRM';
+  }
+
+  crmFieldLabel(profile: { professional_type?: string; module?: string } | null | undefined): string {
+    const base = `Número do ${this.crmLabel(profile)}`;
+    return this.requiresCrm(profile) ? `${base} *` : `${base} (opcional)`;
+  }
+
+  canSubmit(profile: { professional_type?: string } | null | undefined): boolean {
+    if (!this.truthConfirmed) return false;
+    const crmFilled = /^\d{3,10}$/.test(this.crmNumber.trim());
+    const ufFilled = UFS.includes(this.crmUf);
+
+    if (this.requiresCrm(profile)) {
+      return crmFilled && ufFilled;
+    }
+    // Opcional: se preenchido, ambos precisam estar válidos juntos; se vazio, OK
+    if (this.crmNumber.trim() === '' && (this.crmUf === '' || !this.crmUf)) {
+      return true;
+    }
+    return crmFilled && ufFilled;
   }
 
   ngOnInit(): void {
@@ -188,7 +226,8 @@ export class ProfessionalInfoComponent implements OnInit {
   }
 
   submit(): void {
-    if (!this.canSubmit()) return;
+    const profile = this.auth.currentProfile;
+    if (!this.canSubmit(profile)) return;
     this.submitting.set(true);
     this.svc.submit({
       crm_number: this.crmNumber.trim(),

@@ -166,25 +166,60 @@ module.exports = async function (fastify) {
   // POST /auth/professional-info
   // Registra CRM/CRMV + UF + declaração de veracidade. Requer checkbox de consentimento.
   // IP e user-agent são registrados como evidência documental.
+  //
+  // CRM/CRMV é OBRIGATÓRIO pra medico/dentista (mantém audit trail clínico).
+  // OPCIONAL pra esteticista/biomedico/outro (não tem registro CFM/CFO; podem
+  // ter registro CFT mas não validamos formato), mas truthfulness_confirmed
+  // continua obrigatório (declaração de veracidade pesa pra todos).
   const VALID_UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
   fastify.post('/professional-info', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { user_id } = request.user;
+    const { user_id, tenant_id } = request.user;
     const { crm_number, crm_uf, truthfulness_confirmed } = request.body || {};
 
-    if (!crm_number || typeof crm_number !== 'string' || !/^\d{3,10}$/.test(crm_number.trim())) {
-      return reply.status(400).send({ error: 'Número do registro profissional inválido. Use apenas dígitos.' });
-    }
-    if (!crm_uf || !VALID_UFS.includes(String(crm_uf).toUpperCase())) {
-      return reply.status(400).send({ error: 'UF inválida.' });
-    }
+    // Carrega professional_type do user — controla se CRM é obrigatório.
+    const userQ = await fastify.pg.query(
+      'SELECT professional_type FROM users WHERE id = $1 AND tenant_id = $2',
+      [user_id, tenant_id]
+    );
+    if (!userQ.rows[0]) return reply.status(404).send({ error: 'User not found' });
+    const ptype = userQ.rows[0].professional_type || 'medico';
+    const requiresCrm = ptype === 'medico' || ptype === 'dentista';
+
     if (truthfulness_confirmed !== true) {
       return reply.status(400).send({ error: 'É obrigatório confirmar a veracidade das informações.' });
+    }
+
+    let crmValue = null;
+    let ufValue = null;
+
+    if (requiresCrm) {
+      if (!crm_number || typeof crm_number !== 'string' || !/^\d{3,10}$/.test(crm_number.trim())) {
+        return reply.status(400).send({ error: 'Número do registro profissional inválido. Use apenas dígitos.' });
+      }
+      if (!crm_uf || !VALID_UFS.includes(String(crm_uf).toUpperCase())) {
+        return reply.status(400).send({ error: 'UF inválida.' });
+      }
+      crmValue = crm_number.trim();
+      ufValue = String(crm_uf).toUpperCase();
+    } else {
+      // Opcional pra non-medico/dentista — se vier, valida formato; se vazio/null, OK
+      if (crm_number && typeof crm_number === 'string' && crm_number.trim()) {
+        if (!/^\d{3,10}$/.test(crm_number.trim())) {
+          return reply.status(400).send({ error: 'Número do registro profissional inválido. Use apenas dígitos.' });
+        }
+        crmValue = crm_number.trim();
+      }
+      if (crm_uf && String(crm_uf).trim()) {
+        if (!VALID_UFS.includes(String(crm_uf).toUpperCase())) {
+          return reply.status(400).send({ error: 'UF inválida.' });
+        }
+        ufValue = String(crm_uf).toUpperCase();
+      }
     }
 
     const xff = request.headers['x-forwarded-for'];
     const ip = xff ? xff.split(',')[0].trim() : request.ip;
     const ua = request.headers['user-agent'] || null;
-    const { tenant_id } = request.user;
 
     const { rows } = await fastify.pg.query(
       `UPDATE users
@@ -195,7 +230,7 @@ module.exports = async function (fastify) {
              professional_data_user_agent = $4
        WHERE id = $5 AND tenant_id = $6
        RETURNING id, crm_number, crm_uf, professional_data_confirmed_at`,
-      [crm_number.trim(), String(crm_uf).toUpperCase(), ip, ua, user_id, tenant_id]
+      [crmValue, ufValue, ip, ua, user_id, tenant_id]
     );
     if (!rows[0]) return reply.status(404).send({ error: 'User not found' });
     return rows[0];
