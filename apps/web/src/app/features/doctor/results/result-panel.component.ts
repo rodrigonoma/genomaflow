@@ -22,6 +22,7 @@ import { ReviewQueueService } from '../review-queue/review-queue.service';
 import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/prescription/prescription-modal.component';
 import { exportAnalysisPdf } from '../../../shared/utils/analysis-pdf';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { AuthService } from '../../../core/auth/auth.service';
 
 @Component({
   selector: 'app-result-panel',
@@ -248,7 +249,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
               <app-disclaimer />
 
-              @if (e === exam && (result.agent_type === 'therapeutic' || result.agent_type === 'nutrition')) {
+              @if (e === exam && (result.agent_type === 'therapeutic' || result.agent_type === 'nutrition') && (auth.currentProfile?.professional_type === 'medico' || auth.currentProfile?.professional_type === 'dentista')) {
                 <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid rgba(70,69,84,0.15);">
                   <button mat-stroked-button style="font-size:12px;" (click)="openPrescription(result)">
                     <mat-icon>description</mat-icon>
@@ -564,6 +565,7 @@ export class ResultPanelComponent implements OnInit, OnDestroy {
   private dialog = inject(MatDialog);
 
   private snack = inject(MatSnackBar);
+  protected auth = inject(AuthService);
 
   exam: Exam | null = null;
   compareExam: Exam | null = null;

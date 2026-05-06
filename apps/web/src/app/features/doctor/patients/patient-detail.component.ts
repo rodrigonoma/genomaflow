@@ -1306,7 +1306,7 @@ interface ComparisonBlock {
                           </div>
                         }
 
-                        @if (cr.agent_type === 'therapeutic' || cr.agent_type === 'nutrition') {
+                        @if ((cr.agent_type === 'therapeutic' || cr.agent_type === 'nutrition') && (auth.currentProfile?.professional_type === 'medico' || auth.currentProfile?.professional_type === 'dentista')) {
                           <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid rgba(70,69,84,0.1);">
                             <button mat-stroked-button style="font-size:11px;" (click)="openPrescriptionFromDetail(exam, cr)">
                               <mat-icon>description</mat-icon>
@@ -1552,28 +1552,30 @@ interface ComparisonBlock {
                         <mat-icon style="font-size:16px;width:16px;height:16px">download</mat-icon>
                         Baixar PDF
                       </button>
-                    } @else {
+                    } @else if (auth.currentProfile?.professional_type === 'medico' || auth.currentProfile?.professional_type === 'dentista') {
                       <button mat-stroked-button style="font-size:12px" (click)="editPrescription(p)">
                         <mat-icon style="font-size:16px;width:16px;height:16px">picture_as_pdf</mat-icon>
                         Gerar PDF
                       </button>
                     }
-                    <button mat-icon-button [matMenuTriggerFor]="actionMenu" style="width:32px;height:32px">
-                      <mat-icon style="font-size:18px;width:18px;height:18px">more_vert</mat-icon>
-                    </button>
-                    <mat-menu #actionMenu="matMenu">
-                      <button mat-menu-item (click)="editPrescription(p)">
-                        <mat-icon>edit</mat-icon> Editar
+                    @if (auth.currentProfile?.professional_type === 'medico' || auth.currentProfile?.professional_type === 'dentista') {
+                      <button mat-icon-button [matMenuTriggerFor]="actionMenu" style="width:32px;height:32px">
+                        <mat-icon style="font-size:18px;width:18px;height:18px">more_vert</mat-icon>
                       </button>
-                      @if (p.pdf_url) {
+                      <mat-menu #actionMenu="matMenu">
                         <button mat-menu-item (click)="editPrescription(p)">
-                          <mat-icon>share</mat-icon> Compartilhar
+                          <mat-icon>edit</mat-icon> Editar
                         </button>
-                      }
-                      <button mat-menu-item class="danger" (click)="deletePrescription(p)">
-                        <mat-icon>delete</mat-icon> Excluir
-                      </button>
-                    </mat-menu>
+                        @if (p.pdf_url) {
+                          <button mat-menu-item (click)="editPrescription(p)">
+                            <mat-icon>share</mat-icon> Compartilhar
+                          </button>
+                        }
+                        <button mat-menu-item class="danger" (click)="deletePrescription(p)">
+                          <mat-icon>delete</mat-icon> Excluir
+                        </button>
+                      </mat-menu>
+                    }
                   </div>
                 </div>
 
