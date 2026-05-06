@@ -2,7 +2,7 @@ const bcrypt = require('bcrypt');
 const { randomUUID } = require('crypto');
 const { withTenant } = require('../db/tenant');
 const { sendEmailVerification } = require('../mailer/verification');
-const { VALID_DOCTOR_SPECIALTIES, VALID_MODULES } = require('../constants');
+const { VALID_DOCTOR_SPECIALTIES, VALID_MODULES, VALID_PROFESSIONAL_TYPES } = require('../constants');
 
 const SESSION_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 dias
 
@@ -82,7 +82,7 @@ module.exports = async function (fastify) {
   fastify.post('/register', {
     config: { rateLimit: { max: 5, timeWindow: '10 minutes' } }
   }, async (request, reply) => {
-    const { clinic_name, email: rawEmail, password, module: mod } = request.body || {};
+    const { clinic_name, email: rawEmail, password, module: mod, professional_type: ptype } = request.body || {};
     const email = rawEmail?.toLowerCase().trim();
 
     if (!clinic_name || !rawEmail || !password || !mod) {
@@ -102,6 +102,10 @@ module.exports = async function (fastify) {
       return reply.status(400).send({ error: 'Módulo inválido. Use: human ou veterinary' });
     }
 
+    // professional_type opcional — default 'medico' (compat retro pra register human/vet existente).
+    // Estetica deve sempre passar explícito; senão herda 'medico' (médico-dermato é caso comum).
+    const professional_type = ptype && VALID_PROFESSIONAL_TYPES.includes(ptype) ? ptype : 'medico';
+
     const existing = await fastify.pg.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
       return reply.status(409).send({ error: 'Email já cadastrado' });
@@ -117,8 +121,8 @@ module.exports = async function (fastify) {
 
     const { rows: userRows } = await withTenant(fastify.pg, tenant_id, async (client) => {
       return client.query(
-        "INSERT INTO users (tenant_id, email, password_hash, role) VALUES ($1, $2, $3, 'admin') RETURNING id",
-        [tenant_id, email, password_hash]
+        "INSERT INTO users (tenant_id, email, password_hash, role, professional_type) VALUES ($1, $2, $3, 'admin', $4) RETURNING id",
+        [tenant_id, email, password_hash, professional_type]
       );
     });
     const user_id = userRows[0].id;
@@ -148,6 +152,7 @@ module.exports = async function (fastify) {
     const { rows } = await fastify.pg.query(
       `SELECT u.id, u.email, u.role, u.specialty, u.created_at,
               u.crm_number, u.crm_uf, u.professional_data_confirmed_at,
+              u.professional_type,
               t.module, t.name AS tenant_name, t.billing_status
        FROM users u
        JOIN tenants t ON t.id = u.tenant_id
