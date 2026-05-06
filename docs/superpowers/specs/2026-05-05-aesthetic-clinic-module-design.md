@@ -477,6 +477,32 @@ Opt-in granular em `notification_preferences`:
 - Memória Claude atualizada a cada fase em `docs/claude-memory/project_aesthetic_clinic.md`
 - CLAUDE.md ganha seção "## Comportamentos Esperados" pra cada fase
 
-## Próximos passos
+## Status de entrega
 
-Após user review desta spec → invocar skill `superpowers:writing-plans` pra criar plano de implementação detalhado da F1 (com TodoWrite tasks ordenadas, dependências, files a tocar).
+| Fase | Status | SHA principal |
+|---|---|---|
+| F1 Foundation | ✅ Entregue 2026-05-06 | `38d31a92` |
+| F2 Procedures + Packages | Não iniciada | — |
+| F3 Photos antes/depois | Não iniciada | — |
+| F4 IA análise facial | Não iniciada | — |
+| F5 Portal + Dashboards + Campanhas | Não iniciada | — |
+
+## Errata (atualizada 2026-05-06)
+
+**Onboarding pago é via `/onboarding/checkout` (Stripe single-shot), NÃO `/auth/register`.** O plano F1 original assumia /auth/register; descobrimos durante execução que o fluxo real cria tenant+user só no webhook após pagamento. Próximas fases que precisarem de novos campos no onboarding devem atualizar:
+- `apps/api/src/routes/onboarding-checkout.js` — body validation + Stripe metadata
+- `apps/api/src/services/billing-events.js` `handleOnboardingSubscriptionCompleted` — webhook INSERT
+- `apps/api/src/routes/auth.js` `/register` — compat retro pra admin/internal
+- DB default seguro (3-camadas fail-closed em campos sensíveis)
+
+Detalhes: `docs/claude-memory/feedback_onboarding_checkout_flow.md`.
+
+## Débitos abertos pós-F1
+
+- **Smoke E2E manual** (Task 15 do plano F1) — criar tenant teste com module='estetica' / professional_type='esteticista' em `app.genomaflow.com.br/onboarding`, validar fluxo completo (sidebar Clientes, prescription gate, campos fitzpatrick). Defer até alguém ter tempo de fazer manual.
+- **/auth/register tests** — gate de prescriptions tem cobertura, mas não temos test E2E que cria tenant via /onboarding/checkout webhook + valida professional_type persistido. `tests/routes/onboarding-checkout.test.js` cobre o checkout handler isolado, `tests/routes/webhooks-stripe.test.js` cobre o webhook isolado, mas integração end-to-end (chamada real Stripe webhook → INSERT) é integration test debt.
+- **Esteticista vê Tratamentos read-only:** decisão atual é mostrar prescrições existentes com Baixar PDF mas esconder Editar/Excluir. Decisão de UX/produto ainda em aberto se aba Tratamentos inteira deveria sumir pra esteticista (provavelmente sim em F2 quando tiver Procedimentos como aba paralela).
+
+## Próximas fases
+
+Cada fase tem seu próprio plano de implementação separado. Quando começar F2, invocar `superpowers:writing-plans` baseado nas seções F2-F5 deste spec + lições aprendidas em F1 (3-camadas fail-closed, onboarding-checkout flow).

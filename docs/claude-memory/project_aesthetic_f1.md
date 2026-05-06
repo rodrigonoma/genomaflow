@@ -58,6 +58,12 @@ Frontend manda `professional_type` no payload do `POST /onboarding/checkout`. Ba
 
 Total: 592 verdes na API (+15), 31 verdes web.
 
+## Débitos abertos pós-F1
+
+- **Smoke E2E manual** — criar tenant teste com module='estetica' / professional_type='esteticista' em `app.genomaflow.com.br/onboarding`, validar fluxo completo (sidebar Clientes, prescription gate UI+backend, campos fitzpatrick condicionais).
+- **Integration test E2E** — `tests/routes/onboarding-checkout.test.js` cobre handler isolado; `tests/routes/webhooks-stripe.test.js` cobre webhook isolado. Mas integração end-to-end (request real → Stripe → webhook → INSERT) é integration test debt. Defer até integration test infra existir.
+- **UX decisão Tratamentos esteticista** — atualmente mostra prescrições read-only com Baixar PDF, esconde Editar/Excluir. Quando F2 trouxer Procedimentos como aba paralela, possivelmente esconder aba Tratamentos inteira pra esteticista (alinhar com workflow real).
+
 ## Commits da fase
 
 - `596890f5` — migration 079
