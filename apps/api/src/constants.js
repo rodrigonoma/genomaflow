@@ -29,7 +29,9 @@ const PRICE_BY_PACK = {
 // Métodos de pagamento aceitos em /billing/checkout/topup.
 const VALID_PAYMENT_METHODS = ['card', 'pix'];
 
-const VALID_MODULES = ['human', 'veterinary'];
+const VALID_MODULES = ['human', 'veterinary', 'estetica'];
+
+const VALID_PROFESSIONAL_TYPES = ['medico', 'esteticista', 'dentista', 'biomedico', 'outro'];
 
 module.exports = {
   VALID_DOCTOR_SPECIALTIES,
@@ -38,4 +40,5 @@ module.exports = {
   PRICE_BY_PACK,
   VALID_PAYMENT_METHODS,
   VALID_MODULES,
+  VALID_PROFESSIONAL_TYPES,
 };

@@ -81,7 +81,22 @@ describe('constants — VALID_PAYMENT_METHODS', () => {
 });
 
 describe('constants — VALID_MODULES', () => {
-  test('lista exata [human, veterinary]', () => {
-    expect(VALID_MODULES.sort()).toEqual(['human', 'veterinary'].sort());
+  test('lista exata [human, veterinary, estetica]', () => {
+    expect(VALID_MODULES.sort()).toEqual(['estetica', 'human', 'veterinary'].sort());
+  });
+});
+
+describe('VALID_MODULES', () => {
+  it('inclui human, veterinary, estetica', () => {
+    const { VALID_MODULES } = require('../../src/constants');
+    expect(VALID_MODULES).toEqual(expect.arrayContaining(['human', 'veterinary', 'estetica']));
+    expect(VALID_MODULES).toHaveLength(3);
+  });
+});
+
+describe('VALID_PROFESSIONAL_TYPES', () => {
+  it('inclui medico, esteticista, dentista, biomedico, outro', () => {
+    const { VALID_PROFESSIONAL_TYPES } = require('../../src/constants');
+    expect(VALID_PROFESSIONAL_TYPES).toEqual(['medico', 'esteticista', 'dentista', 'biomedico', 'outro']);
   });
 });
