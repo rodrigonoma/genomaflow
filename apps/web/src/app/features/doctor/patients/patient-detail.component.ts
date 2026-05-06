@@ -876,6 +876,27 @@ interface ComparisonBlock {
                     <mat-label>Observações</mat-label>
                     <textarea matInput rows="2" [(ngModel)]="editForm.notes"></textarea>
                   </mat-form-field>
+                  @if (subject()!.subject_type === 'human' && auth.currentProfile?.module === 'estetica') {
+                    <mat-form-field appearance="outline">
+                      <mat-label>Fototipo (Fitzpatrick)</mat-label>
+                      <mat-select [(ngModel)]="editForm.fitzpatrick_type">
+                        <mat-option [value]="null">Não informado</mat-option>
+                        <mat-option [value]="1">I — Branca, sempre queima, nunca bronzeia</mat-option>
+                        <mat-option [value]="2">II — Branca, queima fácil, bronzeia pouco</mat-option>
+                        <mat-option [value]="3">III — Morena clara, queima às vezes, bronzeia gradual</mat-option>
+                        <mat-option [value]="4">IV — Morena, queima pouco, bronzeia bem</mat-option>
+                        <mat-option [value]="5">V — Morena escura, raramente queima</mat-option>
+                        <mat-option [value]="6">VI — Negra, nunca queima</mat-option>
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline">
+                      <mat-label>Queixas estéticas (separadas por vírgula)</mat-label>
+                      <input matInput
+                             [ngModel]="(editForm.skin_concerns || []).join(', ')"
+                             (ngModelChange)="editForm.skin_concerns = parseConcerns($event)"
+                             placeholder="ex: melasma, rugas, acne"/>
+                    </mat-form-field>
+                  }
                 </div>
               </div>
 
@@ -2064,6 +2085,14 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   }
 
   isPhoneValid(v: string | null | undefined): boolean { return isValidPhoneBR(v); }
+
+  /**
+   * Converte string CSV (separada por vírgula) em array trim+filtrado.
+   * Usado pelo input "Queixas estéticas" do módulo estética (Task 11 F1).
+   */
+  parseConcerns(input: string): string[] {
+    return String(input ?? '').split(',').map(s => s.trim()).filter(Boolean);
+  }
 
   /**
    * Abre dialog de gerenciamento de portal token.

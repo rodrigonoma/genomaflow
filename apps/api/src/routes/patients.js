@@ -290,7 +290,22 @@ module.exports = async function (fastify) {
       // Fase 1 extended fields
       allergies_text, current_weight_kg,
       emergency_contact_name, emergency_contact_phone, insurance_name,
+      // Aesthetic F1 (Task 11): só aplicado pra subject_type='human' em tenants module='estetica'.
+      // Schema permite NULL — front envia null pra "Não informado".
+      fitzpatrick_type, skin_concerns,
     } = request.body;
+
+    // Validação defensiva: fitzpatrick_type aceita null OU inteiro 1..6.
+    // CHECK constraint no DB (migration 079) também rejeita, mas falha cedo aqui.
+    if (fitzpatrick_type !== undefined && fitzpatrick_type !== null) {
+      const ft = Number(fitzpatrick_type);
+      if (!Number.isInteger(ft) || ft < 1 || ft > 6) {
+        return reply.status(400).send({ error: 'fitzpatrick_type deve ser inteiro entre 1 e 6.' });
+      }
+    }
+    if (skin_concerns !== undefined && skin_concerns !== null && !Array.isArray(skin_concerns)) {
+      return reply.status(400).send({ error: 'skin_concerns deve ser array de strings.' });
+    }
 
     const phoneErr = checkPhone(phone, 'Telefone do paciente');
     if (phoneErr) return reply.status(400).send({ error: phoneErr });
@@ -331,8 +346,10 @@ module.exports = async function (fastify) {
            current_weight_kg       = COALESCE($25, current_weight_kg),
            emergency_contact_name  = COALESCE($26, emergency_contact_name),
            emergency_contact_phone = COALESCE($27, emergency_contact_phone),
-           insurance_name          = COALESCE($28, insurance_name)
-         WHERE id = $29 AND tenant_id = $30 AND deleted_at IS NULL
+           insurance_name          = COALESCE($28, insurance_name),
+           fitzpatrick_type        = COALESCE($29, fitzpatrick_type),
+           skin_concerns           = COALESCE($30::jsonb, skin_concerns)
+         WHERE id = $31 AND tenant_id = $32 AND deleted_at IS NULL
          RETURNING *`,
         [name, birth_date, sex, phone,
          weight, height, blood_type, allergies, comorbidities, notes,
@@ -342,6 +359,8 @@ module.exports = async function (fastify) {
          consentAt, consentBy,
          allergies_text ?? null, current_weight_kg ?? null,
          emergency_contact_name ?? null, emergency_contact_phone ?? null, insurance_name ?? null,
+         fitzpatrick_type ?? null,
+         skin_concerns !== undefined && skin_concerns !== null ? JSON.stringify(skin_concerns) : null,
          id, tenant_id]
       );
       return rows[0] || null;

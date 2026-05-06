@@ -74,6 +74,9 @@ export interface Subject {
   diet_type?: string;
   physical_activity?: string;
   family_history?: string;
+  // aesthetic module (human + estetica only)
+  fitzpatrick_type?: number | null;
+  skin_concerns?: string[];
 }
 
 /** @deprecated use Subject */
