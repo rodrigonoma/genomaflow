@@ -1,10 +1,11 @@
 const { withTenant } = require('../db/tenant');
 const { uploadFile } = require('../storage/s3');
+const { requireMedico } = require('../middleware/professional-gate');
 
 module.exports = async function (fastify) {
 
   // POST /prescriptions — criar receita
-  fastify.post('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/', { preHandler: [fastify.authenticate, requireMedico] }, async (request, reply) => {
     const { user_id, tenant_id } = request.user;
     const { subject_id, exam_id, agent_type, items, notes } = request.body || {};
 
@@ -91,7 +92,7 @@ module.exports = async function (fastify) {
   });
 
   // PUT /prescriptions/:id — atualizar receita (items, notes, pdf_url)
-  fastify.put('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+  fastify.put('/:id', { preHandler: [fastify.authenticate, requireMedico] }, async (request, reply) => {
     const { tenant_id, user_id } = request.user;
     const { id } = request.params;
     const { items, notes, pdf_url } = request.body || {};
@@ -129,7 +130,7 @@ module.exports = async function (fastify) {
   });
 
   // POST /prescriptions/:id/pdf — upload do PDF gerado no browser para S3
-  fastify.post('/:id/pdf', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/:id/pdf', { preHandler: [fastify.authenticate, requireMedico] }, async (request, reply) => {
     const { tenant_id } = request.user;
     const { id } = request.params;
 
@@ -163,7 +164,7 @@ module.exports = async function (fastify) {
   });
 
   // POST /prescriptions/:id/send-email — infra pronta, provider TBD
-  fastify.post('/:id/send-email', { preHandler: [fastify.authenticate] }, async (_request, reply) => {
+  fastify.post('/:id/send-email', { preHandler: [fastify.authenticate, requireMedico] }, async (_request, reply) => {
     return reply.status(501).send({
       error: 'Envio por email será ativado em breve. Configure o provider de email nas configurações da clínica.'
     });

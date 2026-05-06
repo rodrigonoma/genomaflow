@@ -17,6 +17,9 @@ function buildApp() {
       tenant_id: '00000000-0000-0000-0000-000000000099',
       role: 'admin',
       module: 'human',
+      // requireMedico gate: validation tests assumem profissional autorizado
+      // pra que o handler chegue até a validação de body.
+      professional_type: 'medico',
     };
   });
 
