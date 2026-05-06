@@ -263,8 +263,8 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
           </a>
           <div class="nav-section-label">Clínica</div>
           <a class="nav-item" routerLink="/doctor/patients" routerLinkActive="active">
-            <mat-icon>{{ user.module === 'veterinary' ? 'pets' : 'people' }}</mat-icon>
-            {{ user.module === 'veterinary' ? 'Animais' : 'Pacientes' }}
+            <mat-icon>{{ subjectIconForModule(user.module) }}</mat-icon>
+            {{ subjectLabelForModule(user.module) }}
           </a>
           <a class="nav-item" routerLink="/doctor/review-queue" routerLinkActive="active">
             <mat-icon>inbox</mat-icon>
@@ -310,10 +310,10 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
         </button>
         @if (user.role !== 'master' && (auth.currentProfile$ | async); as profile) {
           <div class="tenant-chip"
-               [matTooltip]="'Tenant: ' + profile.tenant_name + ' · ' + (profile.module === 'veterinary' ? 'Clínica Veterinária' : 'Clínica Humana')">
-            <mat-icon>{{ profile.module === 'veterinary' ? 'pets' : 'local_hospital' }}</mat-icon>
+               [matTooltip]="'Tenant: ' + profile.tenant_name + ' · ' + tenantTooltipForModule(profile.module)">
+            <mat-icon>{{ tenantIconForModule(profile.module) }}</mat-icon>
             <span class="tenant-name">{{ profile.tenant_name }}</span>
-            <span class="tenant-module-badge">{{ profile.module === 'veterinary' ? 'VET' : 'HUMAN' }}</span>
+            <span class="tenant-module-badge">{{ tenantBadgeForModule(profile.module) }}</span>
           </div>
         }
         @if (user.role !== 'master') {
@@ -486,6 +486,36 @@ export class AppComponent implements OnInit, OnDestroy {
     if (msg.includes('No agent configured')) return 'Espécie sem agente configurado.';
     if (msg.includes('no file_path') || msg.includes('não encontrado') || msg.includes('NoSuchKey')) return 'Arquivo não encontrado. Reenvie o PDF.';
     return msg.length > 120 ? msg.slice(0, 120) + '…' : msg;
+  }
+
+  subjectLabelForModule(mod: string | undefined): string {
+    if (mod === 'veterinary') return 'Animais';
+    if (mod === 'estetica') return 'Clientes';
+    return 'Pacientes';
+  }
+
+  subjectIconForModule(mod: string | undefined): string {
+    if (mod === 'veterinary') return 'pets';
+    if (mod === 'estetica') return 'spa';
+    return 'people';
+  }
+
+  tenantTooltipForModule(mod: string | undefined): string {
+    if (mod === 'veterinary') return 'Clínica Veterinária';
+    if (mod === 'estetica') return 'Clínica de Estética';
+    return 'Clínica Humana';
+  }
+
+  tenantIconForModule(mod: string | undefined): string {
+    if (mod === 'veterinary') return 'pets';
+    if (mod === 'estetica') return 'spa';
+    return 'local_hospital';
+  }
+
+  tenantBadgeForModule(mod: string | undefined): string {
+    if (mod === 'veterinary') return 'VET';
+    if (mod === 'estetica') return 'ESTÉTICA';
+    return 'HUMAN';
   }
 }
 
