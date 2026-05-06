@@ -6821,8 +6821,18 @@
     font-weight: 600;
     letter-spacing: -0.005em;
   }
-  .layout-day .d-btn-primary { background: var(--d-ink); }
-  .layout-day .d-btn-primary:hover { background: var(--d-ink-2); }
+  /* Color scope explícito — sem isso `.layout-day a { color: inherit }` (0,1,1)
+     vence `.d-btn-cross { color: #fff }` (0,1,0) e o texto some no fundo. */
+  .layout-day .d-btn-primary,
+  .layout-day a.d-btn-primary { background: var(--d-ink); color: #fff; }
+  .layout-day .d-btn-primary:hover,
+  .layout-day a.d-btn-primary:hover { background: var(--d-ink-2); color: #fff; }
+  .layout-day .d-btn-cross,
+  .layout-day a.d-btn-cross { color: #fff; }
+  .layout-day .d-btn-ghost,
+  .layout-day a.d-btn-ghost { color: var(--d-on-surface); }
+  .layout-day .d-btn-ghost-light,
+  .layout-day a.d-btn-ghost-light { color: rgba(255,255,255,0.95); }
 
   /* NAV — editorial sober */
   .layout-day .d-nav {
@@ -6996,6 +7006,127 @@
   .layout-day .d-display em.d-display-em.d-shimmer {
     background: none;
     -webkit-text-fill-color: var(--d-secondary);
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     RESPONSIVE FIXES — editorial pass quebrou alguns breakpoints
+     ════════════════════════════════════════════════════════════════ */
+
+  @media (max-width: 920px) {
+    /* Section heads sem indent no tablet/mobile — editorial perde sentido */
+    .layout-day .d-section-head { padding-left: 0 !important; }
+
+    /* Hero col stack */
+    .layout-day .d-hero-grid {
+      grid-template-columns: 1fr !important;
+      gap: 48px;
+    }
+    .layout-day .d-hero { padding: 64px 0 80px; }
+
+    /* Display Fraunces escala bem; só restringe drama */
+    .layout-day .d-display { font-size: clamp(44px, 9vw, 80px); }
+    .layout-day .d-headline { font-size: clamp(32px, 6vw, 48px); }
+    .layout-day .d-feat-title { font-size: clamp(28px, 6vw, 44px); }
+
+    /* Pull quote menos dramática */
+    .d-pullquote { padding: 64px 0; }
+    .d-pullquote::before {
+      font-size: 280px;
+      top: -40px;
+    }
+    .d-pullquote-text { font-size: clamp(24px, 5vw, 38px); }
+
+    /* Stats strip */
+    .layout-day .d-stats-strip { padding: 56px 0; }
+    .layout-day .d-stat-num { font-size: clamp(40px, 9vw, 60px); }
+  }
+
+  @media (max-width: 720px) {
+    .layout-day .d-trust-row {
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+    .layout-day .d-trust-divider { display: none; }
+    .layout-day .d-trust-num { font-size: 24px; }
+
+    /* Pricing card escala */
+    .layout-day .d-pricing-card {
+      padding: 32px 24px;
+      box-shadow: 4px 4px 0 var(--d-ink);
+    }
+
+    /* Hero card sombra menor pra não estourar viewport */
+    .layout-day .d-hero-card { box-shadow: 4px 4px 0 var(--d-paper-deep); }
+
+    /* CTA card */
+    .layout-day .d-cta-card { padding: 56px 28px; border-radius: 4px; }
+    .layout-day .d-cta-title { font-size: clamp(32px, 7vw, 48px); }
+
+    /* Module cards */
+    .layout-day .d-module-card { padding: 32px 24px; }
+    .layout-day .d-module-title { font-size: 26px; }
+
+    /* Cards menos padding */
+    .layout-day .d-card { padding: 28px 24px; }
+    .layout-day .d-card-title { font-size: 22px; }
+
+    /* Section padding mobile */
+    .layout-day .d-section { padding: 64px 0; }
+    .layout-day .d-feat { padding: 48px 0; }
+
+    /* Section number ajusta no mobile */
+    .d-section-num { flex-wrap: wrap; gap: 8px; }
+    .d-num-rule { width: 24px; }
+
+    /* Mock cards box-shadow menor */
+    .layout-day .d-mock-card,
+    .layout-day .d-photo-card,
+    .layout-day .d-whatsapp-card { box-shadow: 4px 4px 0 var(--d-paper-deep); padding: 18px; }
+
+    /* Footer cols grid */
+    .layout-day .d-footer { padding: 56px 0 24px; }
+    .layout-day .d-footer-tagline { font-size: 16px; }
+
+    /* Colophon stacks */
+    .d-colophon { flex-direction: column; align-items: flex-start; gap: 16px; }
+    .d-colophon-text { font-size: 12px; }
+    .d-colophon-mark { font-size: 24px; }
+
+    /* CTA row no mobile — botões full width */
+    .layout-day .d-cta-row {
+      flex-direction: column;
+      align-items: stretch;
+      width: 100%;
+    }
+    .layout-day .d-cta-row .d-btn-primary,
+    .layout-day .d-cta-row .d-btn-ghost,
+    .layout-day .d-cta-row .d-btn-cross,
+    .layout-day .d-cta-row .d-btn-ghost-light {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+
+  @media (max-width: 540px) {
+    .d-container { padding: 0 20px; }
+    .layout-day .d-display {
+      font-size: clamp(36px, 11vw, 56px);
+      line-height: 1.0;
+    }
+    .layout-day .d-feat-stats { gap: 16px; }
+    .layout-day .d-feat-stats > div strong { font-size: 18px; }
+    .layout-day .d-feat-list li { font-size: 13px; }
+    .layout-day .d-feat-body { font-size: 15px; }
+    .layout-day .d-lead { font-size: 17px; }
+    .layout-day .d-section-sub { font-size: 16px; }
+    .layout-day .d-section-head { margin-bottom: 32px; }
+
+    /* Pull quote::before pode estourar — esconde no mobile pequeno */
+    .d-pullquote::before { display: none; }
+
+    /* Photo card flex direction */
+    .layout-day .d-photo-card { flex-direction: column; padding: 24px; }
+    .layout-day .d-photo-stamp { margin: 0; align-self: center; }
   }
 </style>
 
