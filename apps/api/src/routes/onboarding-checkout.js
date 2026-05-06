@@ -41,14 +41,7 @@ module.exports = async function (fastify) {
       return reply.status(400).send({ error: 'Senha deve ter no mínimo 8 caracteres' });
     }
     if (!VALID_MODULES.includes(mod)) {
-      return reply.status(400).send({ error: 'Módulo inválido. Use: human ou veterinary' });
-    }
-    if (specialties.length === 0) {
-      return reply.status(400).send({ error: 'Selecione ao menos 1 especialidade' });
-    }
-    const invalid = specialties.filter(s => !VALID_AGENT_TYPES.includes(s));
-    if (invalid.length > 0) {
-      return reply.status(400).send({ error: `Especialidades inválidas: ${invalid.join(', ')}` });
+      return reply.status(400).send({ error: 'Módulo inválido. Use: human, veterinary ou estetica' });
     }
     if (!cleanClinicName || cleanClinicName.length > 100) {
       return reply.status(400).send({ error: 'Nome da clínica deve ter entre 1 e 100 caracteres' });
@@ -58,6 +51,19 @@ module.exports = async function (fastify) {
     // que ainda não manda o campo). Validado contra whitelist; valor inválido cai
     // no default em vez de 400 pra não quebrar fluxo de quem não precisa do gate.
     const professional_type = ptype && VALID_PROFESSIONAL_TYPES.includes(ptype) ? ptype : 'medico';
+
+    // Especialidades médicas (mapeadas pra agentes IA) só fazem sentido pra
+    // médico/dentista. Esteticista/biomedico/outro: array vazio é OK.
+    const requiresSpecialties = professional_type === 'medico' || professional_type === 'dentista';
+    if (requiresSpecialties) {
+      if (specialties.length === 0) {
+        return reply.status(400).send({ error: 'Selecione ao menos 1 especialidade' });
+      }
+      const invalid = specialties.filter(s => !VALID_AGENT_TYPES.includes(s));
+      if (invalid.length > 0) {
+        return reply.status(400).send({ error: `Especialidades inválidas: ${invalid.join(', ')}` });
+      }
+    }
 
     // Pré-checagem antes do Stripe — evita usuário pagar e ficar travado no
     // login depois (webhook abortaria por email duplicado).

@@ -155,4 +155,74 @@ describe('POST /onboarding/checkout — propaga professional_type pra Stripe met
       await app.close();
     }
   });
+
+  test('esteticista aceita specialties: [] (não exige especialidade médica)', async () => {
+    const app = buildApp();
+    await app.register(require('../../src/routes/onboarding-checkout'));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/onboarding/checkout',
+      payload: {
+        clinic_name: 'Clínica X',
+        email: 'esteticista@x.com',
+        password: 'pass1234',
+        module: 'estetica',
+        specialties: [],
+        professional_type: 'esteticista',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const lastCall = Stripe._mock.checkout.sessions.create.mock.calls.slice(-1)[0][0];
+    expect(lastCall.metadata.professional_type).toBe('esteticista');
+    expect(lastCall.metadata.specialties).toBe('');
+    await app.close();
+  });
+
+  test('biomedico/outro também aceita specialties vazio', async () => {
+    for (const ptype of ['biomedico', 'outro']) {
+      const app = buildApp();
+      await app.register(require('../../src/routes/onboarding-checkout'));
+      const res = await app.inject({
+        method: 'POST',
+        url: '/onboarding/checkout',
+        payload: {
+          clinic_name: 'X', email: `${ptype}@x.com`, password: 'pass1234',
+          module: 'estetica', specialties: [], professional_type: ptype,
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      await app.close();
+    }
+  });
+
+  test('medico ainda exige specialties: [] retorna 400', async () => {
+    const app = buildApp();
+    await app.register(require('../../src/routes/onboarding-checkout'));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/onboarding/checkout',
+      payload: {
+        clinic_name: 'X', email: 'medico@x.com', password: 'pass1234',
+        module: 'estetica', specialties: [], professional_type: 'medico',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/especialidade/i);
+    await app.close();
+  });
+
+  test('dentista também exige specialties (não pode vazio)', async () => {
+    const app = buildApp();
+    await app.register(require('../../src/routes/onboarding-checkout'));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/onboarding/checkout',
+      payload: {
+        clinic_name: 'X', email: 'dentista@x.com', password: 'pass1234',
+        module: 'estetica', specialties: [], professional_type: 'dentista',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
 });
