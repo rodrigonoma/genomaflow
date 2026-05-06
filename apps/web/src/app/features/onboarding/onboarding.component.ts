@@ -12,7 +12,8 @@ interface OnboardingData {
   email: string;
   password: string;
   confirm_password: string;
-  module: 'human' | 'veterinary' | '';
+  module: 'human' | 'veterinary' | 'estetica' | '';
+  professional_type: 'medico' | 'esteticista' | 'dentista' | 'biomedico' | 'outro' | '';
   specialties: string[];
 }
 
@@ -93,7 +94,7 @@ interface OnboardingData {
           <h1 style="font-family:'Space Grotesk',sans-serif;font-size:1.875rem;font-weight:700;margin-bottom:0.5rem;">Seleção de Módulo</h1>
           <p style="color:#c7c5d0;font-size:0.875rem;">Esta seleção é permanente após o cadastro.</p>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">
           <div (click)="data.module = 'human'" style="padding:2rem;border-radius:0.25rem;cursor:pointer;border:2px solid transparent;transition:all 0.2s;"
                [style.borderColor]="data.module === 'human' ? '#c0c1ff' : 'transparent'"
                [style.background]="data.module === 'human' ? '#171f33' : '#060d20'">
@@ -108,7 +109,33 @@ interface OnboardingData {
             <h3 style="font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:600;margin-bottom:0.5rem;">Clínica Veterinária</h3>
             <p style="font-size:0.75rem;color:#c7c5d0;">Medicina veterinária: pequenos animais, equinos, bovinos</p>
           </div>
+          <div (click)="data.module = 'estetica'" style="padding:2rem;border-radius:0.25rem;cursor:pointer;border:2px solid transparent;transition:all 0.2s;"
+               [style.borderColor]="data.module === 'estetica' ? '#c0c1ff' : 'transparent'"
+               [style.background]="data.module === 'estetica' ? '#171f33' : '#060d20'">
+            <span style="font-family:'Material Symbols Outlined';color:#c0c1ff;font-size:2rem;display:block;margin-bottom:0.75rem;">spa</span>
+            <h3 style="font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:600;margin-bottom:0.5rem;">Clínica de Estética</h3>
+            <p style="font-size:0.75rem;color:#c7c5d0;">Dermatologia, harmonização orofacial e estética avançada</p>
+          </div>
         </div>
+        @if (data.module === 'estetica') {
+          <div style="margin-top:1.5rem;padding:1rem;background:#171f33;border-radius:0.25rem;margin-bottom:1rem;">
+            <label style="font-size:0.625rem;letter-spacing:0.1em;text-transform:uppercase;color:#c7c5d0;display:block;margin-bottom:0.5rem;">Tipo de profissional principal</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+              <button type="button" (click)="data.professional_type = 'medico'"
+                      style="padding:0.75rem;background:#060d20;color:#dbe2fd;font-size:0.8125rem;border:2px solid transparent;border-radius:0.25rem;cursor:pointer;text-align:left;"
+                      [style.borderColor]="data.professional_type === 'medico' ? '#c0c1ff' : 'transparent'">
+                <strong style="display:block;font-size:0.875rem;">🩺 Médico</strong>
+                <span style="font-size:0.6875rem;color:#c7c5d0;">Dermatologista, harmonização</span>
+              </button>
+              <button type="button" (click)="data.professional_type = 'esteticista'"
+                      style="padding:0.75rem;background:#060d20;color:#dbe2fd;font-size:0.8125rem;border:2px solid transparent;border-radius:0.25rem;cursor:pointer;text-align:left;"
+                      [style.borderColor]="data.professional_type === 'esteticista' ? '#c0c1ff' : 'transparent'">
+                <strong style="display:block;font-size:0.875rem;">💆 Esteticista</strong>
+                <span style="font-size:0.6875rem;color:#c7c5d0;">Técnico em estética</span>
+              </button>
+            </div>
+          </div>
+        }
         @if (errorMsg()) {
           <p style="color:#ffb4ab;font-family:'JetBrains Mono',monospace;font-size:0.75rem;margin-bottom:1rem;">{{ errorMsg() }}</p>
         }
@@ -219,6 +246,7 @@ export class OnboardingComponent implements OnInit {
     password: '',
     confirm_password: '',
     module: '',
+    professional_type: '',
     specialties: [],
   };
 
@@ -291,6 +319,15 @@ export class OnboardingComponent implements OnInit {
   nextStep2(): void {
     this.errorMsg.set('');
     if (!this.data.module) return this.errorMsg.set('Selecione um módulo.');
+    if (this.data.module === 'estetica' && !this.data.professional_type) {
+      return this.errorMsg.set('Selecione o tipo de profissional principal.');
+    }
+    // Esteticista pula Step 3 (especialidades médicas) — vai direto pro pagamento.
+    if (this.data.module === 'estetica' && this.data.professional_type === 'esteticista') {
+      this.data.specialties = [];
+      this.step.set(4);
+      return;
+    }
     this.step.set(3);
   }
 
@@ -318,6 +355,7 @@ export class OnboardingComponent implements OnInit {
             email: this.data.email,
             password: this.data.password,
             module: this.data.module,
+            professional_type: this.data.professional_type || 'medico',
             specialties: this.data.specialties,
           }
         )
