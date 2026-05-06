@@ -7,7 +7,7 @@
   <meta name="description" content="Transforme laudos PDF em insights clínicos estruturados para médicos e veterinários. Pipeline multi-tenant com latência abaixo de 60 segundos."/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,700;0,9..144,800;1,9..144,400;1,9..144,500;1,9..144,700;1,9..144,800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,700;0,9..144,800;1,9..144,400;1,9..144,500;1,9..144,700;1,9..144,800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&family=Onest:wght@300;400;500;600;700;800;900&family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet"/>
   <!-- Hidratação anti-FOUC: aplica tema antes do primeiro paint -->
   <script>
     (function(){
@@ -3879,38 +3879,37 @@
     <div class="d-hero-grid-overlay" aria-hidden="true"></div>
     <div class="d-container d-hero-grid">
       <div class="d-hero-content">
-        <div class="d-section-num d-anim d-anim-fade" data-anim-delay="0">
-          <span class="d-num">01</span>
-          <span class="d-num-rule"></span>
-          <span class="d-num-label">Clinical AI · est. 2026 · São Paulo</span>
+        <div class="d-status-pill d-anim d-anim-fade" data-anim-delay="0">
+          <span class="d-status-dot"></span>
+          <span class="d-status-text">Online · Multi-tenant SaaS · Brasil</span>
         </div>
-        <h1 class="d-display d-anim d-anim-up" data-anim-delay="100">A clínica<br/>que <em class="d-display-em">pensa</em><br/>com você.</h1>
+        <h1 class="d-display d-anim d-anim-up" data-anim-delay="100">
+          Sua clínica <em class="d-display-em">com IA</em><br/>do laudo até o follow-up.
+        </h1>
         <p class="d-lead d-anim d-anim-up" data-anim-delay="200">
-          Plataforma multi-tenant pra clínicas humanas e veterinárias. Agenda, prontuário,
-          análise de exames, prescrições e portal do paciente — com IA assistiva que pensa
-          junto durante a consulta e enxerga o que falta no histórico.
+          Sistema completo pra clínicas <strong>humanas</strong> e <strong>veterinárias</strong>: prontuário, agenda, prescrição, exames com IA, portal do paciente e WhatsApp automático. <span class="d-lead-em">Tudo conversa entre si.</span>
         </p>
         <div class="d-cta-row d-anim d-anim-up" data-anim-delay="300">
           <a class="d-btn-primary d-btn-lg d-btn-shine" data-cta="/onboarding">
-            <span>Criar conta gratuita</span>
+            <span>Começar grátis em 5 min</span>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </a>
-          <a class="d-btn-ghost d-btn-lg" data-cta="/login">Já sou cliente</a>
+          <a class="d-btn-ghost d-btn-lg" data-cta="/login">Já tenho conta</a>
         </div>
         <div class="d-trust-row d-anim d-anim-fade" data-anim-delay="400">
           <div class="d-trust-item">
-            <span class="d-trust-num">5</span>
-            <span class="d-trust-label">agentes IA por exame</span>
+            <span class="d-trust-num"><span class="d-counter" data-target="40">0</span><span class="d-trust-unit">min → 60s</span></span>
+            <span class="d-trust-label">tempo por laudo</span>
           </div>
           <div class="d-trust-divider"></div>
           <div class="d-trust-item">
-            <span class="d-trust-num">&lt;60s</span>
-            <span class="d-trust-label">PDF → insight</span>
+            <span class="d-trust-num">+<span class="d-counter" data-target="12">0</span></span>
+            <span class="d-trust-label">atendimentos/sem</span>
           </div>
           <div class="d-trust-divider"></div>
           <div class="d-trust-item">
-            <span class="d-trust-num">LGPD</span>
-            <span class="d-trust-label">by design</span>
+            <span class="d-trust-num">5 IA</span>
+            <span class="d-trust-label">agentes por exame</span>
           </div>
         </div>
       </div>
@@ -3983,70 +3982,134 @@
   </section>
 
   <!-- ── FEATURES (3 pilares) ────────────────────────────────────── -->
-  <section class="d-section" id="d-features">
+  <section class="d-section d-section-bento" id="d-features">
     <div class="d-container">
       <div class="d-section-head d-anim d-anim-up">
-        <div class="d-section-num">
-          <span class="d-num">02</span>
-          <span class="d-num-rule"></span>
-          <span class="d-num-label">A plataforma</span>
+        <div class="d-eyebrow-pill">
+          <span class="d-pill-dot"></span>
+          A plataforma
         </div>
-        <h2 class="d-headline">Tudo o que sua clínica precisa, <em class="d-headline-em">conversando entre si</em>.</h2>
-        <p class="d-section-sub">Do laudo à prescrição, da agenda ao portal do paciente. Um único produto, três pilares — sem integração frágil, sem dado em silos.</p>
+        <h2 class="d-headline">O que você ganha,<br/>todo dia.</h2>
+        <p class="d-section-sub">Cada feature foi desenhada pra tirar trabalho da sua equipe — não pra adicionar. Você tem mais tempo no paciente, menos retrabalho administrativo, e a IA cuida do que costuma escapar.</p>
       </div>
 
-      <div class="d-features-grid">
-        <article class="d-card d-anim d-anim-up d-anim-stagger">
-          <div class="d-card-icon" data-tone="primary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M9 4h6l1 3h4v13H4V7h4l1-3z"/>
-              <circle cx="12" cy="13" r="3"/>
-            </svg>
+      <div class="d-bento">
+        <!-- Cell 1 — XL: IA / Foundation -->
+        <article class="d-bento-cell d-bento-xl d-anim d-anim-up d-anim-stagger" data-tone="primary">
+          <div class="d-bento-tag">
+            <span class="d-pill-dot"></span>
+            Pilar 01 · IA Clínica
           </div>
-          <h3 class="d-card-title">Inteligência Clínica</h3>
-          <p class="d-card-body">Análise multi-agente em tempo real: cardiovascular, hematologia, metabólico. PDF, DICOM, imagem ou foto do laudo impresso pelo celular.</p>
-          <ul class="d-card-list">
-            <li>5 agentes IA por exame</li>
-            <li>Co-piloto durante consulta</li>
-            <li>Sugestões pró-ativas</li>
-            <li>Comparação longitudinal</li>
-          </ul>
+          <h3 class="d-bento-title">5 agentes IA<br/>analisam <span class="d-bento-em">cada exame</span>.</h3>
+          <p class="d-bento-body">PDF, DICOM ou foto do laudo impresso. Em &lt;60s: valores estruturados, alertas críticos, escore de risco e raciocínio clínico auditável.</p>
+          <div class="d-bento-mock">
+            <div class="d-mock-pulse-line">
+              <svg viewBox="0 0 400 60" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="ecgGrad" x1="0" x2="1">
+                    <stop offset="0%" stop-color="rgba(0,212,197,0)"/>
+                    <stop offset="50%" stop-color="rgba(0,212,197,0.6)"/>
+                    <stop offset="100%" stop-color="rgba(0,212,197,1)"/>
+                  </linearGradient>
+                </defs>
+                <path class="d-ecg-path" d="M0,30 L60,30 L70,30 L80,18 L90,42 L100,30 L160,30 L170,30 L180,8 L185,52 L190,30 L260,30 L270,30 L280,18 L290,42 L300,30 L400,30" fill="none" stroke="url(#ecgGrad)" stroke-width="2.5"/>
+              </svg>
+            </div>
+            <div class="d-mock-row-mini">
+              <span class="d-mock-mini-label">cardiovascular</span>
+              <span class="d-mock-mini-val">analisado</span>
+              <span class="d-mock-mini-check">✓</span>
+            </div>
+            <div class="d-mock-row-mini">
+              <span class="d-mock-mini-label">hematologia</span>
+              <span class="d-mock-mini-val">analisado</span>
+              <span class="d-mock-mini-check">✓</span>
+            </div>
+            <div class="d-mock-row-mini">
+              <span class="d-mock-mini-label">metabólico</span>
+              <span class="d-mock-mini-val d-mock-mini-running">processando<span class="d-mock-dot"></span></span>
+            </div>
+          </div>
         </article>
 
-        <article class="d-card d-anim d-anim-up d-anim-stagger">
-          <div class="d-card-icon" data-tone="secondary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="5" width="18" height="16" rx="2"/>
-              <line x1="3" y1="10" x2="21" y2="10"/>
-              <line x1="8" y1="3" x2="8" y2="7"/>
-              <line x1="16" y1="3" x2="16" y2="7"/>
-            </svg>
+        <!-- Cell 2 — M: Co-piloto -->
+        <article class="d-bento-cell d-bento-m d-anim d-anim-up d-anim-stagger" data-tone="secondary">
+          <div class="d-bento-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.5 5h5l-4 3 1.5 5-4-3-4 3 1.5-5-4-3h5z"/></svg>
           </div>
-          <h3 class="d-card-title">Operação da clínica</h3>
-          <p class="d-card-body">Agenda multi-profissional, prescrições com templates, vacinas com protocolos default, documentos clínicos e portal do paciente.</p>
-          <ul class="d-card-list">
-            <li>Lembretes WhatsApp automáticos</li>
-            <li>Follow-up pós-consulta</li>
-            <li>NPS pós-encontro</li>
-            <li>Chat entre clínicas</li>
-          </ul>
+          <h3 class="d-bento-title-sm">Co-piloto durante consulta</h3>
+          <p class="d-bento-body-sm">Você digita. A IA sugere top 3 hipóteses com CID-10, exames recomendados e red flags.</p>
+          <div class="d-mock-pill-row">
+            <span class="d-pill-mock">I21.9 · 72%</span>
+            <span class="d-pill-mock">I20.0 · 48%</span>
+          </div>
         </article>
 
-        <article class="d-card d-anim d-anim-up d-anim-stagger">
-          <div class="d-card-icon" data-tone="tertiary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 3l8 4v6c0 5-3.5 8.5-8 9-4.5-0.5-8-4-8-9V7z"/>
-              <path d="M9 12l2 2 4-4"/>
-            </svg>
+        <!-- Cell 3 — M: Foto laudo -->
+        <article class="d-bento-cell d-bento-m d-anim d-anim-up d-anim-stagger" data-tone="orange">
+          <div class="d-bento-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg>
           </div>
-          <h3 class="d-card-title">LGPD desde o byte</h3>
-          <p class="d-card-body">Anonimização automática de PII, audit log forense, isolamento multi-tenant via RLS. Profissionais com CRM/CRMV verificado.</p>
-          <ul class="d-card-list">
-            <li>Anonimização automática</li>
-            <li>Audit log append-only</li>
-            <li>Consentimento documentado</li>
-            <li>RLS estrito por tenant</li>
-          </ul>
+          <h3 class="d-bento-title-sm">Foto do laudo impresso</h3>
+          <p class="d-bento-body-sm">Tutor chega com papel? Tira foto com celular. IA classifica, faz OCR e analisa.</p>
+          <div class="d-mock-photo-row">
+            <span class="d-mock-photo-stamp">JPG</span>
+            <span class="d-mock-photo-arrow">→</span>
+            <span class="d-mock-photo-stamp d-stamp-ok">OCR'd</span>
+            <span class="d-mock-photo-arrow">→</span>
+            <span class="d-mock-photo-stamp d-stamp-done">Análise</span>
+          </div>
+        </article>
+
+        <!-- Cell 4 — L: WhatsApp -->
+        <article class="d-bento-cell d-bento-l d-anim d-anim-up d-anim-stagger" data-tone="green">
+          <div class="d-bento-tag d-bento-tag-green">
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+            WhatsApp automático
+          </div>
+          <h3 class="d-bento-title">Pacientes lembrados,<br/><span class="d-bento-em-green">sem você lembrar</span> deles.</h3>
+          <p class="d-bento-body-sm">Lembrete de consulta T-24h. Follow-up pós-consulta T+7d. Próxima dose de vacina T-7d. Tudo automático, configurável, opt-out por paciente.</p>
+          <div class="d-mock-wa-stack">
+            <div class="d-mock-wa-line"><span class="d-wa-dot"></span>"Olá, Maria! Lembrete: consulta amanhã às 14h."</div>
+            <div class="d-mock-wa-line"><span class="d-wa-dot"></span>"Como está se sentindo após a consulta?"</div>
+            <div class="d-mock-wa-line"><span class="d-wa-dot"></span>"Próxima dose da V10 do Thor: 12/06."</div>
+          </div>
+        </article>
+
+        <!-- Cell 5 — S: Agenda -->
+        <article class="d-bento-cell d-bento-s d-anim d-anim-up d-anim-stagger" data-tone="primary">
+          <div class="d-bento-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg>
+          </div>
+          <h3 class="d-bento-title-sm">Agenda multi-profissional</h3>
+          <p class="d-bento-body-sm">Filtro por médico, slot configurável, sem overlap.</p>
+        </article>
+
+        <!-- Cell 6 — S: Prontuário -->
+        <article class="d-bento-cell d-bento-s d-anim d-anim-up d-anim-stagger" data-tone="primary">
+          <div class="d-bento-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          </div>
+          <h3 class="d-bento-title-sm">Prontuário estruturado</h3>
+          <p class="d-bento-body-sm">Encontros assinados, vital signs, evolução, retorno.</p>
+        </article>
+
+        <!-- Cell 7 — S: Portal -->
+        <article class="d-bento-cell d-bento-s d-anim d-anim-up d-anim-stagger" data-tone="primary">
+          <div class="d-bento-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          </div>
+          <h3 class="d-bento-title-sm">Portal do paciente</h3>
+          <p class="d-bento-body-sm">Tutor vê exames, prescrições e vacinas. TTL 90 dias.</p>
+        </article>
+
+        <!-- Cell 8 — S: LGPD -->
+        <article class="d-bento-cell d-bento-s d-anim d-anim-up d-anim-stagger" data-tone="primary">
+          <div class="d-bento-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v6c0 5-3.5 8.5-8 9-4.5-0.5-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg>
+          </div>
+          <h3 class="d-bento-title-sm">LGPD by design</h3>
+          <p class="d-bento-body-sm">Anonimização automática · Audit log · Multi-tenant RLS.</p>
         </article>
       </div>
     </div>
@@ -4323,18 +4386,6 @@
     </div>
   </section>
 
-  <!-- ── PULL QUOTE — momento editorial dramático ─────────────────── -->
-  <section class="d-pullquote">
-    <div class="d-pullquote-inner d-anim d-anim-fade">
-      <p class="d-pullquote-text">
-        Não vendemos software clínico. Vendemos <em class="d-pullquote-emph">tempo de volta</em> pro médico cuidar do paciente — e <em class="d-pullquote-emph">atenção computacional</em> pra que nenhum detalhe importante se perca no histórico.
-      </p>
-      <div class="d-pullquote-cite">
-        <span class="d-pullquote-rule"></span>
-        <span>Filosofia da plataforma · 2026</span>
-      </div>
-    </div>
-  </section>
 
   <!-- ── OPERAÇÃO DETALHADA ──────────────────────────────────────── -->
   <section class="d-section d-section-alt" id="d-operacao">
@@ -4667,12 +4718,6 @@
           <a>Multi-tenant RLS</a>
         </div>
       </div>
-    </div>
-    <div class="d-colophon">
-      <p class="d-colophon-text">
-        Composto em <em>Fraunces</em> (display, opsz 144) e <em>Inter Tight</em> (corpo). Etiquetas técnicas em <em>JetBrains Mono</em>. Texturas geradas por SVG <em>fractalNoise</em>. Sem stock photo, sem template — desenhado pra essa clínica, em Português.
-      </p>
-      <div class="d-colophon-mark">— GF</div>
     </div>
     <div class="d-footer-base">
       <span>© 2026 GenomaFlow · CNPJ 64.052.716/0001-15</span>
@@ -7006,6 +7051,797 @@
   .layout-day .d-display em.d-display-em.d-shimmer {
     background: none;
     -webkit-text-fill-color: var(--d-secondary);
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     FUTURIST OVERRIDE — Quantum Clinical
+     Skill frontend-design: pivot do editorial → modern AI tech.
+     Onest geometric sans, electric teal #00d4c5, deep space sections,
+     bento grid, glassmorphism, glow shadows, aurora gradients.
+     ════════════════════════════════════════════════════════════════ */
+
+  [data-theme="day"] {
+    --d-bg: #f8f9fb;
+    --d-bg-deep: #eef0f5;
+    --d-surface: #ffffff;
+    --d-ink: #0a0e1a;
+    --d-ink-2: #3a4055;
+    --d-rule: #e2e6ee;
+    --d-secondary: #00b8a9;
+    --d-electric: #00d4c5;
+    --d-electric-glow: rgba(0,212,197,0.32);
+    --d-deep: #0c111d;
+  }
+
+  /* Body uses Onest geometric */
+  .layout-day {
+    font-family: 'Onest', 'Inter Tight', system-ui, sans-serif;
+    background: var(--d-bg);
+  }
+  .layout-day a, .layout-day p, .layout-day span, .layout-day li,
+  .layout-day h1, .layout-day h2, .layout-day h3,
+  .layout-day .d-display, .layout-day .d-headline,
+  .layout-day .d-card-title, .layout-day .d-bento-title,
+  .layout-day .d-feat-title, .layout-day .d-section-sub,
+  .layout-day .d-lead, .layout-day .d-pricing-num,
+  .layout-day .d-stat-num, .layout-day .d-cta-title,
+  .layout-day .d-module-title, .layout-day .d-faq-item summary,
+  .layout-day .d-trust-num, .layout-day .d-feat-stats strong,
+  .layout-day .d-extras-name, .layout-day .d-extras-price,
+  .layout-day .d-extras-title, .layout-day .d-card-body,
+  .layout-day .d-feat-body, .layout-day .d-mock-row-title,
+  .layout-day .d-mock-row-meta, .layout-day .d-ops-card h3,
+  .layout-day .d-ops-card p, .layout-day .d-faq-body,
+  .layout-day .d-pricing-tag, .layout-day .d-pricing-currency,
+  .layout-day .d-pricing-period, .layout-day .d-hero-row-val,
+  .layout-day .d-hero-insight p, .layout-day .d-footer-tagline {
+    font-family: 'Onest', 'Inter Tight', system-ui, sans-serif !important;
+    font-style: normal !important;
+  }
+
+  /* Mono labels stay JetBrains */
+  .layout-day .d-eyebrow, .layout-day .d-status-text,
+  .layout-day .d-num, .layout-day .d-num-label,
+  .layout-day .d-trust-label, .layout-day .d-stat-detail,
+  .layout-day .d-stat-label, .layout-day .d-bento-tag,
+  .layout-day .d-mock-mini-label, .layout-day .d-mock-mini-val,
+  .layout-day .d-pill-mock, .layout-day .d-mock-photo-stamp,
+  .layout-day .d-versus-label, .layout-day .d-feat-tag,
+  .layout-day .d-module-tag, .layout-day .d-eyebrow-pill,
+  .layout-day .d-nav-links a, .layout-day .d-footer-col-title,
+  .layout-day .d-footer-col a, .layout-day .d-footer-base {
+    font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  }
+
+  /* ── HERO refinement ────────────────────────────────────────── */
+  .layout-day .d-hero {
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,212,197,0.12), transparent 70%),
+      radial-gradient(ellipse 60% 40% at 100% 100%, rgba(255,59,47,0.07), transparent 70%),
+      var(--d-bg);
+    padding: 72px 0 96px;
+  }
+  .layout-day .d-hero-orb-1 {
+    background: radial-gradient(circle, rgba(0,212,197,0.55), transparent 70%);
+    width: 520px; height: 520px;
+    top: -160px; right: -120px;
+    opacity: 0.45;
+  }
+  .layout-day .d-hero-orb-2 {
+    background: radial-gradient(circle, rgba(0,184,169,0.30), transparent 70%);
+    bottom: -180px; left: -120px;
+    opacity: 0.35;
+  }
+  .layout-day .d-hero-grid-overlay {
+    background-image:
+      linear-gradient(rgba(10,14,26,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(10,14,26,0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  .d-status-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px;
+    background: rgba(0,212,197,0.08);
+    border: 1px solid rgba(0,212,197,0.25);
+    border-radius: 100px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--d-secondary);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 24px;
+  }
+  .d-status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--d-electric);
+    box-shadow: 0 0 8px var(--d-electric-glow);
+    animation: dStatusPulse 1.8s ease-in-out infinite;
+  }
+  @keyframes dStatusPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* Display modernizado */
+  .layout-day .d-display {
+    font-family: 'Onest', system-ui, sans-serif !important;
+    font-weight: 700;
+    font-size: clamp(48px, 6.5vw, 88px);
+    line-height: 1.0;
+    letter-spacing: -0.04em;
+    color: var(--d-ink);
+    margin-top: 24px;
+  }
+  .layout-day .d-display em.d-display-em {
+    font-family: 'Onest', system-ui, sans-serif !important;
+    font-style: normal;
+    font-weight: 700;
+    color: var(--d-secondary);
+    background: linear-gradient(135deg, var(--d-electric), var(--d-secondary));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    position: relative;
+    padding: 0;
+  }
+  .layout-day .d-display em.d-display-em::before { display: none; }
+
+  .layout-day .d-lead {
+    font-family: 'Onest', sans-serif !important;
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--d-ink-2);
+    max-width: 580px;
+    margin-top: 28px;
+    font-weight: 400;
+  }
+  .layout-day .d-lead strong { color: var(--d-ink); font-weight: 700; }
+  .d-lead-em {
+    color: var(--d-secondary);
+    font-weight: 600;
+  }
+
+  /* Trust row futurist */
+  .layout-day .d-trust-row {
+    margin-top: 48px;
+    padding: 20px 24px;
+    background: rgba(255,255,255,0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--d-rule);
+    border-radius: 16px;
+    border-top: 1px solid var(--d-rule);
+    gap: 32px;
+    box-shadow: 0 4px 24px rgba(10,14,26,0.04);
+  }
+  .layout-day .d-trust-num {
+    font-family: 'Onest', sans-serif !important;
+    font-style: normal;
+    font-weight: 700;
+    font-size: 24px;
+    color: var(--d-ink);
+    letter-spacing: -0.02em;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  .d-trust-unit {
+    font-size: 13px;
+    color: var(--d-ink-2);
+    font-weight: 500;
+  }
+  .layout-day .d-trust-divider {
+    background: var(--d-rule);
+    height: 32px;
+  }
+
+  /* Hero card glassmorphism */
+  .layout-day .d-hero-card {
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(10,14,26,0.06);
+    border-radius: 16px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 32px 64px -16px rgba(0,212,197,0.18),
+      0 16px 40px -8px rgba(10,14,26,0.08);
+  }
+  .layout-day .d-hero-card-chrome {
+    background: rgba(248,249,251,0.6);
+    border-bottom: 1px solid var(--d-rule);
+  }
+  .layout-day .d-hero-row-val {
+    font-family: 'Onest', sans-serif !important;
+    font-style: normal;
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .layout-day .d-hero-insight {
+    background: linear-gradient(135deg, rgba(0,212,197,0.06), rgba(0,184,169,0.02));
+    border: 1px solid rgba(0,212,197,0.2);
+    border-radius: 12px;
+  }
+  .layout-day .d-hero-insight-tag {
+    color: var(--d-secondary);
+    font-family: 'JetBrains Mono', monospace !important;
+  }
+
+  /* ── SECTION HEADS futurist ──────────────────────────────────── */
+  .layout-day .d-section-head { padding-left: 0 !important; text-align: center; max-width: 760px; margin: 0 auto 64px; }
+  .d-eyebrow-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px;
+    background: rgba(0,212,197,0.08);
+    border: 1px solid rgba(0,212,197,0.2);
+    border-radius: 100px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--d-secondary);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .d-pill-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--d-electric);
+    box-shadow: 0 0 6px var(--d-electric-glow);
+  }
+
+  .layout-day .d-headline {
+    font-family: 'Onest', sans-serif !important;
+    font-weight: 700;
+    font-size: clamp(36px, 4.5vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    color: var(--d-ink);
+  }
+  .layout-day .d-headline em.d-headline-em,
+  .layout-day .d-headline span.d-headline-em {
+    font-family: 'Onest', sans-serif !important;
+    font-style: normal;
+    background: linear-gradient(135deg, var(--d-electric), var(--d-secondary));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .layout-day .d-section-sub {
+    font-family: 'Onest', sans-serif !important;
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--d-ink-2);
+    margin: 16px auto 0;
+    max-width: 600px;
+  }
+
+  /* Hide editorial section-num (mantém a estrutura mas esconde) */
+  .layout-day .d-section-head .d-section-num { display: none; }
+
+  /* ── BENTO GRID (the killer move) ────────────────────────────── */
+  .d-section-bento { padding: 80px 0; }
+  .d-bento {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-auto-rows: minmax(220px, auto);
+    gap: 16px;
+  }
+  .d-bento-cell {
+    position: relative;
+    background: var(--d-surface);
+    border: 1px solid var(--d-rule);
+    border-radius: 20px;
+    padding: 28px;
+    overflow: hidden;
+    transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+    display: flex; flex-direction: column;
+  }
+  .d-bento-cell::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    padding: 1px;
+    background: linear-gradient(135deg, transparent 30%, rgba(0,212,197,0.5) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .d-bento-cell:hover {
+    transform: translateY(-4px);
+    box-shadow:
+      0 20px 40px -12px rgba(0,212,197,0.18),
+      0 8px 24px -6px rgba(10,14,26,0.08);
+    border-color: transparent;
+  }
+  .d-bento-cell:hover::before { opacity: 1; }
+
+  .d-bento-xl { grid-column: span 2; grid-row: span 2; }
+  .d-bento-l { grid-column: span 2; }
+  .d-bento-m { grid-column: span 2; }
+  .d-bento-s { grid-column: span 1; }
+
+  .d-bento-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    background: rgba(0,212,197,0.08);
+    border: 1px solid rgba(0,212,197,0.25);
+    border-radius: 100px;
+    font-size: 10px;
+    color: var(--d-secondary);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    align-self: flex-start;
+    margin-bottom: 16px;
+  }
+  .d-bento-tag-green {
+    background: rgba(74,214,160,0.1);
+    border-color: rgba(74,214,160,0.3);
+    color: #2a8757;
+  }
+  .d-bento-icon {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(0,212,197,0.12), rgba(0,184,169,0.04));
+    border: 1px solid rgba(0,212,197,0.18);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--d-secondary);
+    margin-bottom: 16px;
+    transition: transform 0.3s;
+  }
+  .d-bento-cell:hover .d-bento-icon {
+    transform: scale(1.05) rotate(-3deg);
+  }
+
+  .d-bento-cell[data-tone="orange"] .d-bento-icon {
+    background: linear-gradient(135deg, rgba(255,59,47,0.12), rgba(255,59,47,0.04));
+    border-color: rgba(255,59,47,0.18);
+    color: var(--d-cross);
+  }
+  .d-bento-cell[data-tone="green"] .d-bento-icon {
+    background: linear-gradient(135deg, rgba(74,214,160,0.12), rgba(74,214,160,0.04));
+    border-color: rgba(74,214,160,0.25);
+    color: #2a8757;
+  }
+
+  .d-bento-title {
+    font-family: 'Onest', sans-serif;
+    font-weight: 700;
+    font-size: clamp(24px, 2.4vw, 32px);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--d-ink);
+    margin: 0 0 12px;
+  }
+  .d-bento-em {
+    background: linear-gradient(135deg, var(--d-electric), var(--d-secondary));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .d-bento-em-green {
+    color: #2a8757;
+  }
+  .d-bento-title-sm {
+    font-family: 'Onest', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+    color: var(--d-ink);
+    margin: 0 0 8px;
+  }
+  .d-bento-body {
+    font-family: 'Onest', sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--d-ink-2);
+    margin: 0;
+  }
+  .d-bento-body-sm {
+    font-family: 'Onest', sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--d-ink-2);
+    margin: 0;
+  }
+
+  /* Bento mock visual (XL card) */
+  .d-bento-mock {
+    margin-top: auto;
+    padding-top: 20px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .d-mock-pulse-line {
+    background: linear-gradient(90deg, rgba(0,212,197,0.04), rgba(0,212,197,0.08));
+    border: 1px solid rgba(0,212,197,0.15);
+    border-radius: 8px;
+    padding: 8px 12px;
+    height: 56px;
+    display: flex; align-items: center;
+    margin-bottom: 8px;
+  }
+  .d-mock-pulse-line svg { width: 100%; height: 100%; }
+  .d-ecg-path {
+    stroke-dasharray: 600;
+    stroke-dashoffset: 600;
+    animation: dEcgDraw 4s linear infinite;
+  }
+  @keyframes dEcgDraw {
+    0% { stroke-dashoffset: 600; }
+    50% { stroke-dashoffset: 0; }
+    100% { stroke-dashoffset: -600; }
+  }
+  .d-mock-row-mini {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    background: rgba(248,249,251,0.6);
+    border: 1px solid var(--d-rule);
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .d-mock-mini-label { color: var(--d-ink-2); flex: 1; }
+  .d-mock-mini-val { color: var(--d-secondary); font-weight: 600; }
+  .d-mock-mini-check { color: var(--d-secondary); font-weight: 700; }
+  .d-mock-mini-running {
+    color: #b88010 !important;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .d-mock-dot {
+    width: 4px; height: 4px; border-radius: 50%;
+    background: #b88010;
+    margin-left: 4px;
+    animation: dStatusPulse 1s ease-in-out infinite;
+  }
+
+  /* Bento M card pills */
+  .d-mock-pill-row {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    margin-top: 16px;
+  }
+  .d-pill-mock {
+    padding: 4px 10px;
+    background: rgba(0,212,197,0.08);
+    border: 1px solid rgba(0,212,197,0.18);
+    border-radius: 100px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--d-secondary);
+    font-weight: 600;
+  }
+
+  .d-mock-photo-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+  .d-mock-photo-stamp {
+    padding: 4px 10px;
+    background: rgba(10,14,26,0.04);
+    border: 1px solid var(--d-rule);
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--d-ink-2);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .d-mock-photo-stamp.d-stamp-ok {
+    background: rgba(247,200,115,0.1);
+    border-color: rgba(247,200,115,0.3);
+    color: #b88010;
+  }
+  .d-mock-photo-stamp.d-stamp-done {
+    background: rgba(0,212,197,0.1);
+    border-color: rgba(0,212,197,0.3);
+    color: var(--d-secondary);
+  }
+  .d-mock-photo-arrow {
+    color: var(--d-ink-2);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  /* WhatsApp mock stack (large card) */
+  .d-mock-wa-stack {
+    margin-top: 16px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .d-mock-wa-line {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    background: rgba(74,214,160,0.06);
+    border: 1px solid rgba(74,214,160,0.2);
+    border-radius: 10px;
+    font-size: 12px;
+    color: var(--d-ink);
+    line-height: 1.4;
+  }
+  .d-wa-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #25D366;
+    flex-shrink: 0;
+    box-shadow: 0 0 6px rgba(37,211,102,0.5);
+  }
+
+  @media (max-width: 920px) {
+    .d-bento { grid-template-columns: repeat(2, 1fr); }
+    .d-bento-xl, .d-bento-l, .d-bento-m { grid-column: span 2; }
+    .d-bento-s { grid-column: span 1; }
+    .d-bento-xl { grid-row: auto; }
+  }
+  @media (max-width: 540px) {
+    .d-bento { grid-template-columns: 1fr; gap: 12px; }
+    .d-bento-xl, .d-bento-l, .d-bento-m, .d-bento-s { grid-column: span 1; }
+    .d-bento-cell { padding: 24px; }
+  }
+
+  /* ── REGULAR CARDS futurist ──────────────────────────────────── */
+  .layout-day .d-card,
+  .layout-day .d-module-card,
+  .layout-day .d-ops-card,
+  .layout-day .d-versus-row,
+  .layout-day .d-pricing-card,
+  .layout-day .d-pricing-extras,
+  .layout-day .d-faq-item,
+  .layout-day .d-mock-card,
+  .layout-day .d-photo-card,
+  .layout-day .d-whatsapp-card,
+  .layout-day .d-extras-item {
+    border-radius: 16px !important;
+    box-shadow: none !important;
+  }
+  .layout-day .d-card:hover,
+  .layout-day .d-module-card:hover,
+  .layout-day .d-ops-card:hover,
+  .layout-day .d-versus-row:hover {
+    border-color: rgba(0,212,197,0.4) !important;
+    box-shadow:
+      0 12px 32px -8px rgba(0,212,197,0.16),
+      0 4px 16px -4px rgba(10,14,26,0.06) !important;
+  }
+
+  .layout-day .d-pricing-card {
+    border: 1px solid var(--d-ink) !important;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 24px 48px -12px rgba(0,212,197,0.2),
+      0 12px 32px -8px rgba(10,14,26,0.1) !important;
+  }
+
+  /* Section alt = subtle gradient (não cream paper) */
+  .layout-day .d-section-alt {
+    background:
+      linear-gradient(180deg, var(--d-bg-deep) 0%, var(--d-bg) 100%) !important;
+  }
+  .layout-day .d-section-alt::before { display: none !important; }
+
+  /* Stats strip — futurist deep space */
+  .layout-day .d-stats-strip {
+    background:
+      radial-gradient(ellipse 60% 80% at 0% 50%, rgba(0,212,197,0.15), transparent 60%),
+      radial-gradient(ellipse 40% 60% at 100% 50%, rgba(255,59,47,0.08), transparent 60%),
+      var(--d-deep) !important;
+  }
+  .layout-day .d-stat-num {
+    font-family: 'Onest', sans-serif !important;
+    font-style: normal !important;
+    font-weight: 800 !important;
+    font-size: clamp(44px, 5vw, 72px) !important;
+    color: #fff !important;
+    background: linear-gradient(135deg, #fff, var(--d-electric));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* Module cards — futurist clean */
+  .layout-day .d-module-card { border-radius: 20px !important; }
+  .layout-day .d-module-icon { border-radius: 12px; }
+  .layout-day .d-module-icon[data-tone="primary"] {
+    background: linear-gradient(135deg, var(--d-ink), var(--d-deep));
+  }
+  .layout-day .d-module-icon[data-tone="secondary"] {
+    background: linear-gradient(135deg, var(--d-electric), var(--d-secondary));
+  }
+  .layout-day .d-module-title {
+    font-family: 'Onest', sans-serif !important;
+    font-style: normal !important;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  /* Feature blocks — futurist refinement */
+  .layout-day .d-feat { border-bottom-color: var(--d-rule) !important; }
+  .layout-day .d-feat-tag {
+    background: rgba(0,212,197,0.08) !important;
+    border: 1px solid rgba(0,212,197,0.25) !important;
+    border-radius: 100px !important;
+    padding: 4px 12px !important;
+    color: var(--d-secondary) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .layout-day .d-feat-title {
+    font-family: 'Onest', sans-serif !important;
+    font-weight: 700 !important;
+    font-style: normal !important;
+    letter-spacing: -0.025em !important;
+  }
+  .layout-day .d-feat-em {
+    font-style: normal !important;
+    background: linear-gradient(135deg, var(--d-electric), var(--d-secondary));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .layout-day .d-feat-list li::before {
+    background: var(--d-electric);
+    width: 16px;
+    height: 2px;
+    border-radius: 2px;
+    box-shadow: 0 0 4px var(--d-electric-glow);
+  }
+  .layout-day .d-feat-list li strong {
+    background: linear-gradient(transparent 60%, rgba(0,212,197,0.18) 60%);
+  }
+
+  /* Pricing futurist */
+  .layout-day .d-pricing-num {
+    font-family: 'Onest', sans-serif !important;
+    font-style: normal !important;
+    font-weight: 800 !important;
+    background: linear-gradient(135deg, var(--d-ink), var(--d-secondary));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .layout-day .d-pricing-currency {
+    font-family: 'Onest', sans-serif !important;
+    font-style: normal !important;
+    font-weight: 700;
+  }
+
+  /* CTA card — futurist with glow */
+  .layout-day .d-cta-card {
+    border-radius: 24px !important;
+    background:
+      radial-gradient(ellipse at 0% 0%, rgba(0,212,197,0.5), transparent 60%),
+      radial-gradient(ellipse at 100% 100%, rgba(255,59,47,0.2), transparent 60%),
+      var(--d-deep) !important;
+    box-shadow:
+      0 32px 64px -16px rgba(0,212,197,0.25),
+      0 16px 40px -8px rgba(10,14,26,0.1);
+  }
+  .layout-day .d-cta-title {
+    font-family: 'Onest', sans-serif !important;
+    font-style: normal !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.025em !important;
+  }
+
+  /* Buttons futurist */
+  .layout-day .d-btn-primary,
+  .layout-day a.d-btn-primary {
+    background: var(--d-ink) !important;
+    color: #fff !important;
+    border-radius: 100px !important;
+    box-shadow: 0 4px 16px -4px rgba(10,14,26,0.3);
+  }
+  .layout-day .d-btn-primary:hover {
+    background: linear-gradient(135deg, var(--d-secondary), var(--d-electric)) !important;
+    box-shadow: 0 8px 24px -4px var(--d-electric-glow) !important;
+    transform: translateY(-2px);
+  }
+  .layout-day .d-btn-ghost {
+    border-radius: 100px !important;
+    background: rgba(255,255,255,0.6) !important;
+    backdrop-filter: blur(8px);
+  }
+  .layout-day .d-btn-cross,
+  .layout-day a.d-btn-cross {
+    border-radius: 100px !important;
+    background: linear-gradient(135deg, var(--d-electric), var(--d-secondary)) !important;
+    color: var(--d-deep) !important;
+    box-shadow: 0 8px 24px -4px var(--d-electric-glow) !important;
+    font-weight: 700 !important;
+  }
+  .layout-day .d-btn-cross:hover {
+    background: linear-gradient(135deg, #fff, var(--d-electric)) !important;
+    transform: translateY(-2px);
+  }
+  .layout-day .d-btn-ghost-light {
+    border-radius: 100px !important;
+    border-color: rgba(255,255,255,0.3) !important;
+  }
+
+  /* NAV futurist — sticky com blur forte */
+  .layout-day .d-nav {
+    background: rgba(248,249,251,0.7) !important;
+    backdrop-filter: saturate(180%) blur(20px) !important;
+    border-bottom: 1px solid rgba(10,14,26,0.06) !important;
+  }
+  .layout-day .d-logo-text {
+    font-family: 'Onest', sans-serif !important;
+    font-weight: 700;
+    font-style: normal !important;
+  }
+  .layout-day .d-logo-text-em {
+    font-style: normal !important;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--d-electric), var(--d-secondary));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* Footer futurist */
+  .layout-day .d-footer {
+    background: var(--d-bg-deep) !important;
+    border-top: 1px solid var(--d-rule) !important;
+  }
+  .layout-day .d-footer-tagline {
+    font-family: 'Onest', sans-serif !important;
+    font-style: normal !important;
+  }
+
+  /* FAQ futurist */
+  .layout-day .d-faq-item summary {
+    font-family: 'Onest', sans-serif !important;
+    font-style: normal !important;
+    font-weight: 600;
+  }
+  .layout-day .d-faq-item[open] {
+    background: rgba(0,212,197,0.03) !important;
+  }
+  .layout-day .d-faq-arrow {
+    font-family: 'Onest', sans-serif !important;
+    color: var(--d-secondary) !important;
+  }
+
+  /* Versus rows */
+  .layout-day .d-versus-arrow {
+    font-family: 'Onest', sans-serif !important;
+    font-style: normal !important;
+    color: var(--d-electric);
+    font-weight: 700;
+  }
+  .layout-day .d-versus-after {
+    border-left-color: var(--d-electric);
+  }
+  .layout-day .d-versus-label-after {
+    color: var(--d-secondary);
+  }
+
+  /* Mock cards futurist (radius 16, glass) */
+  .layout-day .d-mock-card,
+  .layout-day .d-photo-card,
+  .layout-day .d-whatsapp-card {
+    background: rgba(255,255,255,0.85) !important;
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--d-rule) !important;
+  }
+
+  /* Disable paper grain noise (era editorial) */
+  .layout-day::before { display: none !important; }
+
+  /* Hero card LIVE badge — green */
+  .layout-day .d-chrome-live {
+    background: rgba(0,212,197,0.1) !important;
+    color: var(--d-secondary) !important;
+    padding: 3px 8px !important;
+    border-radius: 100px !important;
+  }
+  .layout-day .d-chrome-live-dot {
+    background: var(--d-electric);
+    box-shadow: 0 0 6px var(--d-electric-glow);
   }
 
   /* ════════════════════════════════════════════════════════════════
