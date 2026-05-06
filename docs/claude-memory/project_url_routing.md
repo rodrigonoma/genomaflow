@@ -33,6 +33,7 @@ originSessionId: 6e03ff44-994d-4989-8d23-6ad314de1080
 - Apex / www **nunca** pode servir o Angular SPA — só landing
 - Nenhum email/link/redirect interno pode apontar pro apex pra ações que exigem login (`/login`, `/onboarding`, `/dashboard` etc.) — sempre `app.`
 - Cookies/localStorage **não atravessam subdomínios** — se um dia mover algo entre apex/app, todos os usuários são deslogados
+- **Imagens estáticas no landing** (PNG/JPG/SVG no root de `apps/landing/`) precisam estar cobertas pela regex `location ~* ^/[^/]+\.(png|jpg|jpeg|webp|svg|ico|gif)$` no apex server. Sem isso caem no `location /` catch-all que faz 308 → `app.genomaflow.com.br/<arquivo>` que retorna 404 (incidente 2026-05-05 com `rx_landing.png`)
 
 ## Como adicionar novo host
 
