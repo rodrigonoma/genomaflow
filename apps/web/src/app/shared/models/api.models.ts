@@ -212,7 +212,8 @@ export interface UserProfile {
   crm_number?: string | null;
   crm_uf?: string | null;
   professional_data_confirmed_at?: string | null;
-  module: 'human' | 'veterinary';
+  professional_type: 'medico' | 'esteticista' | 'dentista' | 'biomedico' | 'outro';
+  module: 'human' | 'veterinary' | 'estetica';
   tenant_name: string;
   // Status de cobrança do tenant. Permite UI condicional (banner past_due,
   // chip "fundador" pra grandfathered, prompt "completar pagamento" pra
