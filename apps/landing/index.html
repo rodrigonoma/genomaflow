@@ -3914,39 +3914,170 @@
         </div>
       </div>
       <div class="d-hero-media d-anim d-anim-up" data-anim-delay="200">
-        <div class="d-hero-card d-tilt">
-          <div class="d-hero-card-chrome">
+        <div class="d-xray-frame">
+          <div class="d-xray-chrome">
             <span class="d-chrome-dots"><span></span><span></span><span></span></span>
-            <span class="d-chrome-url">app.genomaflow.com.br / paciente / hemograma</span>
-            <span class="d-chrome-live"><span class="d-chrome-live-dot"></span>LIVE</span>
+            <span class="d-xray-meta">RX TÓRAX · PA · 1024×1280</span>
+            <span class="d-chrome-live"><span class="d-chrome-live-dot"></span>ANALISANDO</span>
           </div>
-          <div class="d-hero-card-body">
-            <div class="d-hero-row d-hero-row-head">
-              <div>
-                <div class="d-hero-row-label">PACIENTE</div>
-                <div class="d-hero-row-val">M.C.S, ♀ 54a</div>
-              </div>
-              <span class="d-badge d-badge-warn d-badge-pulse">2 alertas</span>
+          <div class="d-xray-stage">
+            <svg viewBox="0 0 480 560" class="d-xray-svg" aria-hidden="true">
+              <defs>
+                <radialGradient id="dXrayBg" cx="50%" cy="50%" r="60%">
+                  <stop offset="0%" stop-color="#1a2640" stop-opacity="1"/>
+                  <stop offset="100%" stop-color="#050912" stop-opacity="1"/>
+                </radialGradient>
+                <radialGradient id="dLungL" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="rgba(255,255,255,0.18)"/>
+                  <stop offset="60%" stop-color="rgba(255,255,255,0.08)"/>
+                  <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+                </radialGradient>
+                <linearGradient id="dScanGrad" x1="0" x2="1">
+                  <stop offset="0%" stop-color="rgba(0,212,197,0)"/>
+                  <stop offset="50%" stop-color="rgba(0,212,197,0.9)"/>
+                  <stop offset="100%" stop-color="rgba(0,212,197,0)"/>
+                </linearGradient>
+                <filter id="dGlow">
+                  <feGaussianBlur stdDeviation="2"/>
+                  <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+              </defs>
+
+              <!-- Base radiograph -->
+              <rect width="480" height="560" fill="url(#dXrayBg)"/>
+
+              <!-- Lung soft tissue glow -->
+              <ellipse cx="170" cy="290" rx="78" ry="135" fill="url(#dLungL)"/>
+              <ellipse cx="310" cy="290" rx="78" ry="135" fill="url(#dLungL)"/>
+
+              <!-- Spine -->
+              <g stroke="rgba(220,230,250,0.55)" fill="none" stroke-linecap="round">
+                <line x1="240" y1="60" x2="240" y2="520" stroke-width="1.5"/>
+                <!-- Vertebrae -->
+                <ellipse cx="240" cy="100" rx="9" ry="6" stroke-width="1"/>
+                <ellipse cx="240" cy="135" rx="10" ry="7" stroke-width="1"/>
+                <ellipse cx="240" cy="175" rx="11" ry="7" stroke-width="1"/>
+                <ellipse cx="240" cy="220" rx="12" ry="8" stroke-width="1"/>
+                <ellipse cx="240" cy="270" rx="13" ry="8" stroke-width="1"/>
+                <ellipse cx="240" cy="320" rx="13" ry="8" stroke-width="1"/>
+                <ellipse cx="240" cy="370" rx="14" ry="9" stroke-width="1"/>
+                <ellipse cx="240" cy="420" rx="14" ry="9" stroke-width="1"/>
+                <ellipse cx="240" cy="470" rx="13" ry="9" stroke-width="1"/>
+              </g>
+
+              <!-- Clavicles -->
+              <g stroke="rgba(220,230,250,0.5)" fill="none" stroke-width="2" stroke-linecap="round">
+                <path d="M90,110 Q170,80 230,95"/>
+                <path d="M250,95 Q310,80 390,110"/>
+              </g>
+
+              <!-- Ribs -->
+              <g stroke="rgba(200,215,245,0.35)" fill="none" stroke-width="1.4" stroke-linecap="round">
+                <!-- Left ribs -->
+                <path d="M230,150 Q140,160 95,210"/>
+                <path d="M230,195 Q125,205 80,265"/>
+                <path d="M230,240 Q115,250 70,320"/>
+                <path d="M230,290 Q110,300 70,370"/>
+                <path d="M230,340 Q115,355 80,420"/>
+                <path d="M230,390 Q125,405 95,460"/>
+                <!-- Right ribs (mirror) -->
+                <path d="M250,150 Q340,160 385,210"/>
+                <path d="M250,195 Q355,205 400,265"/>
+                <path d="M250,240 Q365,250 410,320"/>
+                <path d="M250,290 Q370,300 410,370"/>
+                <path d="M250,340 Q365,355 400,420"/>
+                <path d="M250,390 Q355,405 385,460"/>
+              </g>
+
+              <!-- Heart shadow -->
+              <path d="M230,310 Q205,300 195,335 Q188,375 215,400 Q240,415 265,400 Q280,385 280,360 Q278,330 250,318 Z"
+                    fill="rgba(255,255,255,0.07)" stroke="rgba(220,230,250,0.25)" stroke-width="1"/>
+
+              <!-- Diaphragm curves -->
+              <path d="M85,460 Q175,500 235,490" stroke="rgba(220,230,250,0.4)" stroke-width="1.5" fill="none"/>
+              <path d="M245,490 Q305,500 395,460" stroke="rgba(220,230,250,0.4)" stroke-width="1.5" fill="none"/>
+
+              <!-- Soft noise specks -->
+              <g fill="rgba(255,255,255,0.06)">
+                <circle cx="150" cy="240" r="1"/>
+                <circle cx="180" cy="280" r="0.8"/>
+                <circle cx="200" cy="350" r="1.2"/>
+                <circle cx="320" cy="220" r="0.9"/>
+                <circle cx="350" cy="310" r="1"/>
+                <circle cx="290" cy="380" r="0.8"/>
+              </g>
+
+              <!-- Scanning line (continuous animation) -->
+              <line x1="20" x2="460" y1="0" y2="0" class="d-xray-scan-line" stroke="url(#dScanGrad)" stroke-width="2"/>
+
+              <!-- AI markers — bounding boxes drawing in -->
+              <g class="d-xray-markers">
+                <!-- Marker 1: Cardio silhouette -->
+                <rect x="178" y="298" width="110" height="118" rx="2"
+                      class="d-xray-box d-xray-box-1"
+                      fill="none" stroke="#00d4c5" stroke-width="2"/>
+                <circle cx="178" cy="298" r="3" fill="#00d4c5" class="d-xray-corner d-xray-corner-1"/>
+                <circle cx="288" cy="298" r="3" fill="#00d4c5" class="d-xray-corner d-xray-corner-1"/>
+                <circle cx="178" cy="416" r="3" fill="#00d4c5" class="d-xray-corner d-xray-corner-1"/>
+                <circle cx="288" cy="416" r="3" fill="#00d4c5" class="d-xray-corner d-xray-corner-1"/>
+
+                <!-- Marker 2: Lung field R -->
+                <rect x="80" y="220" width="110" height="160" rx="2"
+                      class="d-xray-box d-xray-box-2"
+                      fill="none" stroke="#f5c14a" stroke-width="2"/>
+                <circle cx="80" cy="220" r="3" fill="#f5c14a" class="d-xray-corner d-xray-corner-2"/>
+                <circle cx="190" cy="220" r="3" fill="#f5c14a" class="d-xray-corner d-xray-corner-2"/>
+                <circle cx="80" cy="380" r="3" fill="#f5c14a" class="d-xray-corner d-xray-corner-2"/>
+                <circle cx="190" cy="380" r="3" fill="#f5c14a" class="d-xray-corner d-xray-corner-2"/>
+
+                <!-- Marker 3: Apex L -->
+                <rect x="290" y="170" width="100" height="90" rx="2"
+                      class="d-xray-box d-xray-box-3"
+                      fill="none" stroke="#00d4c5" stroke-width="2"/>
+                <circle cx="290" cy="170" r="3" fill="#00d4c5" class="d-xray-corner d-xray-corner-3"/>
+                <circle cx="390" cy="170" r="3" fill="#00d4c5" class="d-xray-corner d-xray-corner-3"/>
+                <circle cx="290" cy="260" r="3" fill="#00d4c5" class="d-xray-corner d-xray-corner-3"/>
+                <circle cx="390" cy="260" r="3" fill="#00d4c5" class="d-xray-corner d-xray-corner-3"/>
+              </g>
+
+              <!-- Crosshair reticle (subtle, top-right) -->
+              <g class="d-xray-reticle" stroke="rgba(0,212,197,0.4)" fill="none" stroke-width="0.8">
+                <circle cx="430" cy="50" r="14"/>
+                <circle cx="430" cy="50" r="6"/>
+                <line x1="416" y1="50" x2="424" y2="50"/>
+                <line x1="436" y1="50" x2="444" y2="50"/>
+                <line x1="430" y1="36" x2="430" y2="44"/>
+                <line x1="430" y1="56" x2="430" y2="64"/>
+              </g>
+            </svg>
+
+            <!-- AI labels overlaid -->
+            <div class="d-xray-label d-xray-label-1">
+              <span class="d-xray-label-tag d-xray-tag-teal">CARDIO</span>
+              <span class="d-xray-label-text">Silhueta cardíaca normal</span>
+              <span class="d-xray-label-conf">0.94</span>
             </div>
-            <div class="d-hero-row">
-              <div class="d-hero-row-label">colesterol total</div>
-              <div class="d-hero-row-val">248 mg/dL <span class="d-up">↑</span></div>
+            <div class="d-xray-label d-xray-label-2">
+              <span class="d-xray-label-tag d-xray-tag-warn">PULMONAR</span>
+              <span class="d-xray-label-text">Padrão broncovascular acentuado</span>
+              <span class="d-xray-label-conf">0.71</span>
             </div>
-            <div class="d-hero-row">
-              <div class="d-hero-row-label">LDL</div>
-              <div class="d-hero-row-val">172 mg/dL <span class="d-up">↑</span></div>
+            <div class="d-xray-label d-xray-label-3">
+              <span class="d-xray-label-tag d-xray-tag-teal">ÁPICE</span>
+              <span class="d-xray-label-text">Sem opacidade</span>
+              <span class="d-xray-label-conf">0.89</span>
             </div>
-            <div class="d-hero-row">
-              <div class="d-hero-row-label">framingham 10y</div>
-              <div class="d-hero-row-val d-hero-row-crit">18.4% intermediário</div>
-            </div>
-            <div class="d-hero-insight">
-              <div class="d-hero-insight-tag">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.5 5h5l-4 3 1.5 5-4-3-4 3 1.5-5-4-3h5z" stroke-linejoin="round"/></svg>
-                Sugestão da IA
-                <span class="d-typing-dots"><span></span><span></span><span></span></span>
-              </div>
-              <p>Sensibilidade a estatinas prevista. Considere rosuvastatina 10mg + LDL meta &lt;100. <span class="d-conf">conf. 0.94</span></p>
+
+            <!-- Bottom status bar -->
+            <div class="d-xray-statusbar">
+              <span class="d-xray-status-item">
+                <span class="d-xray-status-dot"></span>
+                Imaging RX agent
+              </span>
+              <span class="d-xray-status-divider">·</span>
+              <span class="d-xray-status-item">3 achados</span>
+              <span class="d-xray-status-divider">·</span>
+              <span class="d-xray-status-item d-xray-status-time">2.3s</span>
             </div>
           </div>
         </div>
@@ -4076,40 +4207,106 @@
           </div>
         </article>
 
-        <!-- Cell 5 — S: Agenda -->
+        <!-- Cell 5 — L: Sugestões pró-ativas -->
+        <article class="d-bento-cell d-bento-l d-anim d-anim-up d-anim-stagger" data-tone="secondary">
+          <div class="d-bento-tag">
+            <span class="d-pill-dot"></span>
+            IA Pró-ativa
+          </div>
+          <h3 class="d-bento-title">A IA <span class="d-bento-em">vê o que falta</span><br/>antes de você procurar.</h3>
+          <p class="d-bento-body-sm">Toda vez que você abre o prontuário, a IA revisa o histórico inteiro e sugere ações com diretriz citada.</p>
+          <div class="d-mock-suggestion-row">
+            <span class="d-mock-prio d-prio-high">Alta</span>
+            <div class="d-mock-suggestion-text">Solicitar HbA1c — sem coleta há 7 meses · ADA 2024</div>
+          </div>
+          <div class="d-mock-suggestion-row">
+            <span class="d-mock-prio d-prio-medium">Média</span>
+            <div class="d-mock-suggestion-text">Lipidograma vencido (14 m)</div>
+          </div>
+        </article>
+
+        <!-- Cell 6 — M: Chat RAG -->
+        <article class="d-bento-cell d-bento-m d-anim d-anim-up d-anim-stagger" data-tone="primary">
+          <div class="d-bento-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><circle cx="9" cy="11" r="0.5" fill="currentColor"/><circle cx="14" cy="11" r="0.5" fill="currentColor"/></svg>
+          </div>
+          <h3 class="d-bento-title-sm">Chat RAG por paciente</h3>
+          <p class="d-bento-body-sm">Pergunta natural sobre o prontuário, exames e prescrições. Resposta com citação do trecho exato.</p>
+          <div class="d-mock-chat">
+            <div class="d-mock-chat-q">"Qual a última HbA1c da Maria?"</div>
+            <div class="d-mock-chat-a">7,8% em 03/01 → tendência subindo</div>
+          </div>
+        </article>
+
+        <!-- Cell 7 — M: Comando voz na agenda -->
+        <article class="d-bento-cell d-bento-m d-anim d-anim-up d-anim-stagger" data-tone="orange">
+          <div class="d-bento-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg>
+          </div>
+          <h3 class="d-bento-title-sm">Comando de voz na agenda</h3>
+          <p class="d-bento-body-sm">"Marca consulta da Ana terça às 10". A IA cria, valida overlap, manda WhatsApp confirmação.</p>
+          <div class="d-mock-voice-row">
+            <span class="d-mock-voice-bars">
+              <span></span><span></span><span></span><span></span><span></span>
+            </span>
+            <span class="d-mock-voice-text">"Cancela a consulta de quinta…"</span>
+          </div>
+        </article>
+
+        <!-- Cell 8 — M: Chat entre clínicas -->
+        <article class="d-bento-cell d-bento-m d-anim d-anim-up d-anim-stagger" data-tone="primary">
+          <div class="d-bento-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><circle cx="17" cy="9" r="3"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M22 21v-1.5a3 3 0 0 0-3-3h-2"/></svg>
+          </div>
+          <h3 class="d-bento-title-sm">Chat seguro entre clínicas</h3>
+          <p class="d-bento-body-sm">Discussão de caso entre clínicas (humano↔humano ou vet↔vet). PII anonimizada automaticamente nos anexos.</p>
+          <div class="d-mock-chip-row">
+            <span class="d-pill-mock">PII redacted</span>
+            <span class="d-pill-mock">Cards IA</span>
+          </div>
+        </article>
+
+        <!-- Cell 9 — M: Comparação exames -->
+        <article class="d-bento-cell d-bento-m d-anim d-anim-up d-anim-stagger" data-tone="secondary">
+          <div class="d-bento-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 14l4-4 4 4 5-5"/></svg>
+          </div>
+          <h3 class="d-bento-title-sm">Comparação longitudinal</h3>
+          <p class="d-bento-body-sm">Selecione 2-5 exames do paciente. A IA destaca tendências, melhorias e pioras com timeline visual.</p>
+          <div class="d-mock-trend">
+            <svg viewBox="0 0 100 30" preserveAspectRatio="none">
+              <polyline points="0,22 20,18 40,12 60,15 80,8 100,5" fill="none" stroke="#00d4c5" stroke-width="2"/>
+              <circle cx="100" cy="5" r="3" fill="#00d4c5"/>
+            </svg>
+            <span class="d-mock-trend-label">↗ melhorando</span>
+          </div>
+        </article>
+
+        <!-- Cell 10 — S: Agenda + Prontuário compactos -->
         <article class="d-bento-cell d-bento-s d-anim d-anim-up d-anim-stagger" data-tone="primary">
           <div class="d-bento-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg>
           </div>
-          <h3 class="d-bento-title-sm">Agenda multi-profissional</h3>
-          <p class="d-bento-body-sm">Filtro por médico, slot configurável, sem overlap.</p>
+          <h3 class="d-bento-title-sm">Agenda + Prontuário</h3>
+          <p class="d-bento-body-sm">Multi-profissional, vital signs, evolução assinada (24h imutável).</p>
         </article>
 
-        <!-- Cell 6 — S: Prontuário -->
-        <article class="d-bento-cell d-bento-s d-anim d-anim-up d-anim-stagger" data-tone="primary">
-          <div class="d-bento-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-          </div>
-          <h3 class="d-bento-title-sm">Prontuário estruturado</h3>
-          <p class="d-bento-body-sm">Encontros assinados, vital signs, evolução, retorno.</p>
-        </article>
-
-        <!-- Cell 7 — S: Portal -->
+        <!-- Cell 11 — S: Portal -->
         <article class="d-bento-cell d-bento-s d-anim d-anim-up d-anim-stagger" data-tone="primary">
           <div class="d-bento-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
           </div>
           <h3 class="d-bento-title-sm">Portal do paciente</h3>
-          <p class="d-bento-body-sm">Tutor vê exames, prescrições e vacinas. TTL 90 dias.</p>
+          <p class="d-bento-body-sm">Tutor acessa exames, prescrições e vacinas. Token TTL 90d.</p>
         </article>
 
-        <!-- Cell 8 — S: LGPD -->
+        <!-- Cell 12 — S: LGPD -->
         <article class="d-bento-cell d-bento-s d-anim d-anim-up d-anim-stagger" data-tone="primary">
           <div class="d-bento-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v6c0 5-3.5 8.5-8 9-4.5-0.5-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg>
           </div>
           <h3 class="d-bento-title-sm">LGPD by design</h3>
-          <p class="d-bento-body-sm">Anonimização automática · Audit log · Multi-tenant RLS.</p>
+          <p class="d-bento-body-sm">Anonimização · Audit log · Multi-tenant RLS estrito.</p>
         </article>
       </div>
     </div>
@@ -7842,6 +8039,333 @@
   .layout-day .d-chrome-live-dot {
     background: var(--d-electric);
     box-shadow: 0 0 6px var(--d-electric-glow);
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     X-RAY HERO + MOCKS NOVOS DO BENTO (chat RAG, voz, comparação…)
+     ════════════════════════════════════════════════════════════════ */
+
+  /* X-Ray frame com glassmorphism */
+  .d-xray-frame {
+    background: linear-gradient(180deg, rgba(10,14,26,0.98), rgba(5,9,18,0.98));
+    border: 1px solid rgba(0,212,197,0.18);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.04) inset,
+      0 32px 80px -16px rgba(0,212,197,0.25),
+      0 16px 40px -8px rgba(10,14,26,0.4);
+    position: relative;
+  }
+  .d-xray-chrome {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .d-xray-chrome .d-chrome-dots span {
+    background: rgba(255,255,255,0.2);
+  }
+  .d-xray-meta {
+    flex: 1;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(220,230,250,0.55);
+    letter-spacing: 0.04em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .layout-day .d-xray-frame .d-chrome-live {
+    background: rgba(0,212,197,0.15) !important;
+    color: var(--d-electric) !important;
+    border: 1px solid rgba(0,212,197,0.3);
+  }
+
+  .d-xray-stage {
+    position: relative;
+    aspect-ratio: 480 / 560;
+    background: #050912;
+  }
+  .d-xray-svg {
+    width: 100%; height: 100%;
+    display: block;
+  }
+
+  /* Bounding boxes dasharray draw-in */
+  .d-xray-box {
+    stroke-dasharray: 480;
+    stroke-dashoffset: 480;
+    filter: url(#dGlow);
+    opacity: 0;
+  }
+  .d-xray-box-1 { animation: dBoxDraw 1.6s cubic-bezier(0.65, 0, 0.35, 1) 0.6s forwards; }
+  .d-xray-box-2 { animation: dBoxDraw 1.6s cubic-bezier(0.65, 0, 0.35, 1) 1.5s forwards; }
+  .d-xray-box-3 { animation: dBoxDraw 1.6s cubic-bezier(0.65, 0, 0.35, 1) 2.4s forwards; }
+  @keyframes dBoxDraw {
+    0% { stroke-dashoffset: 480; opacity: 0; }
+    20% { opacity: 1; }
+    100% { stroke-dashoffset: 0; opacity: 1; }
+  }
+
+  /* Box pulse loop (após desenhar) */
+  .d-xray-box-1 { animation: dBoxDraw 1.6s cubic-bezier(0.65, 0, 0.35, 1) 0.6s forwards, dBoxPulse 3s ease-in-out 2.4s infinite; }
+  .d-xray-box-2 { animation: dBoxDraw 1.6s cubic-bezier(0.65, 0, 0.35, 1) 1.5s forwards, dBoxPulse 3s ease-in-out 3.3s infinite; }
+  .d-xray-box-3 { animation: dBoxDraw 1.6s cubic-bezier(0.65, 0, 0.35, 1) 2.4s forwards, dBoxPulse 3s ease-in-out 4.2s infinite; }
+  @keyframes dBoxPulse {
+    0%, 100% { stroke-opacity: 1; }
+    50% { stroke-opacity: 0.5; }
+  }
+
+  /* Corner dots — fade in com box */
+  .d-xray-corner {
+    opacity: 0;
+    animation: dCornerIn 0.4s ease-out forwards;
+  }
+  .d-xray-corner-1 { animation-delay: 1.8s; }
+  .d-xray-corner-2 { animation-delay: 2.7s; }
+  .d-xray-corner-3 { animation-delay: 3.6s; }
+  @keyframes dCornerIn {
+    0% { opacity: 0; r: 1; }
+    100% { opacity: 1; r: 3; }
+  }
+
+  /* Scanning line (loop infinito) */
+  .d-xray-scan-line {
+    transform-origin: center;
+    animation: dScanLine 4s ease-in-out infinite;
+    filter: drop-shadow(0 0 6px rgba(0,212,197,0.8));
+  }
+  @keyframes dScanLine {
+    0% { transform: translateY(20px); opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { transform: translateY(540px); opacity: 0; }
+  }
+
+  /* Reticle subtle pulse */
+  .d-xray-reticle { animation: dRetPulse 2.5s ease-in-out infinite; }
+  @keyframes dRetPulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+  }
+
+  /* AI labels overlaid */
+  .d-xray-label {
+    position: absolute;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 10px;
+    background: rgba(10,14,26,0.92);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(0,212,197,0.25);
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(220,230,250,0.95);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    opacity: 0;
+    transform: translateY(8px);
+    animation: dLabelIn 0.5s ease-out forwards;
+  }
+  .d-xray-label-1 {
+    top: 53%; left: 38%;
+    animation-delay: 2.0s;
+  }
+  .d-xray-label-2 {
+    top: 28%; left: 4%;
+    animation-delay: 2.9s;
+  }
+  .d-xray-label-3 {
+    top: 22%; right: 4%;
+    animation-delay: 3.8s;
+  }
+  @keyframes dLabelIn {
+    0% { opacity: 0; transform: translateY(8px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  .d-xray-label-tag {
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+  }
+  .d-xray-tag-teal { background: rgba(0,212,197,0.2); color: var(--d-electric); }
+  .d-xray-tag-warn { background: rgba(245,193,74,0.2); color: #f5c14a; }
+  .d-xray-label-text { color: rgba(220,230,250,0.85); font-weight: 500; }
+  .d-xray-label-conf {
+    color: var(--d-electric);
+    font-weight: 700;
+  }
+
+  /* Status bar bottom */
+  .d-xray-statusbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 16px;
+    background: rgba(10,14,26,0.95);
+    border-top: 1px solid rgba(0,212,197,0.15);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: rgba(220,230,250,0.55);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .d-xray-status-item {
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .d-xray-status-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--d-electric);
+    box-shadow: 0 0 6px var(--d-electric);
+    animation: dStatusPulse 1.4s ease-in-out infinite;
+  }
+  .d-xray-status-divider { color: rgba(220,230,250,0.25); }
+  .d-xray-status-time { color: var(--d-electric); }
+
+  /* Reduced motion respect */
+  @media (prefers-reduced-motion: reduce) {
+    .d-xray-box,
+    .d-xray-corner,
+    .d-xray-scan-line,
+    .d-xray-reticle,
+    .d-xray-label {
+      animation: none !important;
+      opacity: 1 !important;
+      stroke-dashoffset: 0 !important;
+      transform: none !important;
+    }
+  }
+
+  /* ── New bento mocks ──────────────────────────────────── */
+
+  /* Sugestões pró-ativas mock */
+  .d-mock-suggestion-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 12px;
+    background: rgba(248,249,251,0.5);
+    border: 1px solid var(--d-rule);
+    border-radius: 8px;
+    margin-top: 10px;
+    font-family: 'Onest', sans-serif;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--d-ink);
+  }
+  .d-mock-prio {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 100px;
+    flex-shrink: 0;
+    letter-spacing: 0.04em;
+  }
+  .d-prio-high { background: rgba(255,59,47,0.12); color: var(--d-cross); }
+  .d-prio-medium { background: rgba(245,193,74,0.18); color: #b88010; }
+  .d-mock-suggestion-text { color: var(--d-ink-2); flex: 1; }
+
+  /* Chat RAG mock */
+  .d-mock-chat {
+    margin-top: 14px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .d-mock-chat-q {
+    align-self: flex-end;
+    padding: 8px 12px;
+    background: var(--d-ink);
+    color: #fff;
+    border-radius: 12px 12px 2px 12px;
+    font-size: 12px;
+    max-width: 85%;
+  }
+  .d-mock-chat-a {
+    align-self: flex-start;
+    padding: 8px 12px;
+    background: rgba(0,212,197,0.08);
+    border: 1px solid rgba(0,212,197,0.2);
+    color: var(--d-ink);
+    border-radius: 12px 12px 12px 2px;
+    font-size: 12px;
+    max-width: 90%;
+    font-weight: 500;
+  }
+
+  /* Comando voz mock */
+  .d-mock-voice-row {
+    margin-top: 14px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    background: rgba(255,59,47,0.05);
+    border: 1px solid rgba(255,59,47,0.15);
+    border-radius: 100px;
+  }
+  .d-mock-voice-bars {
+    display: inline-flex; align-items: center; gap: 2px;
+    height: 16px;
+  }
+  .d-mock-voice-bars span {
+    display: inline-block;
+    width: 3px;
+    background: var(--d-cross);
+    border-radius: 2px;
+    animation: dVoiceBar 1.2s ease-in-out infinite;
+  }
+  .d-mock-voice-bars span:nth-child(1) { height: 6px; animation-delay: 0s; }
+  .d-mock-voice-bars span:nth-child(2) { height: 14px; animation-delay: 0.15s; }
+  .d-mock-voice-bars span:nth-child(3) { height: 10px; animation-delay: 0.3s; }
+  .d-mock-voice-bars span:nth-child(4) { height: 16px; animation-delay: 0.45s; }
+  .d-mock-voice-bars span:nth-child(5) { height: 8px; animation-delay: 0.6s; }
+  @keyframes dVoiceBar {
+    0%, 100% { transform: scaleY(0.5); }
+    50% { transform: scaleY(1); }
+  }
+  .d-mock-voice-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--d-ink-2);
+    flex: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* Chat entre clínicas — chip row */
+  .d-mock-chip-row {
+    margin-top: 14px;
+    display: flex; gap: 6px; flex-wrap: wrap;
+  }
+
+  /* Comparação trend mock */
+  .d-mock-trend {
+    margin-top: 14px;
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px;
+    background: rgba(0,212,197,0.04);
+    border: 1px solid rgba(0,212,197,0.15);
+    border-radius: 10px;
+  }
+  .d-mock-trend svg {
+    width: 100px; height: 30px; flex-shrink: 0;
+    overflow: visible;
+  }
+  .d-mock-trend svg polyline {
+    stroke-dasharray: 200;
+    stroke-dashoffset: 200;
+    animation: dTrendDraw 2.5s ease-out forwards;
+  }
+  @keyframes dTrendDraw {
+    to { stroke-dashoffset: 0; }
+  }
+  .d-mock-trend-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--d-secondary);
+  }
+
+  @media (max-width: 720px) {
+    .d-xray-label-text { display: none; }
+    .d-xray-label { padding: 4px 8px; gap: 4px; }
+    .d-xray-label-1 { top: 50%; left: 30%; }
+    .d-xray-label-2 { top: 25%; left: 2%; }
+    .d-xray-label-3 { top: 18%; right: 2%; }
   }
 
   /* ════════════════════════════════════════════════════════════════
