@@ -119,12 +119,12 @@ export class AuthService {
   // ---------------------------------------------------------------------------
 
   async saveToken(token: string): Promise<void> {
+    // localStorage primeiro — leitura síncrona pelo interceptor HTTP (getToken()).
+    // Preferences.set é async; se vier antes, fetchProfile() sai sem token → 401 → logout.
+    localStorage.setItem('token', token);
     if (Capacitor.isNativePlatform()) {
       await Preferences.set({ key: 'auth_token', value: token });
     }
-    // Always write to localStorage as a synchronous read-cache for getToken()
-    // (used by the HTTP interceptor). On web this IS the primary store.
-    localStorage.setItem('token', token);
   }
 
   async loadToken(): Promise<string | null> {
