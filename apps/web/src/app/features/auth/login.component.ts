@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, NgZone, OnInit } from '@angular/core';
 import { FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
@@ -156,6 +156,7 @@ export class LoginComponent implements OnInit {
   private router = inject(Router);
   private http   = inject(HttpClient);
   private snack  = inject(MatSnackBar);
+  private zone   = inject(NgZone);
 
   form = this.fb.group({
     email: ['', [Validators.required, Validators.email]],
@@ -183,13 +184,19 @@ export class LoginComponent implements OnInit {
 
       await NativeBiometric.verifyIdentity({ reason: 'Autenticar no GenomaFlow' });
 
-      const token = await this.auth.loadToken();
-      if (token) {
+      // Após callback nativo, re-entrar no Angular zone para garantir
+      // que Router e change detection processem a navegação corretamente.
+      await this.zone.run(async () => {
+        const token = await this.auth.loadToken();
+        if (!token) {
+          localStorage.removeItem('biometric_enabled');
+          this.snack.open('Sessão expirada. Faça login com suas credenciais.', 'Ok', { duration: 4000 });
+          return;
+        }
         await this.auth.setSession(token);
-        const payload = this.auth.currentUser;
-        const dest = payload?.role === 'master' ? '/master' : '/clinic/dashboard';
+        const dest = this.auth.currentUser?.role === 'master' ? '/master' : '/clinic/dashboard';
         this.router.navigateByUrl(dest);
-      }
+      });
     } catch { /* biometria falhou ou cancelada — exibe login normal */ }
   }
 
