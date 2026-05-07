@@ -34,25 +34,27 @@ Em toda análise, brainstorm, desenvolvimento, arquitetura, modelagem de dados, 
 
 ## Compatibilidade Multi-módulo (OBRIGATÓRIO)
 
-**Todo ajuste, correção de bug ou nova feature deve ser desenvolvido considerando os dois módulos existentes: `human` e `veterinary`.**
+**Todo ajuste, correção de bug ou nova feature deve ser desenvolvido considerando os três módulos existentes: `human`, `veterinary` e `estetica`.**
 
 - Os mundos são diferentes — terminologia, fluxos, agentes de IA, espécies, campos de paciente e contexto clínico variam entre módulos — mas nenhum pode ser negligenciado
-- Ao implementar qualquer mudança, perguntar explicitamente: *"isso funciona igualmente para o módulo human e veterinary?"*
+- Ao implementar qualquer mudança, perguntar explicitamente: *"isso funciona igualmente para os três módulos?"*
 - Se a implementação correta para um módulo não for óbvia (ex: campo sem equivalente no outro módulo, comportamento ambíguo), **questionar o usuário antes de prosseguir** — nunca assumir
-- **Premissa universal: nenhum ajuste pode quebrar ou impactar funcionalidade pré-existente** em nenhum dos dois módulos
-- Mudanças de schema, API ou componente que afetem apenas um módulo devem ser explicitamente marcadas como intencionais e não devem causar regressão no outro
+- **Premissa universal: nenhum ajuste pode quebrar ou impactar funcionalidade pré-existente** em nenhum dos três módulos
+- Mudanças de schema, API ou componente que afetem apenas um módulo devem ser explicitamente marcadas como intencionais e não devem causar regressão nos outros
 
 ### Diferenças relevantes entre módulos
 
-| Aspecto | `human` | `veterinary` |
-|---|---|---|
-| Sujeito | Paciente (humano) | Animal (cão, gato, equino, bovino…) |
-| Proprietário | N/A | Owner (dono do animal) |
-| Agentes IA Fase 1 | metabolic, cardiovascular, hematology | small_animals, equine, bovine |
-| Agentes IA Fase 2 | therapeutic, nutrition, clinical_correlation | therapeutic, nutrition (sem clinical_correlation) |
-| Campos clínicos extras | especialidade médica do usuário | espécie, raça, peso do animal |
-| Ícone na UI | `people` | `pets` |
-| Label na UI | "Pacientes" | "Animais" |
+| Aspecto | `human` | `veterinary` | `estetica` |
+|---|---|---|---|
+| Sujeito | Paciente (humano) | Animal (cão, gato, equino, bovino…) | Cliente (humano) |
+| Proprietário | N/A | Owner (dono do animal) | N/A |
+| Agentes IA Fase 1 | metabolic, cardiovascular, hematology | small_animals, equine, bovine | (sem agentes próprios — F1 usa human base) |
+| Agentes IA Fase 2 | therapeutic, nutrition, clinical_correlation | therapeutic, nutrition (sem clinical_correlation) | (sem agentes próprios ainda) |
+| Campos clínicos extras | especialidade médica do usuário | espécie, raça, peso do animal | fitzpatrick_type (1-6) + skin_concerns (jsonb) |
+| Ícone na UI | `people` | `pets` | `spa` |
+| Label na UI | "Pacientes" | "Animais" | "Clientes" |
+| Prescrições | médico cria/edita | médico cria/edita | esteticista só lê (requireMedico gate) |
+| professional_type relevante | medico/dentista/biomedico/outro | medico | medico/esteticista/dentista/biomedico/outro |
 
 ---
 
@@ -121,6 +123,7 @@ docker compose exec api node src/db/migrate.js
 - **API**: Node.js + Fastify (`apps/api`, porta 3000)
 - **Worker**: Node.js standalone (`apps/worker`)
 - **Web**: Angular 18 standalone (`apps/web`, porta 4200)
+- **Mobile**: Angular 18 + Ionic Capacitor 6 empacotando o mesmo `apps/web` (branch `feat/mobile-app-capacitor`, aguarda aprovação)
 - **Landing**: HTML estático (`apps/landing`)
 - **DB**: PostgreSQL 15 + pgvector (`db`, porta 5432)
 - **Cache**: Redis 7.2 (`redis`, porta 6379)
@@ -242,9 +245,10 @@ Detalhes do incidente 2026-04-24 + commits de referência: `docs/claude-memory/f
 ### Angular: build de produção (OBRIGATÓRIO)
 
 - `apps/web/angular.json` **DEVE** ter `fileReplacements` no `production` de `architect.build` substituindo `src/environments/environment.ts` por `environment.prod.ts`. Sem isso, `environment.production` fica `false` em runtime de prod e tudo que ramifica nesse flag cai no ramo dev (WS sem `/api/`, botões de debug vazando)
-- **Toda flag nova em `environment.ts` deve ter equivalente em `environment.prod.ts`** — shapes sempre sincronizados
+- **Toda flag nova em `environment.ts` deve ter equivalente em `environment.prod.ts` e `environment.mobile.ts`** — shapes sempre sincronizados entre os três arquivos
 - **Validação obrigatória após build:** `grep -oE 'production:![01]|apiUrl:"[^"]*"' apps/web/dist/genomaflow-web/browser/chunk-*.js` → deve sair `production:!0` e `apiUrl:"/api"`
 - **Red flag:** "código no repo correto mas prod não reflete" → antes de refazer deploy, auditar bundle minificado
+- **Build mobile isolado:** `ng build --configuration=mobile && npx cap sync` — usa `environment.mobile.ts` (`mobile: true, production: true`). Build `--configuration=production` (web) **nunca** toca `ios/` ou `android/`
 
 Incidente 2026-04-24 (causa raiz definitiva): `docs/claude-memory/feedback_angular_prod_build.md`.
 
@@ -285,6 +289,7 @@ Incidente 2026-04-24 (causa raiz definitiva): `docs/claude-memory/feedback_angul
 - Search full-text (Phase 6): GET /conversations/:id/search?q= usa ts_headline português com `<mark>` nos highlights
 - Denúncias (Phase 7): POST /reports (reason mín 10, max 2000 chars). UNIQUE constraint: 1 denúncia pending por par reporter/reported
 - Suspensão automática (Phase 7): tenant com 3+ denúncias pending de reporters distintos nos últimos 30 dias é suspenso — POST /messages e POST /invitations retornam 403 com mensagem de suspensão. Master pode dismiss/action via POST /reports/:id/resolve
+- Mobile app GenomaFlow (branch `feat/mobile-app-capacitor`, aguarda aprovação, 2026-05-07): Capacitor 6 empacota Angular 18 em shells nativas Android (Play Store) + iOS (App Store). Isolamento total do build web. `environment.mobile.ts` (`mobile: true`). Plugins: `@capacitor/push-notifications`, `@capacitor/camera`, `@capacitor/preferences`, `@capacitor/app`, `@capacitor/status-bar`, `@capacitor/splash-screen`, `@capgo/capacitor-native-biometric@6.0.4` (biometria Face ID / Touch ID). Migration 080 criou tabela `device_tokens` (sem RLS — infra de entrega, não dado clínico). Endpoints novos: `POST /auth/device-token`, `DELETE /auth/device-token`, `POST /auth/refresh`. Push via Firebase Cloud Messaging (`firebase-admin` no worker + API). Push em 5 eventos: exam:done, alerta clínico crítico/high, mensagem chat inter-clínica, appointment reminder, master broadcast. Sempre best-effort (try/catch — push nunca derruba o flow principal). JWT armazenado no Keychain / EncryptedSharedPreferences via `@capacitor/preferences` + dual-write em localStorage (interceptor HTTP precisa de acesso síncrono). Back button Android via `@capacitor/app`. Safe area iOS via `body.capacitor-native { padding: env(safe-area-inset-*) }`. Câmera nativa: `NativeCameraService` → base64 → File → reusa path de upload existente. CI/CD: `deploy-mobile.yml` disparado por tags `v*.*.*`, jobs paralelos Android (ubuntu + Gradle + Fastlane supply → Play Store internal) + iOS (macos-latest + CocoaPods + Fastlane beta → TestFlight). Task 20 (manual): criar contas lojas + Firebase + gerar keystore + 9 GitHub Secrets + `git tag v1.0.0 && git push origin v1.0.0`. Spec: `docs/superpowers/specs/2026-05-07-mobile-app-design.md`
 
 ## Dados de Usuário — Normalização (OBRIGATÓRIO)
 
@@ -391,7 +396,7 @@ Arquitetura completa (schema, fan-out, frontend, endpoints, RLS detalhada): `doc
 
 ## Testes e CI gate (OBRIGATÓRIO)
 
-- **CI gate em `.github/workflows/deploy.yml`** roda job `test` antes do `deploy` (`needs: test`). Falha bloqueia build/push/update de ECS:
+- **CI gate em `.github/workflows/deploy.yml`** roda job `test` antes do `deploy` (`needs: test`). Falha bloqueia build/push/update de ECS. **Não confundir com `.github/workflows/deploy-mobile.yml`** — workflow separado, disparado SOMENTE por tags `v*.*.*`, nunca em push para main:
   - `apps/api` → `npm run test:unit` (subset sem DB declarado em `package.json`)
   - `apps/worker` → `npm test` (suite completa)
   - `apps/web` → `npm test` (Jest + jsdom)
@@ -443,6 +448,12 @@ Sintomas de armadilhas únicas que **não saltam aos olhos** ao ler as seções 
 - **Canvas exportando como `image/png` em upload anonimizado** → 5–10x mais bytes sem ganho visível. Default JPEG q=0.85
 - **HTTP em construtor + UI dependente de `BehaviorSubject(null)`** → flicker/sumiço no F5. Persistir shape mínimo em `localStorage`, hidratar no construtor antes do fetch
 - **Sintoma de WS quebrado:** badge/notificação real-time com latência ~60s ou exigindo F5 → suspeitar de WS URL sem `/api/` ou `notifyTenant()` direto
+- **`@capawesome-team/capacitor-biometrics` não existe no npm** — pacote fictício da spec original. O correto pra Capacitor 6 é `@capgo/capacitor-native-biometric@6.0.4` (API: `isAvailable()` + `verifyIdentity()`)
+- **`npx cap add ios` exige macOS** — não funciona em WSL/Linux. iOS project inicializado pelo CI `macos-latest` via `cap add ios || true` antes do `cap sync ios`
+- **Push mobile NUNCA pode derrubar flow principal** — toda chamada a `push.sendToUser` ou `push.sendToTenant` DEVE estar em try/catch; falha de FCM é best-effort
+- **`device_tokens` NÃO tem RLS** (intencional) — é infra de entrega, não dado clínico. Sem `tenant_id` obrigatório nas queries dessa tabela
+- **Interceptor HTTP Angular é síncrono** — não pode usar `await` em `getToken()`. Solução: dual-write do JWT em `@capacitor/preferences` (secure) + `localStorage` (sync read-cache). Nunca refatorar o interceptor para async sem análise profunda
+- **`deploy-mobile.yml` nunca dispara em push** — só em tags `v*.*.*`. Nenhum push para `main` dispara build de app store
 
 Outros red flags estão no corpo das seções correspondentes (Multi-tenant, Segurança da API, Infraestrutura de Produção, Regras de Edição, Testes).
 
