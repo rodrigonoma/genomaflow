@@ -273,11 +273,9 @@ import { BillingService, LedgerItem, LedgerSummary, UsageReport } from './billin
               <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#c0c1ff;">💳 Cartão</div>
               <div style="font-size:0.65rem;color:#c7c5d0;">Crédito · instantâneo</div>
             </div>
-            <div (click)="selectedPaymentMethod = 'pix'" style="padding:0.75rem;border-radius:0.25rem;cursor:pointer;text-align:center;border:2px solid transparent;transition:all 0.2s;"
-                 [style.borderColor]="selectedPaymentMethod === 'pix' ? '#c0c1ff' : 'transparent'"
-                 [style.background]="selectedPaymentMethod === 'pix' ? '#171f33' : '#060d20'">
+            <div style="padding:0.75rem;border-radius:0.25rem;text-align:center;border:2px solid transparent;background:#060d20;opacity:0.45;cursor:not-allowed;">
               <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#c0c1ff;">⚡ PIX</div>
-              <div style="font-size:0.65rem;color:#c7c5d0;">QR Code · ~2-30s</div>
+              <div style="font-size:0.65rem;color:#c7c5d0;">Em breve...</div>
             </div>
           </div>
         </div>
