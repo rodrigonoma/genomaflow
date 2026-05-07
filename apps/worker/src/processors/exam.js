@@ -77,6 +77,33 @@ async function persistResult(client, examId, tenantId, agentType, result, usage)
       usage?.output_tokens || 0
     ]
   );
+
+  // Push para alertas clínicos críticos
+  try {
+    const alerts = result.alerts || [];
+    const hasCritical = alerts.some(a => ['critical', 'high'].includes((a.severity || '').toLowerCase()));
+    if (hasCritical) {
+      const { sendToUser } = require('../../../api/src/services/push');
+      const { rows: examRows } = await client.query(
+        'SELECT user_id, subject_id FROM exams WHERE id = $1 AND tenant_id = $2',
+        [examId, tenantId]
+      );
+      if (examRows[0]) {
+        const { rows: subjectRows } = await client.query(
+          'SELECT name FROM subjects WHERE id = $1 AND tenant_id = $2',
+          [examRows[0].subject_id, tenantId]
+        );
+        const patientName = subjectRows[0]?.name ?? 'Paciente';
+        await sendToUser(pool, examRows[0].user_id, {
+          title: 'Alerta clínico',
+          body: `Alerta crítico no exame de ${patientName}`,
+          data: { route: `/doctor/patients/${examRows[0].subject_id}` }
+        });
+      }
+    }
+  } catch (e) {
+    console.error('[push] clinical alert push error:', e.message);
+  }
 }
 
 async function persistImagingResult(client, examId, tenantId, agentType, result, usage, imageMetadata) {
@@ -284,6 +311,29 @@ async function processImagingExam({ exam_id, tenant_id, file_path, file_type }) 
     await pub.publish(`exam:done:${tenant_id}`, JSON.stringify({ exam_id }));
     await pub.quit();
   } catch (_) {}
+
+  // Push notification pra médico do exame
+  try {
+    const { sendToUser } = require('../../../api/src/services/push');
+    const { rows: examRows } = await pool.query(
+      'SELECT user_id, subject_id FROM exams WHERE id = $1 AND tenant_id = $2',
+      [exam_id, tenant_id]
+    );
+    if (examRows[0]) {
+      const { rows: subjectRows } = await pool.query(
+        'SELECT name FROM subjects WHERE id = $1 AND tenant_id = $2',
+        [examRows[0].subject_id, tenant_id]
+      );
+      const patientName = subjectRows[0]?.name ?? 'Paciente';
+      await sendToUser(pool, examRows[0].user_id, {
+        title: 'Exame disponível',
+        body: `Exame de ${patientName} pronto para análise`,
+        data: { route: `/doctor/patients/${examRows[0].subject_id}` }
+      });
+    }
+  } catch (e) {
+    console.error('[push] exam:done push error:', e.message);
+  }
 }
 
 /**
@@ -558,6 +608,29 @@ async function processTextExam({ exam_id, tenant_id, file_path, selected_agents,
     await pub.quit();
   } catch (redisErr) {
     console.error(`[processor] Redis notify failed for exam ${exam_id}:`, redisErr.message);
+  }
+
+  // Push notification pra médico do exame
+  try {
+    const { sendToUser } = require('../../../api/src/services/push');
+    const { rows: examRows } = await pool.query(
+      'SELECT user_id, subject_id FROM exams WHERE id = $1 AND tenant_id = $2',
+      [exam_id, tenant_id]
+    );
+    if (examRows[0]) {
+      const { rows: subjectRows } = await pool.query(
+        'SELECT name FROM subjects WHERE id = $1 AND tenant_id = $2',
+        [examRows[0].subject_id, tenant_id]
+      );
+      const patientName = subjectRows[0]?.name ?? 'Paciente';
+      await sendToUser(pool, examRows[0].user_id, {
+        title: 'Exame disponível',
+        body: `Exame de ${patientName} pronto para análise`,
+        data: { route: `/doctor/patients/${examRows[0].subject_id}` }
+      });
+    }
+  } catch (e) {
+    console.error('[push] exam:done push error:', e.message);
   }
 
   // Index clinical chunks for the chatbot RAG (non-fatal)
