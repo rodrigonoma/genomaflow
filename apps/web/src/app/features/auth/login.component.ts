@@ -185,7 +185,10 @@ export class LoginComponent implements OnInit {
 
       const token = await this.auth.loadToken();
       if (token) {
-        this.router.navigateByUrl('/doctor/patients');
+        await this.auth.setSession(token);
+        const payload = this.auth.currentUser;
+        const dest = payload?.role === 'master' ? '/master' : '/clinic/dashboard';
+        this.router.navigateByUrl(dest);
       }
     } catch { /* biometria falhou ou cancelada — exibe login normal */ }
   }
