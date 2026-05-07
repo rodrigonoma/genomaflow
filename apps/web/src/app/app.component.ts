@@ -22,6 +22,7 @@ import { ChatService } from './features/chat-inter-tenant/chat.service';
 import { ChatPanelComponent } from './features/chat/chat-panel.component';
 import { ProductHelpPanelComponent } from './features/product-help/product-help-panel.component';
 import { HesitationDetectorService } from './core/help-context/hesitation-detector.service';
+import { PushNotificationService } from './core/push/push-notification.service';
 import { ClinicProfileModalComponent } from './features/clinic/profile/clinic-profile-modal.component';
 import { NotificationPreferencesModalComponent } from './features/notifications/notification-preferences-modal.component';
 import { QuickSearchComponent } from './shared/components/quick-search/quick-search.component';
@@ -399,6 +400,7 @@ export class AppComponent implements OnInit, OnDestroy {
   closeDrawer(): void { this.drawerOpen.set(false); }
 
   private hesitation = inject(HesitationDetectorService);
+  private pushSvc = inject(PushNotificationService);
 
   constructor() {
     // Fecha o drawer ao navegar para qualquer rota (UX mobile padrão)
@@ -416,7 +418,7 @@ export class AppComponent implements OnInit, OnDestroy {
     }, { allowSignalWrites: true });
   }
 
-  ngOnInit() {
+  async ngOnInit(): Promise<void> {
     if (Capacitor.isNativePlatform()) {
       document.body.classList.add('capacitor-native');
 
@@ -430,6 +432,8 @@ export class AppComponent implements OnInit, OnDestroy {
         }
       });
     }
+
+    await this.pushSvc.initialize();
 
     this.subs.add(
       this.ws.examUpdates$.subscribe(() => this.reviewService.refreshCount())
