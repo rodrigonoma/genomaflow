@@ -8,11 +8,14 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { Capacitor } from '@capacitor/core';
+import { NativeBiometric } from '@capgo/capacitor-native-biometric';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule],
+  imports: [ReactiveFormsModule, RouterModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, MatSnackBarModule],
   styles: [`
     :host {
       display: flex; align-items: center; justify-content: center;
@@ -152,6 +155,7 @@ export class LoginComponent implements OnInit {
   private route  = inject(ActivatedRoute);
   private router = inject(Router);
   private http   = inject(HttpClient);
+  private snack  = inject(MatSnackBar);
 
   form = this.fb.group({
     email: ['', [Validators.required, Validators.email]],
@@ -167,8 +171,37 @@ export class LoginComponent implements OnInit {
   resending = false;
   resent = false;
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     this.showActivatedBanner = this.route.snapshot.queryParams['activated'] === 'true';
+
+    if (!Capacitor.isNativePlatform()) return;
+    if (localStorage.getItem('biometric_enabled') !== 'true') return;
+
+    try {
+      const { isAvailable } = await NativeBiometric.isAvailable();
+      if (!isAvailable) return;
+
+      await NativeBiometric.verifyIdentity({ reason: 'Autenticar no GenomaFlow' });
+
+      const token = await this.auth.loadToken();
+      if (token) {
+        this.router.navigateByUrl('/doctor/patients');
+      }
+    } catch { /* biometria falhou ou cancelada — exibe login normal */ }
+  }
+
+  private async offerBiometricSetup(): Promise<void> {
+    try {
+      const { isAvailable } = await NativeBiometric.isAvailable();
+      if (!isAvailable) return;
+
+      if (localStorage.getItem('biometric_enabled') === 'true') return;
+
+      this.snack.open('Ativar Face ID / Touch ID para próximos acessos?', 'Ativar', { duration: 8000 })
+        .onAction().subscribe(() => {
+          localStorage.setItem('biometric_enabled', 'true');
+        });
+    } catch { /* biometria indisponível */ }
   }
 
   submit(): void {
@@ -179,7 +212,7 @@ export class LoginComponent implements OnInit {
     this.loading = true;
     const { email, password } = this.form.value;
     this.auth.login(email!, password!).subscribe({
-      next: () => { this.loading = false; },
+      next: async () => { this.loading = false; await this.offerBiometricSetup(); },
       error: (err) => {
         this.loading = false;
         if (err.status === 403 && err.error?.error === 'EMAIL_NOT_VERIFIED') {

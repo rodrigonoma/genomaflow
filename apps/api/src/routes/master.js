@@ -442,6 +442,7 @@ module.exports = async function masterRoutes(fastify) {
             recipientTenant: t,
             body,
             attachments: uploadedAttachments,
+            pg: fastify.pg,
           }),
           { userId: request.user.user_id, channel: 'system' }
         );
