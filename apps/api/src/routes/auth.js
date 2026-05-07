@@ -251,4 +251,37 @@ module.exports = async function (fastify) {
     if (!rows[0]) return reply.status(404).send({ error: 'User not found' });
     return rows[0];
   });
+
+  // POST /auth/device-token — registra device token para push notifications
+  fastify.post('/device-token', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { user_id, tenant_id } = request.user;
+    const { token, platform } = request.body || {};
+
+    if (!token || !platform || !['android', 'ios'].includes(platform)) {
+      return reply.status(400).send({ error: 'token e platform (android|ios) são obrigatórios' });
+    }
+
+    await fastify.pg.query(
+      `INSERT INTO device_tokens (user_id, tenant_id, token, platform)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, token) DO UPDATE SET platform = EXCLUDED.platform, created_at = NOW()`,
+      [user_id, tenant_id, token, platform]
+    );
+
+    return reply.status(204).send();
+  });
+
+  // DELETE /auth/device-token — remove token no logout
+  fastify.delete('/device-token', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { user_id } = request.user;
+    const { token } = request.body || {};
+
+    if (!token) return reply.status(400).send({ error: 'token obrigatório' });
+
+    await fastify.pg.query(
+      'DELETE FROM device_tokens WHERE user_id = $1 AND token = $2',
+      [user_id, token]
+    );
+    return reply.status(204).send();
+  });
 };
