@@ -79,10 +79,12 @@ async function resolveTargetTenants(pg, segment) {
  * @param {Array<{kind: string, filename: string, s3_key: string, size_bytes: number}>} [args.attachments]
  *   Lista de anexos canonicais já no S3 — clonados em tenant_message_attachments
  *   pra cada entrega. S3 obj é compartilhado, só os metadados duplicam.
+ * @param {import('pg').Pool} [args.pg]
+ *   Pool original (não o client de transação) — usado pra push notification best-effort.
  * @returns {Promise<{conversationId: string, messageId: string}>}
  */
 async function deliverToTenant(client, args) {
-  const { broadcastId, masterUserId, recipientTenant, body, attachments = [] } = args;
+  const { broadcastId, masterUserId, recipientTenant, body, attachments = [], pg } = args;
   const hasAttachment = attachments.length > 0;
 
   // 1. UPSERT conversação master ↔ tenant.
@@ -130,6 +132,27 @@ async function deliverToTenant(client, args) {
      VALUES ($1, $2, $3, $4)`,
     [broadcastId, recipientTenant.id, conversationId, messageId]
   );
+
+  // 6. Push notification para o admin do tenant destinatário (best-effort)
+  if (pg) {
+    try {
+      const { sendToUser } = require('./push');
+      const { rows: adminRows } = await client.query(
+        "SELECT id FROM users WHERE tenant_id = $1 AND role = 'admin' LIMIT 1",
+        [recipientTenant.id]
+      );
+      if (adminRows[0]) {
+        const preview = body.slice(0, 80) + (body.length > 80 ? '…' : '');
+        await sendToUser(pg, adminRows[0].id, {
+          title: 'GenomaFlow',
+          body: preview,
+          data: { route: '/chat' }
+        });
+      }
+    } catch (e) {
+      console.error('[push] broadcast push error:', e.message);
+    }
+  }
 
   return { conversationId, messageId };
 }
