@@ -432,12 +432,17 @@ async function sendPendingNotifications() {
   const client = await getPool().connect();
   try {
     const { rows } = await client.query(`
-      SELECT id, tenant_id, channel, send_to, body, appointment_id, subject_id, retry_count
-      FROM scheduled_notifications
-      WHERE status = 'pending'
-        AND scheduled_for <= NOW()
-        AND retry_count < 3
-      ORDER BY scheduled_for ASC
+      SELECT
+        sn.id, sn.tenant_id, sn.channel, sn.send_to, sn.body,
+        sn.appointment_id, sn.subject_id, sn.retry_count, sn.notification_type,
+        a.user_id AS appointment_user_id,
+        a.start_at AS appointment_start_at
+      FROM scheduled_notifications sn
+      LEFT JOIN appointments a ON a.id = sn.appointment_id
+      WHERE sn.status = 'pending'
+        AND sn.scheduled_for <= NOW()
+        AND sn.retry_count < 3
+      ORDER BY sn.scheduled_for ASC
       LIMIT 100
     `);
 
@@ -472,6 +477,24 @@ async function sendPendingNotifications() {
 
         await client.query(`UPDATE scheduled_notifications SET status = 'sent', sent_at = NOW() WHERE id = $1`, [n.id]);
         sent++;
+
+        // Push notification para o médico responsável pelo agendamento (best-effort)
+        if (n.notification_type === 'appointment_reminder' && n.appointment_user_id) {
+          try {
+            const { sendToUser } = require('../../../api/src/services/push');
+            const hora = new Date(n.appointment_start_at).toLocaleTimeString('pt-BR', {
+              hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo',
+            });
+            const subjectName = n.body.match(/Olá (.+?)!/)?.[1] || 'Paciente';
+            await sendToUser(getPool(), n.appointment_user_id, {
+              title: 'Consulta em breve',
+              body: `${subjectName} — ${hora}`,
+              data: { route: '/agenda' },
+            });
+          } catch (pushErr) {
+            console.error('[push] appointment reminder push error:', pushErr.message);
+          }
+        }
       } catch (err) {
         const newRetry = (n.retry_count || 0) + 1;
         await client.query(
