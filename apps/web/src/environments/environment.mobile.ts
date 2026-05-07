@@ -1,5 +1,5 @@
 export const environment = {
   production: true,
-  apiUrl: '/api',
+  apiUrl: 'https://app.genomaflow.com.br/api',
   mobile: true
 };

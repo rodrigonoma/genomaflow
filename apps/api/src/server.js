@@ -30,6 +30,17 @@ app.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done)
   }
 });
 
+app.register(require('@fastify/cors'), {
+  origin: [
+    'https://app.genomaflow.com.br',
+    'capacitor://localhost',
+    'http://localhost',
+    'https://localhost',
+    /^http:\/\/localhost(:\d+)?$/,
+  ],
+  credentials: true,
+});
+
 app.register(require('./plugins/postgres'));
 app.register(require('./plugins/redis'));
 app.register(require('./plugins/auth'));
