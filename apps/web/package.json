@@ -29,6 +29,7 @@
     "@capacitor/push-notifications": "^6.0.5",
     "@capacitor/splash-screen": "^6.0.4",
     "@capacitor/status-bar": "^6.0.3",
+    "@capgo/capacitor-native-biometric": "^6.0.4",
     "chart.js": "^4.5.1",
     "dompurify": "^3.4.1",
     "jspdf": "^2.5.2",
