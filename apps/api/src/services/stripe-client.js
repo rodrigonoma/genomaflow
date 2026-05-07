@@ -57,7 +57,7 @@ async function createSubscriptionCheckoutSession({ customerId, tenantId, priceId
 
 async function createTopupCheckoutSession({ customerId, tenantId, credits, unitAmount, paymentMethod, successUrl, cancelUrl }) {
   const stripe = getClient();
-  const methods = paymentMethod === 'pix' ? ['pix'] : ['card', 'pix'];
+  const methods = paymentMethod === 'pix' ? ['pix'] : ['card'];
   return stripe.checkout.sessions.create({
     mode: 'payment',
     customer: customerId,
