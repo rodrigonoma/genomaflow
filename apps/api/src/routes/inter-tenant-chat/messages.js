@@ -463,6 +463,30 @@ module.exports = async function (fastify) {
         }
       } catch (_) {}
 
+      // Push notification para o admin da clínica contraparte (best-effort)
+      try {
+        const { sendToUser } = require('../../services/push');
+        const { rows: senderTenantRows } = await fastify.pg.query(
+          'SELECT name FROM tenants WHERE id = $1',
+          [tenant_id]
+        );
+        const senderName = senderTenantRows[0]?.name || 'Uma clínica';
+
+        const { rows: counterpartAdminRows } = await fastify.pg.query(
+          "SELECT id FROM users WHERE tenant_id = $1 AND role = 'admin' LIMIT 1",
+          [result.counterpart]
+        );
+        if (counterpartAdminRows[0]) {
+          await sendToUser(fastify.pg, counterpartAdminRows[0].id, {
+            title: 'Nova mensagem',
+            body: `${senderName} enviou uma mensagem`,
+            data: { route: '/chat' }
+          });
+        }
+      } catch (e) {
+        fastify.log.error({ err: e }, '[push] chat message push error');
+      }
+
       return reply.status(201).send({
         ...result.msg,
         attachments: result.attachments || [],
