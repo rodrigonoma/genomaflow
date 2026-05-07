@@ -41,12 +41,19 @@ export class WsService {
   private openConnection(): void {
     if (!this.token || this.destroyed) return;
 
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Em prod, ALB só roteia /api/* pra API (o resto vai pro nginx do Angular).
-    // Em dev, proxy.conf.json mapeia /exams/subscribe direto com ws:true.
-    // Então em prod incluímos o API_PREFIX (/api); em dev mantemos path raw.
-    const basePath = environment.production ? environment.apiUrl : '';
-    const url = `${protocol}//${location.host}${basePath}/exams/subscribe?token=${this.token}`;
+    // Mobile: environment.apiUrl é absoluto (https://app.genomaflow.com.br/api).
+    // Converter https→wss e usar diretamente, sem location.host (que seria localhost).
+    // Web prod: apiUrl é relativo (/api) — construir com location.host.
+    // Dev: sem prefix — proxy.conf.json intercepta.
+    let url: string;
+    if (environment.production && environment.apiUrl.startsWith('http')) {
+      const wsBase = environment.apiUrl.replace(/^http/, 'ws');
+      url = `${wsBase}/exams/subscribe?token=${this.token}`;
+    } else {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const basePath = environment.production ? environment.apiUrl : '';
+      url = `${protocol}//${location.host}${basePath}/exams/subscribe?token=${this.token}`;
+    }
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {
