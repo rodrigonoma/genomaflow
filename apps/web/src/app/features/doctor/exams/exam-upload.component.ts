@@ -1,18 +1,20 @@
 import { Component, inject, OnDestroy, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, RouterModule } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subscription, filter } from 'rxjs';
 import { WsService } from '../../../core/ws/ws.service';
 import { ExamCardComponent } from '../../../shared/components/exam-card/exam-card.component';
+import { NativeCameraService } from '../../../shared/native-camera.service';
 import { environment } from '../../../../environments/environment';
 import { Exam } from '../../../shared/models/api.models';
 
 @Component({
   selector: 'app-exam-upload',
   standalone: true,
-  imports: [RouterModule, MatIconModule, MatSnackBarModule, ExamCardComponent],
+  imports: [RouterModule, MatButtonModule, MatIconModule, MatSnackBarModule, ExamCardComponent],
   styles: [`
     :host { display: block; background: #0b1326; min-height: 100vh; padding: 2rem; }
 
@@ -129,6 +131,19 @@ import { Exam } from '../../../shared/models/api.models';
       padding: 2px 8px; border-radius: 20px;
     }
 
+    /* ── Native camera button ── */
+    .native-camera-btn {
+      width: 100%; margin-top: 0.75rem;
+      display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      background: transparent; color: #a09fb2;
+      border: 1px solid rgba(70,69,84,0.35); border-radius: 6px;
+      font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all 150ms ease;
+    }
+    .native-camera-btn:hover { border-color: rgba(192,193,255,0.4); color: #c0c1ff; }
+    .native-camera-btn mat-icon { font-size: 18px; width: 18px; height: 18px; }
+
     /* ══════════════ MOBILE (< 640px) ══════════════ */
     @media (max-width: 639px) {
       :host { padding: 1rem; }
@@ -187,6 +202,12 @@ import { Exam } from '../../../shared/models/api.models';
         }
       </div>
 
+      @if (cameraSvc.isNative()) {
+        <button class="native-camera-btn" (click)="onNativeCamera()">
+          <mat-icon>camera_alt</mat-icon> Câmera / Galeria
+        </button>
+      }
+
       <div class="actions">
         <button class="submit-btn" [disabled]="!selectedFile || uploading || balance === 0" (click)="upload()">
           {{ uploading ? 'Enviando...' : 'Enviar para análise' }}
@@ -215,6 +236,7 @@ export class ExamUploadComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private ws = inject(WsService);
   private snackBar = inject(MatSnackBar);
+  cameraSvc = inject(NativeCameraService);
 
   patientId = '';
   selectedFile: File | null = null;
@@ -318,6 +340,22 @@ export class ExamUploadComponent implements OnInit, OnDestroy {
   clearFile(event: Event): void {
     event.stopPropagation();
     this.selectedFile = null;
+  }
+
+  async onNativeCamera(): Promise<void> {
+    const result = await this.cameraSvc.pickImage();
+    if (!result) return;
+
+    // Convert base64 to Blob then to File so the existing upload() logic works unchanged
+    const byteChars = atob(result.base64);
+    const byteArr = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) {
+      byteArr[i] = byteChars.charCodeAt(i);
+    }
+    const blob = new Blob([byteArr], { type: result.mimeType });
+    const ext = result.mimeType.split('/')[1] ?? 'jpg';
+    const filename = `camera-${Date.now()}.${ext}`;
+    this.selectedFile = new File([blob], filename, { type: result.mimeType });
   }
 
   upload(): void {
