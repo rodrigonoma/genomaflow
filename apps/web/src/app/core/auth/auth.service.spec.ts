@@ -45,8 +45,8 @@ describe('AuthService', () => {
   });
 
   it('logout clears token and currentUser', (done) => {
-    service.login('doc@clinic.com', 'pass123').subscribe(() => {
-      service.logout();
+    service.login('doc@clinic.com', 'pass123').subscribe(async () => {
+      await service.logout();
       expect(service.currentUser).toBeNull();
       expect(localStorage.getItem('token')).toBeNull();
       done();
