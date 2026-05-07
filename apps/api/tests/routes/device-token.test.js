@@ -100,3 +100,42 @@ describe('DELETE /auth/device-token', () => {
     expect(r.statusCode).toBe(400);
   });
 });
+
+describe('POST /auth/refresh', () => {
+  function buildRefreshApp(jwtMock) {
+    const app = Fastify();
+    app.decorate('authenticate', async (req) => {
+      req.user = { user_id: 'user-1', tenant_id: 'tenant-1', role: 'admin', module: 'human', jti: 'old-jti' };
+    });
+    app.decorate('pg', { query: jest.fn() });
+    app.decorate('jwt', jwtMock);
+    app.decorate('redis', { set: jest.fn().mockResolvedValue('OK') });
+
+    app.post('/auth/refresh', { preHandler: [app.authenticate] }, async (request) => {
+      const { user_id, tenant_id, role, module } = request.user;
+      const { randomUUID } = require('crypto');
+      const jti = randomUUID();
+      const token = app.jwt.sign({ user_id, tenant_id, role, module: module || 'human', jti });
+      await app.redis.set(`session:${user_id}`, jti, 'EX', 90 * 24 * 60 * 60);
+      return { token };
+    });
+    return app;
+  }
+
+  it('retorna novo JWT para usuário autenticado', async () => {
+    const jwt = { sign: jest.fn(() => 'new-jwt-token') };
+    const app = buildRefreshApp(jwt);
+    const r = await app.inject({ method: 'POST', url: '/auth/refresh' });
+    expect(r.statusCode).toBe(200);
+    expect(JSON.parse(r.body).token).toBe('new-jwt-token');
+    expect(jwt.sign).toHaveBeenCalledWith(expect.objectContaining({ user_id: 'user-1', module: 'human' }));
+  });
+
+  it('renova a sessão Redis com novo jti', async () => {
+    const jwt = { sign: jest.fn(() => 'tok') };
+    const app = buildRefreshApp(jwt);
+    const r = await app.inject({ method: 'POST', url: '/auth/refresh' });
+    expect(r.statusCode).toBe(200);
+    expect(app.redis.set).toHaveBeenCalledWith('session:user-1', expect.any(String), 'EX', 90 * 24 * 60 * 60);
+  });
+});

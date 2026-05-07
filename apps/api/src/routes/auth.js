@@ -284,4 +284,13 @@ module.exports = async function (fastify) {
     );
     return reply.status(204).send();
   });
+
+  // POST /auth/refresh — gera novo JWT para sessão mobile (biometria)
+  fastify.post('/refresh', { preHandler: [fastify.authenticate] }, async (request) => {
+    const { user_id, tenant_id, role, module } = request.user;
+    const jti = randomUUID();
+    const token = fastify.jwt.sign({ user_id, tenant_id, role, module: module || 'human', jti });
+    await fastify.redis.set(`session:${user_id}`, jti, 'EX', SESSION_TTL_SECONDS);
+    return { token };
+  });
 };
