@@ -1,7 +1,9 @@
 import { Component, inject, OnInit, OnDestroy, signal, effect } from '@angular/core';
 import { ViewportService } from './core/viewport/viewport.service';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
-import { AsyncPipe, NgIf } from '@angular/common';
+import { AsyncPipe, NgIf, Location } from '@angular/common';
+import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -384,6 +386,7 @@ export class AppComponent implements OnInit, OnDestroy {
   dialog = inject(MatDialog);
   viewport = inject(ViewportService);
   private router = inject(Router);
+  private location = inject(Location);
   reviewCount$: Observable<number> = this.reviewService.pendingCount$;
   chatOpen = false;
   helpOpen = false;
@@ -414,6 +417,20 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    if (Capacitor.isNativePlatform()) {
+      document.body.classList.add('capacitor-native');
+
+      App.addListener('backButton', ({ canGoBack }) => {
+        const protectedRoots = ['/doctor/patients', '/clinic/dashboard', '/master/tenants'];
+        const isRoot = protectedRoots.some(r => this.router.url.startsWith(r));
+        if (!canGoBack || isRoot) {
+          App.exitApp();
+        } else {
+          this.location.back();
+        }
+      });
+    }
+
     this.subs.add(
       this.ws.examUpdates$.subscribe(() => this.reviewService.refreshCount())
     );

@@ -308,3 +308,9 @@ body.is-mobile .cdk-overlay-pane.dark-dialog .mat-mdc-dialog-surface {
 
 /* Scrollbar mais visível no mobile (toque precisa feedback) */
 body.is-mobile ::-webkit-scrollbar { width: 8px; height: 8px; }
+
+/* Safe area para notch / Dynamic Island / barra de câmera Android */
+body.capacitor-native {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
