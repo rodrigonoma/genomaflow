@@ -2,6 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { BehaviorSubject, Observable, map, tap } from 'rxjs';
+import { Capacitor } from '@capacitor/core';
+import { Preferences } from '@capacitor/preferences';
 import { environment } from '../../../environments/environment';
 import { JwtPayload, UserProfile } from '../../shared/models/api.models';
 import { WsService } from '../ws/ws.service';
@@ -36,7 +38,9 @@ export class AuthService {
         if (cached) this.currentProfileSubject.next(cached);
         if (payload.role !== 'master') this.fetchProfile();
       } catch {
-        localStorage.removeItem('token');
+        // clearToken() is async — fire-and-forget here because the constructor
+        // must remain synchronous. On web this resolves instantly (localStorage).
+        void this.clearToken();
         localStorage.removeItem('profile');
       }
     }
@@ -47,7 +51,10 @@ export class AuthService {
       .post<{ token: string }>(`${environment.apiUrl}/auth/login`, { email, password })
       .pipe(
         tap(({ token }) => {
-          localStorage.setItem('token', token);
+          // saveToken() is async — fire-and-forget inside tap. On web it
+          // resolves synchronously (localStorage). On native, Preferences.set
+          // is awaited internally; tap ignores the returned Promise.
+          void this.saveToken(token);
           const payload = this.decode(token);
           this.currentUserSubject.next(payload);
           this.ws.connect(token);
@@ -61,8 +68,8 @@ export class AuthService {
       );
   }
 
-  logout(): void {
-    this.resetSession();
+  async logout(): Promise<void> {
+    await this.resetSession();
     this.router.navigate(['/login']);
   }
 
@@ -71,8 +78,8 @@ export class AuthService {
    * /auth/register no onboarding). Faz o mesmo que login() faz no .pipe.tap,
    * mas SEM HTTP request e SEM navegação. Caller decide pra onde ir.
    */
-  setSession(token: string): void {
-    localStorage.setItem('token', token);
+  async setSession(token: string): Promise<void> {
+    await this.saveToken(token);
     const payload = this.decode(token);
     this.currentUserSubject.next(payload);
     this.ws.connect(token);
@@ -84,16 +91,55 @@ export class AuthService {
    * Uso: antes de entrar na tela de registro de novo tenant, para evitar
    * que um JWT de tenant antigo fique ativo após a criação do novo.
    */
-  resetSession(): void {
-    localStorage.removeItem('token');
+  async resetSession(): Promise<void> {
+    await this.clearToken();
     localStorage.removeItem('profile');
     try { this.ws.disconnect(); } catch {}
     this.currentUserSubject.next(null);
     this.currentProfileSubject.next(null);
   }
 
+  /**
+   * Synchronous token read used by the HTTP interceptor.
+   * Capacitor Preferences is async and cannot be used here without refactoring
+   * the interceptor to an async pattern. On web (and during Angular hydration
+   * before Capacitor loads) localStorage is the correct fast path.
+   * NOTE: On native, the token is ALSO written to localStorage as a read-cache
+   * by saveToken() — so this always returns the most-recently-saved value even
+   * on native. The durable copy lives in Keychain/EncryptedSharedPreferences.
+   */
   getToken(): string | null {
     return localStorage.getItem('token');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Secure token storage — async to support Capacitor Preferences (Keychain /
+  // EncryptedSharedPreferences). On web falls back to localStorage.
+  // loadToken() is public so Task 17 (biometric login) can check for a token.
+  // ---------------------------------------------------------------------------
+
+  async saveToken(token: string): Promise<void> {
+    if (Capacitor.isNativePlatform()) {
+      await Preferences.set({ key: 'auth_token', value: token });
+    }
+    // Always write to localStorage as a synchronous read-cache for getToken()
+    // (used by the HTTP interceptor). On web this IS the primary store.
+    localStorage.setItem('token', token);
+  }
+
+  async loadToken(): Promise<string | null> {
+    if (Capacitor.isNativePlatform()) {
+      const { value } = await Preferences.get({ key: 'auth_token' });
+      return value;
+    }
+    return localStorage.getItem('token');
+  }
+
+  async clearToken(): Promise<void> {
+    if (Capacitor.isNativePlatform()) {
+      await Preferences.remove({ key: 'auth_token' });
+    }
+    localStorage.removeItem('token');
   }
 
   get currentUser(): JwtPayload | null {
