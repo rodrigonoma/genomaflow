@@ -32,6 +32,26 @@ Em toda análise, brainstorm, desenvolvimento, arquitetura, modelagem de dados, 
 
 ---
 
+## Paridade Web ↔ Android ↔ iOS (OBRIGATÓRIO)
+
+**Toda feature nova, ajuste, correção de bug ou melhoria feita para a web DEVE ser aplicada também ao Android e iOS.**
+
+- O app mobile (Capacitor) embute o bundle Angular dentro do APK/IPA — deploys web **não** atualizam o app instalado no celular automaticamente
+- A cada mudança em `apps/web/`, após o commit/push da web, executar obrigatoriamente:
+  ```bash
+  cd apps/web
+  ng build --configuration=mobile
+  npx cap sync android
+  npx cap sync ios   # somente em macOS/CI
+  ```
+- O build mobile usa `environment.mobile.ts` — toda flag nova em `environment.ts` deve estar em `environment.prod.ts` E `environment.mobile.ts`
+- Mudanças puramente de **backend** (API, worker, banco) propagam automaticamente para todos os clientes — não precisam de rebuild do APK
+- Mudanças de **frontend** (componentes Angular, rotas, templates, estilos) requerem rebuild do APK/IPA para refletir no app instalado
+- Ao entregar qualquer tarefa com mudança de frontend: commitar o sync Android junto (o iOS via CI ao criar tag `v*.*.*`)
+- Nunca declarar uma tarefa de UI como "concluída" sem ter feito o sync do Android
+
+---
+
 ## Compatibilidade Multi-módulo (OBRIGATÓRIO)
 
 **Todo ajuste, correção de bug ou nova feature deve ser desenvolvido considerando os três módulos existentes: `human`, `veterinary` e `estetica`.**
