@@ -19,7 +19,7 @@ export interface CreateConsultationResponse {
 }
 
 export interface ConsultationTokens {
-  meeting_id: string;
+  meeting: { MeetingId: string; MediaPlacement: Record<string, string> };
   doctor_attendee: Record<string, string>;
   patient_attendee: Record<string, string>;
   join_url: string;

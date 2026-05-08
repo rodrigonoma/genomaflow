@@ -308,7 +308,7 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
     this.videoSvc.getTokens(this.consultationId).subscribe({
       next: async (tokens) => {
         this.status.set(tokens.status);
-        await this.joinMeeting(tokens.meeting_id, tokens.doctor_attendee);
+        await this.joinMeeting(tokens.meeting, tokens.doctor_attendee);
         this.videoSvc.startConsultation(this.consultationId).subscribe();
         this.status.set('active');
         this.startTime = new Date();
@@ -318,7 +318,10 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  private async joinMeeting(meetingId: string, attendee: Record<string, string>) {
+  private async joinMeeting(
+    meeting: { MeetingId: string; MediaPlacement: Record<string, string> },
+    attendee: Record<string, string>
+  ) {
     try {
       const {
         ConsoleLogger, DefaultDeviceController, DefaultMeetingSession,
@@ -327,10 +330,7 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
 
       const logger = new ConsoleLogger('ChimeDoctor', LogLevel.ERROR);
       const deviceController = new DefaultDeviceController(logger);
-      const config = new MeetingSessionConfiguration(
-        { MeetingId: meetingId, MediaPlacement: attendee['MediaPlacement'] ?? {} },
-        attendee
-      );
+      const config = new MeetingSessionConfiguration(meeting, attendee);
       this.meetingSession = new DefaultMeetingSession(config, logger, deviceController);
 
       // Câmera e microfone locais
@@ -392,17 +392,23 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private loadSidePanel() {
-    const subjectId = this.route.snapshot.queryParamMap.get('subject_id');
-    if (subjectId) {
-      this.http.get<any>(`${environment.apiUrl}/patients/${subjectId}`).subscribe({
-        next: (s) => this.subject.set(s),
-        error: () => {},
-      });
-      this.http.get<any[]>(`${environment.apiUrl}/exams?subject_id=${subjectId}&limit=20`).subscribe({
-        next: (e) => this.exams.set(e || []),
-        error: () => {},
-      });
-    }
+    // subject_id vem da consulta (JOIN appointments) — não do query param
+    this.videoSvc.getStatus(this.consultationId).subscribe({
+      next: (res: any) => {
+        const subjectId = res.subject_id;
+        if (subjectId) {
+          this.http.get<any>(`${environment.apiUrl}/patients/${subjectId}`).subscribe({
+            next: (s) => this.subject.set(s),
+            error: () => {},
+          });
+          this.http.get<any[]>(`${environment.apiUrl}/exams?subject_id=${subjectId}&limit=20`).subscribe({
+            next: (e) => this.exams.set(e || []),
+            error: () => {},
+          });
+        }
+      },
+      error: () => {},
+    });
     this.loadFiles();
   }
 

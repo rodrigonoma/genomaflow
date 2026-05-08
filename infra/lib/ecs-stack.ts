@@ -186,6 +186,7 @@ export class EcsStack extends cdk.Stack {
     taskRole.addToPolicy(new iam.PolicyStatement({
       actions: [
         'chime:CreateMeeting',
+        'chime:GetMeeting',
         'chime:DeleteMeeting',
         'chime:CreateAttendee',
         'chime:DeleteAttendee',
