@@ -128,13 +128,11 @@ module.exports = async function (fastify) {
   });
 
   // ────────────────────────────────────────────────────────────────────────
-  // POST /auth/password-reset/request
+  // POST /auth/password-reset/request  (alias: /auth/forgot-password)
   // Público — sempre retorna 204 pra evitar enumeration.
   // Rate-limited: 3/hora por IP + cooldown de 60s na linha do user.
   // ────────────────────────────────────────────────────────────────────────
-  fastify.post('/password-reset/request', {
-    config: { rateLimit: { max: 3, timeWindow: '1 hour' } },
-  }, async (request, reply) => {
+  const passwordResetHandler = async (request, reply) => {
     const email = String(request.body?.email || '').toLowerCase().trim();
     if (!email) return reply.status(400).send({ error: 'email obrigatório' });
 
@@ -169,10 +167,18 @@ module.exports = async function (fastify) {
       await sendEmail({ to: user.email, subject, text, html, pg: fastify.pg, log: request.log });
     } catch (err) {
       request.log.error({ err }, 'falha ao enviar email de reset');
-      // Não vaza erro — usuário tenta de novo.
     }
     return reply.status(204).send();
-  });
+  };
+
+  // Alias legado — alguns bundles antigos chamam /auth/forgot-password
+  fastify.post('/forgot-password', {
+    config: { rateLimit: { max: 3, timeWindow: '1 hour' } },
+  }, passwordResetHandler);
+
+  fastify.post('/password-reset/request', {
+    config: { rateLimit: { max: 3, timeWindow: '1 hour' } },
+  }, passwordResetHandler);
 
   // ────────────────────────────────────────────────────────────────────────
   // POST /auth/password-reset/confirm

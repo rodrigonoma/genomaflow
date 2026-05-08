@@ -1,6 +1,8 @@
 'use strict';
 
 const FROM = process.env.SES_FROM_EMAIL || 'noreply@genomaflow.com.br';
+// SMTP_FROM_EMAIL overrides FROM when sending via SMTP (Zoho auth requer mesmo endereço).
+const SMTP_FROM = process.env.SMTP_FROM_EMAIL || FROM;
 const REPLY_TO = process.env.SES_REPLY_TO || null;
 
 // ---------------------------------------------------------------------------
@@ -63,7 +65,7 @@ async function sendViaSes({ to, subject, html, text }) {
 
 async function sendViaSmtp({ to, subject, html, text }) {
   const info = await smtpTransport().sendMail({
-    from: FROM,
+    from: SMTP_FROM,
     ...(REPLY_TO ? { replyTo: REPLY_TO } : {}),
     to,
     subject,
