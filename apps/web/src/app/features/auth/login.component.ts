@@ -1,3 +1,7 @@
+// Semáforo em nível de módulo: impede múltiplos prompts biométricos simultâneos
+// caso o Router instancie LoginComponent mais de uma vez durante a navegação.
+let biometricActive = false;
+
 import { Component, inject, NgZone, OnInit } from '@angular/core';
 import { FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
@@ -177,7 +181,9 @@ export class LoginComponent implements OnInit {
 
     if (!Capacitor.isNativePlatform()) return;
     if (localStorage.getItem('biometric_enabled') !== 'true') return;
+    if (biometricActive) return;
 
+    biometricActive = true;
     try {
       const { isAvailable } = await NativeBiometric.isAvailable();
       if (!isAvailable) return;
@@ -189,8 +195,6 @@ export class LoginComponent implements OnInit {
       await this.zone.run(async () => {
         const token = await this.auth.loadToken();
         if (!token) {
-          // Preferences vazio: token expirou ou foi revogado (forceLogout já limpou tudo).
-          // Não limpar biometric_enabled aqui — o próximo login vai re-oferecer biometria.
           this.snack.open('Sessão expirada. Faça login com suas credenciais.', 'Ok', { duration: 4000 });
           return;
         }
@@ -198,7 +202,9 @@ export class LoginComponent implements OnInit {
         const dest = this.auth.currentUser?.role === 'master' ? '/master' : '/clinic/dashboard';
         this.router.navigateByUrl(dest);
       });
-    } catch { /* biometria falhou ou cancelada — exibe login normal */ }
+    } catch { /* biometria falhou ou cancelada — exibe login normal */ } finally {
+      biometricActive = false;
+    }
   }
 
   private async offerBiometricSetup(): Promise<void> {
