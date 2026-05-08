@@ -180,6 +180,25 @@ export class EcsStack extends cdk.Stack {
       ],
     }));
 
+    // Chime SDK Meetings — consulta por vídeo (v1.1.0).
+    // Adicionado inline via aws iam put-role-policy em 2026-05-08;
+    // registrado aqui para não ser apagado em próximo cdk deploy.
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        'chime:CreateMeeting',
+        'chime:DeleteMeeting',
+        'chime:CreateAttendee',
+        'chime:DeleteAttendee',
+      ],
+      resources: ['*'],
+    }));
+
+    // S3 — gravações de consulta por vídeo (worker Whisper acessa este prefix).
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['s3:PutObject', 's3:GetObject', 's3:DeleteObject'],
+      resources: ['arn:aws:s3:::genomaflow-uploads-prod/video-consultations/*'],
+    }));
+
     // ── ECS Cluster ──
     const cluster = new ecs.Cluster(this, 'Cluster', {
       vpc,
