@@ -148,7 +148,7 @@ import { NativeBiometric } from '@capgo/capacitor-native-biometric';
       <div class="footer-note">
         <a routerLink="/forgot-password" style="color:#c0c1ff;text-decoration:none">Esqueci a senha</a>
         &nbsp;&middot;&nbsp;
-        Não tem conta? <a routerLink="/register" style="color:#c0c1ff;text-decoration:none">Registrar</a>
+        Não tem conta? <a routerLink="/onboarding" style="color:#c0c1ff;text-decoration:none">Registrar</a>
       </div>
     </div>
   `
