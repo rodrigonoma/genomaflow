@@ -7,6 +7,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { VideoService, PublicJoinInfo } from './video.service';
+import {
+  ConsoleLogger, DefaultDeviceController, DefaultMeetingSession,
+  LogLevel, MeetingSessionConfiguration,
+} from 'amazon-chime-sdk-js';
 
 @Component({
   selector: 'app-patient-room',
@@ -134,7 +138,7 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
       next: async (info) => {
         this.info.set(info);
         this.consultationId = info.consultation_id;
-        await this.joinMeeting(info.meeting_id, info.patient_attendee);
+        await this.joinMeeting(info.meeting, info.patient_attendee);
       },
       error: (err) => {
         this.loadError.set(
@@ -151,19 +155,14 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
     this.localStream?.getTracks().forEach(t => t.stop());
   }
 
-  private async joinMeeting(meetingId: string, attendee: Record<string, string>) {
+  private async joinMeeting(
+    meeting: { MeetingId: string; MediaPlacement: Record<string, string> },
+    attendee: Record<string, string>
+  ) {
     try {
-      const {
-        ConsoleLogger, DefaultDeviceController, DefaultMeetingSession,
-        LogLevel, MeetingSessionConfiguration,
-      } = await import('amazon-chime-sdk-js');
-
       const logger = new ConsoleLogger('ChimePatient', LogLevel.ERROR);
       const deviceController = new DefaultDeviceController(logger);
-      const config = new MeetingSessionConfiguration(
-        { MeetingId: meetingId, MediaPlacement: attendee['MediaPlacement'] ?? {} },
-        attendee
-      );
+      const config = new MeetingSessionConfiguration(meeting, attendee);
       this.meetingSession = new DefaultMeetingSession(config, logger, deviceController);
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });

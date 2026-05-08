@@ -29,7 +29,7 @@ export interface ConsultationTokens {
 export interface PublicJoinInfo {
   consultation_id: string;
   status: string;
-  meeting_id: string;
+  meeting: { MeetingId: string; MediaPlacement: Record<string, string> };
   patient_attendee: Record<string, string>;
   clinic_name: string;
   doctor_name: string;

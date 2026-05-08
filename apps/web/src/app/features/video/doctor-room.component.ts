@@ -12,6 +12,10 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { VideoService, ConsultationFile } from './video.service';
 import { environment } from '../../../environments/environment';
 import { interval, Subscription } from 'rxjs';
+import {
+  ConsoleLogger, DefaultDeviceController, DefaultMeetingSession,
+  LogLevel, MeetingSessionConfiguration,
+} from 'amazon-chime-sdk-js';
 import { switchMap, takeWhile } from 'rxjs/operators';
 
 @Component({
@@ -381,11 +385,6 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
     attendee: Record<string, string>
   ) {
     try {
-      const {
-        ConsoleLogger, DefaultDeviceController, DefaultMeetingSession,
-        LogLevel, MeetingSessionConfiguration,
-      } = await import('amazon-chime-sdk-js');
-
       const logger = new ConsoleLogger('ChimeDoctor', LogLevel.ERROR);
       const deviceController = new DefaultDeviceController(logger);
       const config = new MeetingSessionConfiguration(meeting, attendee);

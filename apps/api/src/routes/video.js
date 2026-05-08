@@ -388,10 +388,20 @@ module.exports = async function (fastify) {
     if (!rows[0]) return reply.status(404).send({ error: 'Consulta não encontrada' });
     const vc = rows[0];
 
+    // Busca MediaPlacement fresco do Chime para o paciente iniciar o SDK
+    let mediaPlacement = {};
+    try {
+      const { GetMeetingCommand } = require('@aws-sdk/client-chime-sdk-meetings');
+      const r = await chimeClient().send(new GetMeetingCommand({ MeetingId: vc.meeting_id }));
+      mediaPlacement = r.Meeting?.MediaPlacement ?? {};
+    } catch (err) {
+      request.log.warn({ err }, '[video/join] falha ao buscar MediaPlacement do Chime');
+    }
+
     return {
       consultation_id: vc.id,
       status: vc.status,
-      meeting_id: vc.meeting_id,
+      meeting: { MeetingId: vc.meeting_id, MediaPlacement: mediaPlacement },
       patient_attendee: JSON.parse(vc.patient_attendee_id),
       clinic_name: vc.clinic_name,
       doctor_name: vc.doctor_name,
