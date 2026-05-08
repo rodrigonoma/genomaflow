@@ -16,7 +16,6 @@ import {
   ConsoleLogger, DefaultDeviceController, DefaultMeetingSession,
   LogLevel, MeetingSessionConfiguration,
 } from 'amazon-chime-sdk-js';
-import { switchMap, takeWhile } from 'rxjs/operators';
 
 @Component({
   selector: 'app-doctor-room',
@@ -159,19 +158,6 @@ import { switchMap, takeWhile } from 'rxjs/operators';
 
         <video #remoteVideo class="remote-video" autoplay playsinline></video>
         <video #selfVideo class="self-video" autoplay playsinline muted></video>
-
-        @if (status() === 'ended' || status() === 'transcribing') {
-          <div class="transcribing-banner">
-            <mat-spinner diameter="16"></mat-spinner>
-            Consulta encerrada. Transcrição em andamento...
-          </div>
-        }
-        @if (status() === 'done' && encounterId()) {
-          <div class="done-banner">
-            ✅ Prontuário pré-preenchido pela IA pronto.
-            <a (click)="goToEncounter()">Abrir prontuário →</a>
-          </div>
-        }
 
         <div class="controls">
           <button class="ctrl-btn" [class.active]="!audioMuted()" (click)="toggleAudio()" title="Mute">
@@ -361,7 +347,6 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
   private recorder: MediaRecorder | null = null;
   private recordingChunks: Blob[] = [];
   private timerSub?: Subscription;
-  private pollSub?: Subscription;
   private startTime?: Date;
 
   ngOnInit() {
@@ -374,7 +359,6 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
 
   ngOnDestroy() {
     this.timerSub?.unsubscribe();
-    this.pollSub?.unsubscribe();
     this.meetingSession?.audioVideo?.stop();
     this.localStream?.getTracks().forEach(t => t.stop());
     this.recorder?.state !== 'inactive' && this.recorder?.stop();
@@ -548,27 +532,16 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
     this.localStream?.getTracks().forEach(t => t.stop());
     this.videoSvc.endConsultation(this.consultationId, s3Key).subscribe({
       next: (res) => {
-        this.status.set(res.status);
-        this.snack.open(`Consulta encerrada. ${res.credits_debited} créditos debitados.`, '', { duration: 4000 });
-        if (res.status === 'transcribing') {
-          this.pollTranscription();
-        }
+        const msg = res.status === 'transcribing'
+          ? `Consulta encerrada (${res.credits_debited} créditos). Transcrição e prontuário IA sendo gerados em segundo plano.`
+          : `Consulta encerrada. ${res.credits_debited} créditos debitados.`;
+        this.snack.open(msg, '', { duration: 5000 });
+        // Redireciona para a agenda após 2s — transcrição e IA rodam no worker em background
+        setTimeout(() => this.router.navigate(['/clinic/appointments']), 2000);
       },
       error: () => {
         this.ending.set(false);
         this.snack.open('Erro ao encerrar consulta', 'Fechar', { duration: 4000 });
-      },
-    });
-  }
-
-  private pollTranscription() {
-    this.pollSub = interval(10_000).pipe(
-      switchMap(() => this.videoSvc.getStatus(this.consultationId)),
-      takeWhile((r) => r.status !== 'done' && r.status !== 'failed', true),
-    ).subscribe({
-      next: (r) => {
-        this.status.set(r.status);
-        if (r.encounter_id) this.encounterId.set(r.encounter_id);
       },
     });
   }
