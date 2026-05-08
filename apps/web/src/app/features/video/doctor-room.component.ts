@@ -118,6 +118,14 @@ import { switchMap, takeWhile } from 'rxjs/operators';
 
     .pip-hint { font-size:.65rem; color:#6e6d80; text-align:center; padding:.25rem 0; }
 
+    /* Material tab body precisa de overflow-y:auto para scroll funcionar */
+    ::ng-deep .panel .mat-mdc-tab-body-content {
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    ::ng-deep .panel .mat-mdc-tab-body-wrapper { flex: 1; overflow: hidden; }
+
     @media (max-width:767px) {
       .panel { display:none; }
     }
