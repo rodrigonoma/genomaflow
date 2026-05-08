@@ -43,7 +43,8 @@ jobs:
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | base64 -d > android/app/genomaflow-release.keystore
           else
-            echo "No keystore secret — building with debug signing"
+            echo "ANDROID_KEYSTORE_BASE64 not set — AAB will use debug signing"
+            touch android/app/genomaflow-release.keystore
           fi
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -58,7 +59,6 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
 
       - name: Setup Ruby + Fastlane
-        if: ${{ secrets.GOOGLE_PLAY_JSON_KEY != '' }}
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
@@ -66,9 +66,13 @@ jobs:
           working-directory: apps/web/android
 
       - name: Upload to Play Store (internal track)
-        if: ${{ secrets.GOOGLE_PLAY_JSON_KEY != '' }}
         working-directory: apps/web/android
-        run: bundle exec fastlane supply
+        run: |
+          if [ -n "$GOOGLE_PLAY_JSON_KEY_DATA" ]; then
+            bundle exec fastlane supply
+          else
+            echo "GOOGLE_PLAY_JSON_KEY not configured — skipping Play Store upload (Task 20)"
+          fi
         env:
           GOOGLE_PLAY_JSON_KEY_DATA: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
 
@@ -102,7 +106,6 @@ jobs:
         run: npx cap sync ios
 
       - name: Setup Ruby + Fastlane
-        if: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID != '' }}
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
@@ -110,14 +113,17 @@ jobs:
           working-directory: apps/web/ios
 
       - name: Install CocoaPods
-        if: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID != '' }}
         working-directory: apps/web/ios/App
         run: pod install
 
       - name: Build + Upload to TestFlight
-        if: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID != '' }}
         working-directory: apps/web/ios
-        run: bundle exec fastlane beta
+        run: |
+          if [ -n "$APP_STORE_CONNECT_API_KEY_ID" ]; then
+            bundle exec fastlane beta
+          else
+            echo "APP_STORE_CONNECT_API_KEY_ID not configured — skipping TestFlight upload (Task 20)"
+          fi
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
