@@ -137,7 +137,7 @@ module.exports = async function (fastify) {
     // Cria Chime Meeting + Attendees
     let meeting, doctorAttendee, patientAttendee;
     try {
-      meeting = await createChimeMeeting(`${tenant_id}-${appointment_id}`);
+      meeting = await createChimeMeeting(appointment_id); // UUID 36 chars ≤ limite Chime de 64
       doctorAttendee  = await createChimeAttendee(meeting.MeetingId, `doctor-${user_id}`);
       patientAttendee = await createChimeAttendee(meeting.MeetingId, `patient-${appointment_id}`);
     } catch (err) {
