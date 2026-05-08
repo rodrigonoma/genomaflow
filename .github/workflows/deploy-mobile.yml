@@ -99,8 +99,17 @@ jobs:
       - name: Build Angular (mobile)
         run: npx ng build --configuration=mobile
 
-      - name: Init iOS project (first run)
-        run: npx cap add ios || true
+      - name: Init iOS project
+        run: |
+          # Preserve custom Fastlane files, then clear ios/ so cap add ios creates
+          # the full Xcode project (ios/App/Podfile etc). Without this, cap add ios
+          # says "platform already exists" and skips, leaving ios/App/ empty.
+          cp ios/Gemfile /tmp/Gemfile_ios 2>/dev/null || true
+          cp -r ios/fastlane /tmp/fastlane_ios 2>/dev/null || true
+          rm -rf ios
+          npx cap add ios
+          cp /tmp/Gemfile_ios ios/Gemfile 2>/dev/null || true
+          cp -r /tmp/fastlane_ios ios/fastlane 2>/dev/null || true
 
       - name: Sync Capacitor
         run: npx cap sync ios
