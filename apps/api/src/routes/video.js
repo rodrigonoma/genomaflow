@@ -80,7 +80,7 @@ function formatDateBR(isoString) {
 // Busca phone/email do paciente respeitando os 3 módulos
 async function getSubjectContact(pg, tenantId, subjectId, module_) {
   const { rows } = await pg.query(
-    `SELECT s.phone, s.email, s.name,
+    `SELECT s.phone, s.name,
             o.phone AS owner_phone, o.email AS owner_email, o.name AS owner_name
      FROM subjects s
      LEFT JOIN owners o ON o.id = s.owner_id AND o.tenant_id = $2
@@ -93,7 +93,7 @@ async function getSubjectContact(pg, tenantId, subjectId, module_) {
   if (module_ === 'veterinary') {
     return { phone: r.owner_phone, email: r.owner_email, name: r.owner_name || r.name };
   }
-  return { phone: r.phone, email: r.email, name: r.name };
+  return { phone: r.phone, email: null, name: r.name }; // subjects não tem email; veterinary usa owner_email
 }
 
 module.exports = async function (fastify) {
