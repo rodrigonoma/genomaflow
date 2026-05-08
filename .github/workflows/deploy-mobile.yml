@@ -39,6 +39,7 @@ jobs:
         run: npx cap sync android
 
       - name: Decode Android Keystore
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/genomaflow-release.keystore
 
@@ -46,12 +47,13 @@ jobs:
         working-directory: apps/web/android
         run: ./gradlew bundleRelease
         env:
-          KEYSTORE_PATH: app/genomaflow-release.keystore
+          KEYSTORE_PATH: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && 'app/genomaflow-release.keystore' || '' }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: genomaflow
           KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
 
       - name: Setup Ruby + Fastlane
+        if: ${{ secrets.GOOGLE_PLAY_JSON_KEY != '' }}
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
@@ -59,6 +61,7 @@ jobs:
           working-directory: apps/web/android
 
       - name: Upload to Play Store (internal track)
+        if: ${{ secrets.GOOGLE_PLAY_JSON_KEY != '' }}
         working-directory: apps/web/android
         run: bundle exec fastlane supply
         env:
@@ -94,6 +97,7 @@ jobs:
         run: npx cap sync ios
 
       - name: Setup Ruby + Fastlane
+        if: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID != '' }}
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
@@ -101,10 +105,12 @@ jobs:
           working-directory: apps/web/ios
 
       - name: Install CocoaPods
+        if: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID != '' }}
         working-directory: apps/web/ios/App
         run: pod install
 
       - name: Build + Upload to TestFlight
+        if: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID != '' }}
         working-directory: apps/web/ios
         run: bundle exec fastlane beta
         env:
