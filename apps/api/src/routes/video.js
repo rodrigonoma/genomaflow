@@ -83,7 +83,7 @@ async function getSubjectContact(pg, tenantId, subjectId, module_) {
     `SELECT s.phone, s.email, s.name,
             o.phone AS owner_phone, o.email AS owner_email, o.name AS owner_name
      FROM subjects s
-     LEFT JOIN owners o ON o.subject_id = s.id AND o.tenant_id = $2
+     LEFT JOIN owners o ON o.id = s.owner_id AND o.tenant_id = $2
      WHERE s.id = $1 AND s.tenant_id = $2`,
     [subjectId, tenantId]
   );
@@ -118,7 +118,8 @@ module.exports = async function (fastify) {
        FROM appointments a
        JOIN users u ON u.id = $3
        JOIN tenants t ON t.id = $2
-       WHERE a.id = $1 AND a.tenant_id = $2 AND a.status NOT IN ('cancelled','no_show')`,
+       WHERE a.id = $1 AND a.tenant_id = $2 AND a.user_id = $3
+         AND a.status NOT IN ('cancelled','no_show')`,
       [appointment_id, tenant_id, user_id]
     );
     if (!apts[0]) return reply.status(404).send({ error: 'Agendamento não encontrado' });
@@ -368,9 +369,8 @@ module.exports = async function (fastify) {
        FROM video_consultations vc
        JOIN appointments a ON a.id = vc.appointment_id
        JOIN tenants t ON t.id = vc.tenant_id
-       JOIN users u ON u.tenant_id = vc.tenant_id AND u.role = 'admin'
-       WHERE vc.id = $1 AND vc.join_token = $2
-       LIMIT 1`,
+       JOIN users u ON u.id = a.user_id
+       WHERE vc.id = $1 AND vc.join_token = $2`,
       [payload.consultation_id, request.params.token]
     );
 
