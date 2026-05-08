@@ -11,9 +11,13 @@ import { AgendaService } from './agenda.service';
 import {
   Appointment,
   AppointmentStatus,
+  AppointmentType,
   STATUS_LABELS,
   VALID_SLOT_MINUTES,
+  APPOINTMENT_TYPE_LABELS,
+  APPOINTMENT_TYPES_BY_MODULE,
 } from './agenda.models';
+import { AuthService } from '../../core/auth/auth.service';
 import { StartVideoConsultationDialogComponent } from '../video/start-video-consultation-dialog.component';
 
 export interface EditAppointmentDialogData {
@@ -91,6 +95,19 @@ export type EditAppointmentDialogResult =
         </mat-form-field>
       </div>
 
+      @if (!isBlocked()) {
+        <div>
+          <div class="row-label">Tipo</div>
+          <mat-form-field appearance="outline" class="full">
+            <mat-select [(ngModel)]="appointmentType">
+              @for (t of appointmentTypes(); track t) {
+                <mat-option [value]="t">{{ typeLabel(t) }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </div>
+      }
+
       <div>
         <div class="row-label">Duração</div>
         <mat-form-field appearance="outline" class="full">
@@ -153,17 +170,27 @@ export class EditAppointmentDialogComponent {
   private ref = inject(MatDialogRef<EditAppointmentDialogComponent, EditAppointmentDialogResult>);
   private agenda = inject(AgendaService);
   private dialog = inject(MatDialog);
+  private auth = inject(AuthService);
   data: EditAppointmentDialogData = inject(MAT_DIALOG_DATA);
 
   readonly validSlots = VALID_SLOT_MINUTES;
   readonly statusLabels = STATUS_LABELS;
+  readonly typeLabels = APPOINTMENT_TYPE_LABELS;
 
   status: AppointmentStatus = this.data.appointment.status;
   durationMinutes = this.data.appointment.duration_minutes;
+  appointmentType: AppointmentType = (this.data.appointment.appointment_type as AppointmentType) || 'consulta';
   reason = this.data.appointment.reason || '';
   notes = this.data.appointment.notes || '';
   errorMsg = signal('');
   submitting = signal(false);
+
+  appointmentTypes() {
+    const mod = this.auth.currentUser?.module || 'human';
+    return APPOINTMENT_TYPES_BY_MODULE[mod] ?? APPOINTMENT_TYPES_BY_MODULE['human'];
+  }
+
+  typeLabel(t: AppointmentType): string { return this.typeLabels[t]; }
 
   isBlocked(): boolean { return this.data.appointment.status === 'blocked'; }
   isTelemedicina(): boolean { return this.data.appointment.appointment_type === 'telemedicina'; }
@@ -202,6 +229,7 @@ export class EditAppointmentDialogComponent {
     const body: any = {};
     if (this.durationMinutes !== this.data.appointment.duration_minutes) body.duration_minutes = this.durationMinutes;
     if (this.status !== this.data.appointment.status) body.status = this.status;
+    if (!this.isBlocked() && this.appointmentType !== (this.data.appointment.appointment_type || 'consulta')) body.appointment_type = this.appointmentType;
     if (this.notes !== (this.data.appointment.notes || '')) body.notes = this.notes.trim() || null;
     if (this.isBlocked() && this.reason !== (this.data.appointment.reason || '')) body.reason = this.reason.trim();
 

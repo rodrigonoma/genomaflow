@@ -13,7 +13,13 @@ import { MatRadioModule } from '@angular/material/radio';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/auth/auth.service';
 import { AgendaService } from './agenda.service';
-import { VALID_SLOT_MINUTES, AppointmentStatus } from './agenda.models';
+import {
+  VALID_SLOT_MINUTES,
+  AppointmentStatus,
+  AppointmentType,
+  APPOINTMENT_TYPE_LABELS,
+  APPOINTMENT_TYPES_BY_MODULE,
+} from './agenda.models';
 
 interface SubjectModel {
   id: string;
@@ -87,6 +93,17 @@ export type QuickCreateDialogResult = { created: true; subject_name?: string } |
 
       @if (mode() === 'appointment') {
         <div>
+          <div class="row-label">Tipo</div>
+          <mat-form-field appearance="outline" class="full">
+            <mat-select [(ngModel)]="appointmentType">
+              @for (t of appointmentTypes(); track t) {
+                <mat-option [value]="t">{{ typeLabel(t) }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div>
           <div class="row-label">{{ isVet() ? 'Animal' : 'Paciente' }}</div>
           <mat-form-field appearance="outline" class="full">
             <input matInput
@@ -154,6 +171,7 @@ export class QuickCreateDialogComponent {
   data: QuickCreateDialogData = inject(MAT_DIALOG_DATA);
 
   readonly validSlots = VALID_SLOT_MINUTES;
+  readonly typeLabels = APPOINTMENT_TYPE_LABELS;
 
   mode = signal<'appointment' | 'block'>('appointment');
   modeValue = 'appointment';
@@ -162,6 +180,7 @@ export class QuickCreateDialogComponent {
   reason = '';
   notes = '';
   durationMinutes = this.data.default_duration_minutes;
+  appointmentType: AppointmentType = 'consulta';
   errorMsg = signal('');
   submitting = signal(false);
 
@@ -176,6 +195,13 @@ export class QuickCreateDialogComponent {
   });
 
   isVet(): boolean { return this.auth.currentUser?.module === 'veterinary'; }
+
+  appointmentTypes() {
+    const mod = this.auth.currentUser?.module || 'human';
+    return APPOINTMENT_TYPES_BY_MODULE[mod] ?? APPOINTMENT_TYPES_BY_MODULE['human'];
+  }
+
+  typeLabel(t: AppointmentType): string { return this.typeLabels[t]; }
 
   constructor() {
     // Pré-carrega subjects pra autocomplete (mesma lógica do quick-search global)
@@ -239,6 +265,7 @@ export class QuickCreateDialogComponent {
           duration_minutes: this.durationMinutes,
           status: 'scheduled' as AppointmentStatus,
           subject_id: this.selectedSubject!.id,
+          appointment_type: this.appointmentType,
           notes: this.notes.trim() || null,
         };
 

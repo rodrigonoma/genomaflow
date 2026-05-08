@@ -74,6 +74,33 @@ export const STATUS_LABELS: Record<AppointmentStatus, string> = {
   blocked: 'Bloqueado',
 };
 
+export type AppointmentType =
+  | 'consulta'
+  | 'retorno'
+  | 'telemedicina'
+  | 'exame'
+  | 'procedimento'
+  | 'vacina'
+  | 'banho_tosa'
+  | 'outro';
+
+export const APPOINTMENT_TYPE_LABELS: Record<AppointmentType, string> = {
+  consulta:      'Consulta',
+  retorno:       'Retorno',
+  telemedicina:  'Telemedicina 📹',
+  exame:         'Exame',
+  procedimento:  'Procedimento',
+  vacina:        'Vacina',
+  banho_tosa:    'Banho e tosa',
+  outro:         'Outro',
+};
+
+export const APPOINTMENT_TYPES_BY_MODULE: Record<string, AppointmentType[]> = {
+  human:      ['consulta', 'retorno', 'telemedicina', 'exame', 'procedimento', 'vacina', 'outro'],
+  veterinary: ['consulta', 'retorno', 'telemedicina', 'exame', 'procedimento', 'vacina', 'banho_tosa', 'outro'],
+  estetica:   ['consulta', 'retorno', 'telemedicina', 'procedimento', 'outro'],
+};
+
 export const STATUS_COLORS: Record<AppointmentStatus, { bg: string; border: string; text: string }> = {
   scheduled: { bg: 'rgba(73, 75, 214, 0.18)',  border: '#494bd6', text: '#dae2fd' },
   confirmed: { bg: 'rgba(34, 197, 94, 0.18)',  border: '#22c55e', text: '#d4f4dd' },
