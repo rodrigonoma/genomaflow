@@ -313,7 +313,10 @@ module.exports = async function (fastify) {
     const durationSeconds = vc.started_at
       ? Math.round((endedAt - new Date(vc.started_at)) / 1000)
       : 0;
-    const credits = CREDITS[vc.modality];
+    // Proporcional à duração real — taxa = CREDITS[modality] por hora, arredondando para cima
+    const credits = durationSeconds > 0
+      ? Math.ceil(CREDITS[vc.modality] * durationSeconds / 3600)
+      : 0;
     const nextStatus = vc.modality === 'complete' ? 'transcribing' : 'done';
 
     await withTenant(fastify.pg, tenant_id, async (client) => {

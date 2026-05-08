@@ -31,29 +31,41 @@ import {
 
     .video-area {
       flex:1; display:flex; flex-direction:column;
-      background:#060d1a; position:relative;
+      background:#060d1a; position:relative; overflow:hidden;
     }
-    .remote-video { flex:1; background:#000; object-fit:cover; }
+    .remote-video { flex:1; background:#000; object-fit:cover; width:100%; }
     .self-video {
-      position:absolute; bottom:80px; right:16px;
+      position:absolute; bottom:20px; right:16px;
       width:160px; height:110px; border-radius:8px;
       border:2px solid rgba(192,193,255,0.3); object-fit:cover; background:#111;
+      transition:bottom 200ms ease;
+      z-index:2;
     }
+    .video-area:hover .self-video { bottom:80px; }
+
     .controls {
-      height:64px; background:#111929;
+      position:absolute; bottom:0; left:0; right:0; z-index:3;
+      padding:.875rem 0 1.25rem;
+      background:linear-gradient(transparent, rgba(6,13,26,0.9));
       display:flex; align-items:center; justify-content:center; gap:1rem;
-      border-top:1px solid rgba(70,69,84,0.3);
+      opacity:0; transition:opacity 200ms ease;
     }
+    .video-area:hover .controls { opacity:1; }
+
     .ctrl-btn {
-      width:44px; height:44px; border-radius:50%; border:1px solid rgba(70,69,84,0.4);
-      background:#1a2440; color:#dae2fd; cursor:pointer;
+      width:46px; height:46px; border-radius:50%; border:1px solid rgba(255,255,255,0.15);
+      background:rgba(17,25,41,0.85); backdrop-filter:blur(8px);
+      color:#dae2fd; cursor:pointer;
       display:flex; align-items:center; justify-content:center;
-      transition:background 120ms;
+      transition:background 120ms, transform 100ms;
     }
-    .ctrl-btn:hover { background:#243050; }
-    .ctrl-btn.active { background:#c0c1ff; color:#1000a9; border-color:#c0c1ff; }
-    .ctrl-btn.end { background:rgba(239,68,68,0.15); color:#ef4444; border-color:rgba(239,68,68,0.4); }
-    .ctrl-btn.end:hover { background:rgba(239,68,68,0.3); }
+    .ctrl-btn:hover { background:rgba(36,48,80,0.95); transform:scale(1.08); }
+    .ctrl-btn.active { background:rgba(192,193,255,0.9); color:#1000a9; border-color:#c0c1ff; }
+    .ctrl-btn.end {
+      width:52px; height:52px;
+      background:rgba(220,38,38,0.85); color:#fff; border-color:rgba(239,68,68,0.5);
+    }
+    .ctrl-btn.end:hover { background:rgba(239,68,68,0.95); }
 
     .panel {
       width:340px; background:#111929; border-left:1px solid rgba(70,69,84,0.25);
