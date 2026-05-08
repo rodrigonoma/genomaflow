@@ -18,15 +18,13 @@ android {
     }
     signingConfigs {
         release {
-            def keystorePath = System.getenv('KEYSTORE_PATH')
             def keystorePass = System.getenv('KEYSTORE_PASSWORD')
-            def keyAliasVal = System.getenv('KEY_ALIAS') ?: 'genomaflow'
-            def keyPass = System.getenv('KEY_PASSWORD')
-            if (keystorePath && keystorePass) {
-                storeFile file(keystorePath)
+            def keystoreFile = new File(projectDir, 'app/genomaflow-release.keystore')
+            if (keystorePass && keystoreFile.exists() && keystoreFile.length() > 0) {
+                storeFile keystoreFile
                 storePassword keystorePass
-                keyAlias keyAliasVal
-                keyPassword keyPass
+                keyAlias System.getenv('KEY_ALIAS') ?: 'genomaflow'
+                keyPassword System.getenv('KEY_PASSWORD') ?: keystorePass
             }
         }
     }
@@ -34,8 +32,9 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            def keystorePath = System.getenv('KEYSTORE_PATH')
-            if (keystorePath) {
+            def keystorePass = System.getenv('KEYSTORE_PASSWORD')
+            def keystoreFile = new File(projectDir, 'app/genomaflow-release.keystore')
+            if (keystorePass && keystoreFile.exists() && keystoreFile.length() > 0) {
                 signingConfig signingConfigs.release
             }
         }
