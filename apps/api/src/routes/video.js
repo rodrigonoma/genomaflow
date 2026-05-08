@@ -51,7 +51,7 @@ async function createChimeAttendee(meetingId, externalUserId) {
   const { CreateAttendeeCommand } = require('@aws-sdk/client-chime-sdk-meetings');
   const res = await chimeClient().send(new CreateAttendeeCommand({
     MeetingId: meetingId,
-    Attendee: { ExternalUserId: externalUserId },
+    ExternalUserId: externalUserId,
   }));
   return res.Attendee;
 }
