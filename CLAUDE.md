@@ -86,6 +86,7 @@ Em toda análise, brainstorm, desenvolvimento, arquitetura, modelagem de dados, 
 4. **Atualizar specs de memória**: após aprovação, atualizar os arquivos de memória do Claude (`/home/rodrigonoma/.claude/projects/...`) com o contexto relevante da mudança.
 5. **Commit e push**: commitar na branch de desenvolvimento e fazer push.
 6. **Deploy via GitHub Actions**: o deploy para a AWS é feito automaticamente pelo pipeline de CI/CD ao fazer merge na `main`. Não fazer deploy manual na AWS sem antes passar pelo processo acima.
+7. **Monitor obrigatório após todo push**: usar a ferramenta `Monitor` para acompanhar o workflow `deploy.yml` após cada `git push origin main`. Nunca declarar deploy concluído sem confirmação do Monitor. O usuário deve ser avisado quando o deploy terminar (success ou failure).
 
 ---
 
@@ -445,6 +446,8 @@ Modelos vivos, mocks de SDKs externos, ESM/Jest, cobertura snapshot: `docs/claud
 - **Verificar stash + WIP no início de toda sessão** — `git stash list` e `git log --all --oneline | grep -i "wip\|stash"`
 - **Nunca afirmações categóricas sem verificar** — "nunca existiu", "não há stash" só após rodar as ferramentas. Sem verificar = mentira
 - **Vibe coding proibido** — nunca correções em cadeia sem diagnóstico completo primeiro. Fluxo: ler todos os arquivos relevantes → causa raiz → propor → executar de uma vez
+- **Auditoria SQL obrigatória antes do primeiro commit** — para toda query nova que referencia tabelas com FK entre si: abrir as migrations relevantes e listar as colunas reais de cada tabela antes de escrever uma linha de SQL. JOINs errados só aparecem em produção. Incidente 2026-05-08: `owners.subject_id` (não existe), `users.display_name` (não existe), `Attendee.ExternalUserId` (SDK v3 quer top-level), `externalMeetingId` > 64 chars — 4 deploys de hotfix evitáveis
+- **SDK de terceiros: verificar assinatura antes de usar** — APIs externas (Chime, Stripe, etc.) têm estruturas não-óbvias que mudam entre versões. Ler o código do pacote ou docs antes de montar o payload
 - **Angular `computed()` só reage a signals lidos** — propriedades string/boolean/object comuns NÃO invalidam o cache. Pra `[(ngModel)]` sobre signal: `[ngModel]="x()"` + `(ngModelChange)="x.set($event)"`
 - **Toda query tenant-scoped precisa de `AND tenant_id = $X` explícito** — RLS é última camada, nunca única (regra detalhada em `## Arquitetura Multi-tenant`)
 - **Output do LLM nunca é confiável** — toda feature que parseia JSON do LLM deve aplicar saneamento defensivo (regex pra extrair JSON com prefixo, whitelist de enums, clamp numérico, slice de strings, limite de itens, throw `BAD_LLM_OUTPUT` em parse fail → endpoint retorna 502, não 500). Modelo: `apps/api/src/services/ai-suggestions.js` e `apps/api/src/services/encounter-copilot.js`. Pattern detalhado em `docs/claude-memory/feedback_llm_output_sanitization.md`
@@ -476,6 +479,11 @@ Sintomas de armadilhas únicas que **não saltam aos olhos** ao ler as seções 
 - **Interceptor HTTP Angular é síncrono** — não pode usar `await` em `getToken()`. Solução: dual-write do JWT em `@capacitor/preferences` (secure) + `localStorage` (sync read-cache). Nunca refatorar o interceptor para async sem análise profunda
 - **`deploy-mobile.yml` nunca dispara em push** — só em tags `v*.*.*`. Nenhum push para `main` dispara build de app store
 - **Chime SDK sem IAM** → `POST /video/consultations` retorna 502 silencioso em prod. Permissões `chime:CreateMeeting/DeleteMeeting/CreateAttendee/DeleteAttendee` DEVEM estar na task role ECS antes de testar em produção (análogo ao incidente S3 2026-04-25)
+- **Chime `ExternalMeetingId` > 64 chars** → `ValidationException` silencioso. UUID (36) é seguro; `${tenant_id}-${appointment_id}` (73) explode
+- **Chime SDK v3 `CreateAttendeeCommand`** → `ExternalUserId` é campo **raiz** do input, não aninhado em `Attendee: {}`. `Attendee.ExternalUserId` retorna null e Chime rejeita com ValidationException
+- **`owners` não tem `subject_id`** → FK é `subjects.owner_id → owners.id`. JOIN errado: `ON o.subject_id = s.id`; correto: `ON o.id = s.owner_id`
+- **`users` não tem `display_name` nem `name`** → coluna disponível: `email`. Para mostrar o médico numa query, usar `u.email AS doctor_name`
+- **JOIN `users ON u.role = 'admin'` para pegar médico** → retorna todos os admins do tenant (múltiplas rows). Para pegar o médico de um agendamento: `JOIN users u ON u.id = a.user_id`
 - **`video_consultation_files` sem RLS própria** (intencional) — isolamento garantido pela FK em `video_consultations` (que tem RLS). Não adicionar RLS dupla.
 
 Outros red flags estão no corpo das seções correspondentes (Multi-tenant, Segurança da API, Infraestrutura de Produção, Regras de Edição, Testes).
