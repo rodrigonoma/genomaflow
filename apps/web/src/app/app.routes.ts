@@ -85,6 +85,17 @@ export const routes: Routes = [
       import('./features/agenda/agenda.routes').then(m => m.AGENDA_ROUTES)
   },
   {
+    path: 'clinic/video/:consultationId',
+    canActivate: [authGuard, termsGuard, professionalInfoGuard],
+    loadComponent: () =>
+      import('./features/video/doctor-room.component').then(m => m.DoctorRoomComponent)
+  },
+  {
+    path: 'video/join/:token',
+    loadComponent: () =>
+      import('./features/video/patient-room.component').then(m => m.PatientRoomComponent)
+  },
+  {
     path: 'onboarding/terms',
     canActivate: [authGuard],
     loadComponent: () =>

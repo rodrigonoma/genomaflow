@@ -101,4 +101,44 @@ function passwordReset({ resetUrl }) {
   return { subject, text, html };
 }
 
-module.exports = { emailVerification, passwordReset };
+// ──────────────────────────────────────────────────────────────────────────
+// Link de consulta por vídeo
+// ──────────────────────────────────────────────────────────────────────────
+function videoConsultationLink({ joinUrl, doctorName, clinicName, dateFormatted, durationMinutes }) {
+  const subject = `${clinicName} — link para sua consulta por vídeo`;
+  const text = [
+    `Olá! Você tem uma consulta agendada com ${doctorName} em ${clinicName}.`,
+    '',
+    `Data/hora: ${dateFormatted}`,
+    `Duração estimada: ${durationMinutes} minutos`,
+    '',
+    'Acesse o link abaixo para entrar na sala de vídeo:',
+    '',
+    joinUrl,
+    '',
+    'O link abre direto no navegador — não é necessário instalar nada.',
+    'Você pode acessar pelo celular ou computador.',
+    '',
+    'Em caso de dúvidas, entre em contato com a clínica.',
+  ].join('\n');
+  const html = layout(subject, `
+    <h2 style="font-size:18px;margin:0 0 12px;">Consulta por vídeo agendada</h2>
+    <p style="font-size:14px;line-height:1.5;color:${FG2};margin:0 0 8px;">
+      Você tem uma consulta agendada com <strong>${doctorName}</strong> em <strong>${clinicName}</strong>.
+    </p>
+    <p style="font-size:14px;line-height:1.5;color:${FG2};margin:0 0 20px;">
+      <strong>Data/hora:</strong> ${dateFormatted}<br>
+      <strong>Duração estimada:</strong> ${durationMinutes} minutos
+    </p>
+    <p style="margin:24px 0;">${button(joinUrl, 'Entrar na consulta')}</p>
+    <p style="font-size:12px;line-height:1.5;color:${FG2};margin:16px 0 0;">
+      O link abre direto no navegador — não é necessário instalar nada.<br>
+      Você pode acessar pelo celular ou computador.<br><br>
+      Se o botão não funcionar, copie e cole o link:<br>
+      <span style="word-break:break-all;color:${PRIMARY};">${joinUrl}</span>
+    </p>
+  `);
+  return { subject, text, html };
+}
+
+module.exports = { emailVerification, passwordReset, videoConsultationLink };

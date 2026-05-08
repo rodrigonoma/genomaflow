@@ -2,11 +2,13 @@ require('dotenv').config();
 const { Worker } = require('bullmq');
 const Redis = require('ioredis');
 const { processExam } = require('./processors/exam');
+const { processVideoTranscription } = require('./video/transcription');
 const { indexSubject, indexAggregates } = require('./rag/indexer');
 const { startScheduler } = require('./notifications/scheduler');
 
 const connection  = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
 const subscriber  = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+const videoConn   = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
 
 const worker = new Worker('exam-processing', async (job) => {
   console.log(`[worker] Processing job ${job.id}: exam ${job.data.exam_id}`);
@@ -15,6 +17,14 @@ const worker = new Worker('exam-processing', async (job) => {
 
 worker.on('completed', (job) => console.log(`[worker] Job ${job.id} completed`));
 worker.on('failed',    (job, err) => console.error(`[worker] Job ${job.id} failed: ${err.message}`));
+
+const videoWorker = new Worker('video-transcription', async (job) => {
+  console.log(`[video-worker] Job ${job.id}: consultation ${job.data.consultation_id}`);
+  await processVideoTranscription(job.data);
+}, { connection: videoConn, concurrency: 2 });
+
+videoWorker.on('completed', (job) => console.log(`[video-worker] Job ${job.id} completed`));
+videoWorker.on('failed',    (job, err) => console.error(`[video-worker] Job ${job.id} failed: ${err.message}`));
 
 subscriber.psubscribe('subject:upserted:*', 'billing:updated:*', (err) => {
   if (err) console.error('[worker] Subscribe error:', err.message);
@@ -44,4 +54,4 @@ subscriber.on('pmessage', async (_pattern, channel, message) => {
 // Fase 3 PMS expansion — scheduler de lembretes WhatsApp/email
 startScheduler();
 
-console.log('[worker] Listening for exam-processing jobs and index events...');
+console.log('[worker] Listening for exam-processing, video-transcription jobs and index events...');

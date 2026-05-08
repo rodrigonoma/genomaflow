@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { MatDialogRef, MatDialogModule, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatDialogRef, MatDialogModule, MAT_DIALOG_DATA, MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -14,6 +14,7 @@ import {
   STATUS_LABELS,
   VALID_SLOT_MINUTES,
 } from './agenda.models';
+import { StartVideoConsultationDialogComponent } from '../video/start-video-consultation-dialog.component';
 
 export interface EditAppointmentDialogData {
   appointment: Appointment;
@@ -125,6 +126,11 @@ export type EditAppointmentDialogResult =
           <button class="action-btn" (click)="quickAction('completed')">Marcar como concluído</button>
           <button class="action-btn danger" (click)="quickAction('no_show')">Marcou falta</button>
         }
+        @if (isTelemedicina() && (data.appointment.status === 'scheduled' || data.appointment.status === 'confirmed')) {
+          <button class="action-btn" style="color:#86efac;border-color:rgba(134,239,172,0.4);" (click)="startVideoConsultation()">
+            📹 Iniciar vídeo
+          </button>
+        }
         @if (data.appointment.status !== 'cancelled' && data.appointment.status !== 'blocked') {
           <button class="action-btn danger" (click)="cancelAppointment()">Cancelar agendamento</button>
         }
@@ -146,6 +152,7 @@ export type EditAppointmentDialogResult =
 export class EditAppointmentDialogComponent {
   private ref = inject(MatDialogRef<EditAppointmentDialogComponent, EditAppointmentDialogResult>);
   private agenda = inject(AgendaService);
+  private dialog = inject(MatDialog);
   data: EditAppointmentDialogData = inject(MAT_DIALOG_DATA);
 
   readonly validSlots = VALID_SLOT_MINUTES;
@@ -159,6 +166,21 @@ export class EditAppointmentDialogComponent {
   submitting = signal(false);
 
   isBlocked(): boolean { return this.data.appointment.status === 'blocked'; }
+  isTelemedicina(): boolean { return this.data.appointment.appointment_type === 'telemedicina'; }
+
+  startVideoConsultation() {
+    this.ref.close(null);
+    const d = new Date(this.data.appointment.start_at);
+    const label = d.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    this.dialog.open(StartVideoConsultationDialogComponent, {
+      data: {
+        appointment_id: this.data.appointment.id,
+        subject_name: this.data.subject_name || 'Paciente',
+        date_label: label,
+      },
+      width: '480px',
+    });
+  }
 
   selectableStatuses(): AppointmentStatus[] {
     if (this.isBlocked()) return ['blocked'];
