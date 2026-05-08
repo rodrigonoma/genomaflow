@@ -118,6 +118,23 @@ import { switchMap, takeWhile } from 'rxjs/operators';
 
     .pip-hint { font-size:.65rem; color:#6e6d80; text-align:center; padding:.25rem 0; }
 
+    .patient-link-bar {
+      padding:.5rem 1rem; background:#0d1520;
+      border-bottom:1px solid rgba(70,69,84,0.2);
+      display:flex; align-items:center; gap:.5rem;
+    }
+    .patient-link-text {
+      flex:1; font-family:'JetBrains Mono',monospace; font-size:.65rem;
+      color:#6e6d80; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    .copy-btn {
+      flex-shrink:0; padding:3px 8px; border-radius:4px;
+      background:#1a2440; border:1px solid rgba(192,193,255,0.25);
+      color:#c0c1ff; font-size:.65rem; cursor:pointer;
+      display:flex; align-items:center; gap:3px;
+    }
+    .copy-btn:hover { background:#202e4a; }
+
     /* Material tab body precisa de overflow-y:auto para scroll funcionar */
     ::ng-deep .panel .mat-mdc-tab-body-content {
       overflow-y: auto;
@@ -175,6 +192,18 @@ import { switchMap, takeWhile } from 'rxjs/operators';
       <!-- Painel lateral -->
       <div class="panel">
         <div class="panel-header">Cockpit Clínico</div>
+
+        @if (joinUrl()) {
+          <div class="patient-link-bar">
+            <mat-icon style="font-size:14px;color:#6e6d80;flex-shrink:0;">link</mat-icon>
+            <span class="patient-link-text" title="{{ joinUrl() }}">{{ joinUrl() }}</span>
+            <button class="copy-btn" (click)="copyLink()" title="Copiar link do paciente">
+              <mat-icon style="font-size:12px;">content_copy</mat-icon>
+              Copiar
+            </button>
+          </div>
+        }
+
         <mat-tab-group animationDuration="0ms" style="flex:1;overflow:hidden;">
 
           <mat-tab label="📋 Perfil">
@@ -321,6 +350,7 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
   videoOff = signal(false);
   ending = signal(false);
   encounterId = signal<string | null>(null);
+  joinUrl = signal<string>('');
   subject = signal<any | null>(null);
   exams = signal<any[]>([]);
   files = signal<ConsultationFile[]>([]);
@@ -378,6 +408,7 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
     this.videoSvc.getTokens(this.consultationId).subscribe({
       next: async (tokens) => {
         this.status.set(tokens.status);
+        if (tokens.join_url) this.joinUrl.set(tokens.join_url);
         await this.joinMeeting(tokens.meeting, tokens.doctor_attendee);
         this.videoSvc.startConsultation(this.consultationId).subscribe();
         this.status.set('active');
@@ -545,6 +576,16 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
   goToEncounter() {
     const encId = this.encounterId();
     if (encId) this.router.navigate(['/clinic/encounters', encId]);
+  }
+
+  copyLink() {
+    const url = this.joinUrl();
+    if (!url) return;
+    navigator.clipboard.writeText(url).then(() => {
+      this.snack.open('Link copiado!', '', { duration: 2000 });
+    }).catch(() => {
+      this.snack.open('Não foi possível copiar automaticamente — selecione e copie manualmente.', 'Fechar', { duration: 5000 });
+    });
   }
 
   openExam(examId: string) {
