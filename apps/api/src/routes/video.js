@@ -114,7 +114,7 @@ module.exports = async function (fastify) {
     // Valida appointment e obtém dados
     const { rows: apts } = await fastify.pg.query(
       `SELECT a.id, a.subject_id, a.start_at, a.duration_minutes, a.appointment_type,
-              u.display_name AS doctor_name, t.name AS clinic_name
+              u.email AS doctor_name, t.name AS clinic_name
        FROM appointments a
        JOIN users u ON u.id = $3
        JOIN tenants t ON t.id = $2
@@ -363,7 +363,7 @@ module.exports = async function (fastify) {
       `SELECT vc.id, vc.meeting_id, vc.patient_attendee_id, vc.modality, vc.status,
               vc.started_at, vc.tenant_id,
               t.name AS clinic_name,
-              u.display_name AS doctor_name,
+              u.email AS doctor_name,
               a.start_at, a.duration_minutes, a.subject_id
        FROM video_consultations vc
        JOIN appointments a ON a.id = vc.appointment_id
