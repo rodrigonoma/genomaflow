@@ -111,11 +111,19 @@ module.exports = async function (fastify) {
 
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { tenant_id } = request.user;
+    const { subject_id, limit } = request.query || {};
+    const maxRows = Math.min(parseInt(limit) || 50, 100);
 
     const exams = await withTenant(fastify.pg, tenant_id, async (client) => {
+      const params = [tenant_id];
+      let subjectFilter = '';
+      if (subject_id) {
+        params.push(subject_id);
+        subjectFilter = `AND e.subject_id = $${params.length}`;
+      }
       const { rows } = await client.query(
-        `SELECT e.id, e.subject_id, e.status, e.source, e.file_path, e.error_message,
-                e.created_at, e.updated_at,
+        `SELECT e.id, e.subject_id, e.status, e.source, e.file_path, e.file_type,
+                e.error_message, e.created_at, e.updated_at,
                 json_agg(
                   json_build_object(
                     'agent_type', cr.agent_type,
@@ -126,12 +134,13 @@ module.exports = async function (fastify) {
                   )
                 ) FILTER (WHERE cr.id IS NOT NULL) AS results
          FROM exams e
-         LEFT JOIN clinical_results cr ON cr.exam_id = e.id
-         WHERE e.tenant_id = $1
-         GROUP BY e.id, e.subject_id, e.status, e.source, e.file_path, e.error_message,
-                  e.created_at, e.updated_at
-         ORDER BY e.created_at DESC`,
-        [tenant_id]
+         LEFT JOIN clinical_results cr ON cr.exam_id = e.id AND cr.tenant_id = $1
+         WHERE e.tenant_id = $1 ${subjectFilter}
+         GROUP BY e.id, e.subject_id, e.status, e.source, e.file_path, e.file_type,
+                  e.error_message, e.created_at, e.updated_at
+         ORDER BY e.created_at DESC
+         LIMIT ${maxRows}`,
+        params
       );
       return rows;
     });

@@ -168,22 +168,78 @@ import { switchMap, takeWhile } from 'rxjs/operators';
           <mat-tab label="📋 Perfil">
             <div class="panel-content">
               @if (subject()) {
-                <div style="font-size:.8rem;line-height:1.6;">
-                  <div style="font-weight:700;color:#c0c1ff;margin-bottom:.5rem;">{{ subject()!.name }}</div>
-                  @if (subject()!.birth_date) {
-                    <div class="exam-label">Nascimento: {{ subject()!.birth_date | date:'dd/MM/yyyy' }}</div>
+                <div style="font-size:.8rem;line-height:1.7;">
+                  <div style="font-weight:700;color:#c0c1ff;font-size:.9rem;margin-bottom:.625rem;">{{ subject()!.name }}</div>
+
+                  @if (subject()!.birth_date || subject()!.sex || subject()!.blood_type) {
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem;">
+                      @if (subject()!.birth_date) {
+                        <span style="background:#171f33;border:1px solid rgba(70,69,84,.3);border-radius:4px;padding:2px 7px;font-size:.7rem;color:#a09fb2;">
+                          {{ subject()!.birth_date | date:'dd/MM/yyyy' }}
+                        </span>
+                      }
+                      @if (subject()!.sex) {
+                        <span style="background:#171f33;border:1px solid rgba(70,69,84,.3);border-radius:4px;padding:2px 7px;font-size:.7rem;color:#a09fb2;">
+                          {{ subject()!.sex === 'M' ? 'Masc.' : subject()!.sex === 'F' ? 'Fem.' : 'Outro' }}
+                        </span>
+                      }
+                      @if (subject()!.blood_type) {
+                        <span style="background:#171f33;border:1px solid rgba(70,69,84,.3);border-radius:4px;padding:2px 7px;font-size:.7rem;color:#c0c1ff;">
+                          {{ subject()!.blood_type }}
+                        </span>
+                      }
+                    </div>
                   }
+
+                  @if (subject()!.phone) {
+                    <div class="exam-label">Telefone: <span style="color:#dae2fd;">{{ subject()!.phone }}</span></div>
+                  }
+
+                  @if (subject()!.subject_type === 'animal') {
+                    @if (subject()!.species) {
+                      <div class="exam-label" style="margin-top:.375rem;">Espécie: <span style="color:#dae2fd;">{{ subject()!.species }}</span>
+                        @if (subject()!.breed) { &nbsp;·&nbsp; {{ subject()!.breed }} }
+                      </div>
+                    }
+                    @if (subject()!.weight) {
+                      <div class="exam-label">Peso: <span style="color:#dae2fd;">{{ subject()!.weight }} kg</span></div>
+                    }
+                    @if (subject()!.owner_name) {
+                      <div class="exam-label" style="margin-top:.375rem;">Tutor: <span style="color:#dae2fd;">{{ subject()!.owner_name }}</span></div>
+                      @if (subject()!.owner_phone) {
+                        <div class="exam-label">Tel. tutor: <span style="color:#dae2fd;">{{ subject()!.owner_phone }}</span></div>
+                      }
+                    }
+                  }
+
                   @if (subject()!.comorbidities) {
                     <div style="margin-top:.5rem;">
                       <div class="exam-label">Comorbidades</div>
                       <div style="font-size:.75rem;color:#dae2fd;">{{ subject()!.comorbidities }}</div>
                     </div>
                   }
-                  @if (subject()!.allergies) {
+                  @if (subject()!.allergies || subject()!.allergies_text) {
                     <div style="margin-top:.5rem;">
                       <div class="exam-label">Alergias</div>
-                      <div style="font-size:.75rem;color:#fca5a5;">{{ subject()!.allergies }}</div>
+                      <div style="font-size:.75rem;color:#fca5a5;">{{ subject()!.allergies_text || subject()!.allergies }}</div>
                     </div>
+                  }
+                  @if (subject()!.notes) {
+                    <div style="margin-top:.5rem;">
+                      <div class="exam-label">Observações</div>
+                      <div style="font-size:.75rem;color:#a09fb2;">{{ subject()!.notes }}</div>
+                    </div>
+                  }
+                  @if (subject()!.emergency_contact_name) {
+                    <div style="margin-top:.5rem;">
+                      <div class="exam-label">Contato emergência</div>
+                      <div style="font-size:.75rem;color:#dae2fd;">{{ subject()!.emergency_contact_name }}
+                        @if (subject()!.emergency_contact_phone) { · {{ subject()!.emergency_contact_phone }} }
+                      </div>
+                    </div>
+                  }
+                  @if (subject()!.insurance_name) {
+                    <div class="exam-label" style="margin-top:.375rem;">Plano: <span style="color:#dae2fd;">{{ subject()!.insurance_name }}</span></div>
                   }
                 </div>
               } @else {
@@ -197,13 +253,15 @@ import { switchMap, takeWhile } from 'rxjs/operators';
               @for (exam of exams(); track exam.id) {
                 <div class="exam-card" (click)="openExam(exam.id)">
                   <div class="exam-label">
-                    {{ exam.file_type || 'Exame' }}
-                    @if (exam.alert_level === 'critical' || exam.alert_level === 'high') {
-                      <span class="alert-badge">{{ exam.alert_level }}</span>
+                    {{ exam.file_type || exam.source || 'Exame' }}
+                    @if (examMaxSeverity(exam) === 'critical') {
+                      <span class="alert-badge">crítico</span>
+                    } @else if (examMaxSeverity(exam) === 'high') {
+                      <span class="alert-badge" style="background:#78350f;color:#fde68a;">alto</span>
                     }
                   </div>
-                  <div class="exam-name">{{ exam.description || 'Sem descrição' }}</div>
-                  <div class="exam-date">{{ exam.exam_date | date:'dd/MM/yy' }}</div>
+                  <div class="exam-name">{{ examName(exam) }}</div>
+                  <div class="exam-date">{{ exam.created_at | date:'dd/MM/yy' }} · {{ exam.status === 'done' ? 'Analisado' : exam.status }}</div>
                 </div>
               }
               @if (exams().length === 0) {
@@ -358,9 +416,12 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
       // Grava áudio mixed para transcrição
       this.startRecording(stream);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('[DoctorRoom] Chime join error:', err);
-      this.snack.open('Erro ao acessar câmera/microfone', 'Fechar', { duration: 5000 });
+      const msg = (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError')
+        ? 'Permissão de câmera/microfone negada. Habilite nas configurações do navegador e recarregue.'
+        : `Erro ao conectar à sala: ${err?.message || err?.name || 'verifique o console'}. Se a consulta expirou, crie uma nova.`;
+      this.snack.open(msg, 'Fechar', { duration: 10000 });
     }
   }
 
@@ -480,7 +541,25 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   openExam(examId: string) {
-    this.router.navigate(['/results', examId]);
+    window.open(`/results/${examId}`, '_blank');
+  }
+
+  examName(exam: any): string {
+    if (!exam.file_path) return 'Exame';
+    const filename = exam.file_path.split('/').pop() || '';
+    // remove timestamp prefix (ex: 1715123456789-nome.pdf → nome.pdf)
+    return filename.replace(/^\d{10,}-/, '') || 'Exame';
+  }
+
+  examMaxSeverity(exam: any): string | null {
+    if (!exam.results?.length) return null;
+    const order = ['critical', 'high', 'medium', 'low'];
+    for (const level of order) {
+      for (const r of exam.results) {
+        if (r.alerts?.some((a: any) => a.severity === level)) return level;
+      }
+    }
+    return null;
   }
 
   async uploadFile(event: Event) {
