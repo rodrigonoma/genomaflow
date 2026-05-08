@@ -26,6 +26,7 @@ export interface Appointment {
   created_at: string;
   updated_at: string;
   cancelled_at: string | null;
+  appointment_type?: string;
   // Enriched client-side ao listar (lookup de subjects):
   subject_name?: string;
 }
