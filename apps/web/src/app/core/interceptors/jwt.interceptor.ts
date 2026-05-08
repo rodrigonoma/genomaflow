@@ -23,7 +23,7 @@ export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
             { duration: 8000, panelClass: ['snack-warn'] }
           );
         }
-        auth.logout();
+        auth.forceLogout();
       }
       return throwError(() => error);
     })

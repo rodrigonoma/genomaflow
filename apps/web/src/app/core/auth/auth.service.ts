@@ -68,8 +68,33 @@ export class AuthService {
       );
   }
 
+  /**
+   * Logout iniciado pelo usuário (botão "Sair").
+   * Encerra a sessão Angular (limpa localStorage) mas preserva o token seguro
+   * em Preferences (Keychain/EncryptedSharedPreferences) para recuperação
+   * biométrica no próximo acesso.
+   */
   async logout(): Promise<void> {
-    await this.resetSession();
+    localStorage.removeItem('token');
+    localStorage.removeItem('profile');
+    try { this.ws.disconnect(); } catch {}
+    this.currentUserSubject.next(null);
+    this.currentProfileSubject.next(null);
+    this.router.navigate(['/login']);
+  }
+
+  /**
+   * Logout forçado por segurança (token inválido/substituído — chamado pelo
+   * jwtInterceptor em respostas 401). Limpa TODO o armazenamento, incluindo
+   * Preferences e biometric_enabled, forçando re-autenticação completa.
+   */
+  async forceLogout(): Promise<void> {
+    await this.clearToken();
+    localStorage.removeItem('profile');
+    localStorage.removeItem('biometric_enabled');
+    try { this.ws.disconnect(); } catch {}
+    this.currentUserSubject.next(null);
+    this.currentProfileSubject.next(null);
     this.router.navigate(['/login']);
   }
 

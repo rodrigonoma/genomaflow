@@ -189,7 +189,8 @@ export class LoginComponent implements OnInit {
       await this.zone.run(async () => {
         const token = await this.auth.loadToken();
         if (!token) {
-          localStorage.removeItem('biometric_enabled');
+          // Preferences vazio: token expirou ou foi revogado (forceLogout já limpou tudo).
+          // Não limpar biometric_enabled aqui — o próximo login vai re-oferecer biometria.
           this.snack.open('Sessão expirada. Faça login com suas credenciais.', 'Ok', { duration: 4000 });
           return;
         }
