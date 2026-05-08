@@ -200,7 +200,7 @@ export class LoginComponent implements OnInit {
         }
         await this.auth.setSession(token);
         const dest = this.auth.currentUser?.role === 'master' ? '/master' : '/clinic/dashboard';
-        this.router.navigateByUrl(dest);
+        await this.router.navigateByUrl(dest);
       });
     } catch { /* biometria falhou ou cancelada — exibe login normal */ } finally {
       biometricActive = false;
