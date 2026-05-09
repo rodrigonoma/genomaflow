@@ -414,13 +414,22 @@ module.exports = async function (fastify) {
 
     const sql = `
       WITH events AS (
+        -- Cadastro do paciente (evento único)
+        SELECT 'registered'::text AS event_type, s.id AS event_id, s.created_at AS event_at,
+               jsonb_build_object('id', s.id, 'name', s.name, 'subject_type', s.subject_type, 'module', s.module) AS payload
+        FROM subjects s
+        WHERE s.tenant_id = $1 AND s.id = $2
+
+        UNION ALL
+
         SELECT 'encounter'::text AS event_type, e.id AS event_id, e.created_at AS event_at,
                jsonb_build_object(
                  'id', e.id,
                  'encounter_type', e.encounter_type,
                  'chief_complaint', e.chief_complaint,
                  'professional_user_id', e.professional_user_id,
-                 'signed_at', e.signed_at
+                 'signed_at', e.signed_at,
+                 'source', e.source
                ) AS payload
         FROM clinical_encounters e
         WHERE e.tenant_id = $1 AND e.subject_id = $2
@@ -462,6 +471,48 @@ module.exports = async function (fastify) {
         FROM clinical_results cr
         JOIN exams ex_cr ON ex_cr.id = cr.exam_id
         WHERE cr.tenant_id = $1 AND ex_cr.subject_id = $2
+
+        UNION ALL
+
+        -- Agendamentos
+        SELECT 'appointment'::text, a.id, a.start_at,
+               jsonb_build_object(
+                 'id', a.id,
+                 'appointment_type', a.appointment_type,
+                 'status', a.status,
+                 'duration_minutes', a.duration_minutes,
+                 'notes', a.notes
+               )
+        FROM appointments a
+        WHERE a.tenant_id = $1 AND a.subject_id = $2
+
+        UNION ALL
+
+        -- Teleconsultas (via appointments.subject_id)
+        SELECT 'video_consultation'::text, vc.id, COALESCE(vc.started_at, vc.created_at),
+               jsonb_build_object(
+                 'id', vc.id,
+                 'modality', vc.modality,
+                 'status', vc.status,
+                 'duration_seconds', vc.duration_seconds,
+                 'credits_debited', vc.credits_debited,
+                 'encounter_id', vc.encounter_id
+               )
+        FROM video_consultations vc
+        JOIN appointments a_vc ON a_vc.id = vc.appointment_id
+        WHERE vc.tenant_id = $1 AND a_vc.subject_id = $2
+
+        UNION ALL
+
+        -- Follow-ups enviados
+        SELECT 'followup'::text, sn.id, sn.sent_at,
+               jsonb_build_object(
+                 'id', sn.id,
+                 'notification_type', sn.notification_type,
+                 'channel', sn.channel
+               )
+        FROM scheduled_notifications sn
+        WHERE sn.tenant_id = $1 AND sn.subject_id = $2 AND sn.sent_at IS NOT NULL
       )
       SELECT * FROM events
       WHERE 1=1 ${cursorClause}
