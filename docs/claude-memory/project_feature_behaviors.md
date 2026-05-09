@@ -137,6 +137,35 @@ Spec: `docs/superpowers/specs/2026-05-08-video-consultation-design.md`.
 
 ---
 
+## Tutor (módulo veterinary) — visualizar/editar dados completos (2026-05-09)
+
+Antes só dava pra cadastrar tutor novo (em `patient-list`) ou ver `owner_name + owner_phone` read-only no `patient-detail`. Agora há UI completa de visualizar e editar.
+
+**Backend:**
+- `GET /patients/owners/:id` (novo) — retorna dados completos do tutor: name, cpf_last4 (cpf_hash não exposto), phone, email, notes, observations, endereço estruturado (cep, street, number, complement, neighborhood, city, state), created_at, updated_at
+- `GET /patients/owners` (existente) — lista todos do tenant
+- `POST /patients/owners` (existente) — criar
+- `PUT /patients/owners/:id` (existente) — atualizar (CPF NÃO é editável; usa COALESCE pra updates parciais)
+
+**Frontend (`apps/web/src/app/features/owners/`):**
+- `owners.service.ts` — list/get/update tipados. Interface `Owner` com todos os campos.
+- `owner-detail-dialog.component.ts` — dialog standalone reutilizável.
+  - Modo view (default): dados pessoais (nome, CPF mascarado `••••••••XX`, phone formatado, email), endereço formatado em uma linha, observações em grid read-only.
+  - Modo edit: form com validação de telefone (DDD obrigatório), máscaras de CEP/phone, seções (Dados pessoais, Endereço estruturado, Observações).
+  - CPF/CNPJ é read-only no edit (campo desabilitado com hint "CPF não pode ser alterado") — backend não atualiza cpf_hash/cpf_last4 no PUT.
+  - `afterClosed` retorna `boolean` (true se salvou).
+
+**Onde usar:**
+- `patient-detail` (módulo veterinary): botão "Ver/editar dados do tutor" abaixo de "Link portal do tutor". Só aparece quando `subject_type === 'animal' && owner_id`. `afterClosed` → `loadSubject(patientId)` pra refletir mudanças nos campos JOINados (`owner_name`, `owner_phone`).
+- Pode ser reutilizado em outras telas que precisarem mostrar dados do tutor.
+
+**Por que essa estrutura:**
+- Dialog reutilizável > página dedicada — médico já está no contexto do paciente, não precisa navegar
+- Toggle view/edit > sempre editável — reduz atrito em consultas rápidas e protege contra alterações acidentais
+- CPF read-only > erro de digitação — CPF é identidade, não muda; backend já garante isso
+
+---
+
 ## Aba Prontuário (patient-detail) — refatorada 2026-05-09
 
 A aba **Prontuário** do `patient-detail.component.ts` mostra **somente lista de evoluções clínicas (clinical_encounters)** — encounters do paciente em ordem cronológica, com cards expandíveis.
