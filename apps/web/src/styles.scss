@@ -188,6 +188,11 @@ html, body {
 /* Give floating labels room at the top of tab content */
 .mat-mdc-tab-body-content { padding-top: 1rem !important; overflow: visible !important; }
 .mat-mdc-tab-body-active { overflow: visible !important; }
+/* Tab navigation arrows (pagination) — make visible on dark bg */
+.mat-mdc-tab-header-pagination { color: #6e6d80 !important; min-width: 32px !important; }
+.mat-mdc-tab-header-pagination--enabled { color: #c0c1ff !important; }
+.mat-mdc-tab-header-pagination--enabled:hover { color: #dae2fd !important; background: rgba(192,193,255,.08) !important; border-radius: 4px; }
+.mat-mdc-tab-header-pagination-chevron { border-color: currentColor !important; opacity: 1 !important; }
 
 /* Input */
 .mat-mdc-input-element {

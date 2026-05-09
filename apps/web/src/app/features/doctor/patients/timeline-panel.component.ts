@@ -1,6 +1,10 @@
-import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges, inject, signal } from '@angular/core';
+import {
+  Component, Input, Output, EventEmitter, OnChanges, OnDestroy,
+  SimpleChanges, inject, signal
+} from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -15,6 +19,7 @@ interface ExamResult {
   alerts: Array<{ marker: string; value: string; severity: string }>;
   recommendations: any[];
   disclaimer: string;
+  metadata?: any;
 }
 
 interface ExamDetail {
@@ -44,7 +49,7 @@ const AGENT_LABELS: Record<string, string> = {
   imaging_rx:           'Radiografia',
   imaging_ecg:          'ECG',
   imaging_ultrasound:   'Ultrassom',
-  imaging_mri:          'Ressonância',
+  imaging_mri:          'Ressonância Magnética',
 };
 
 @Component({
@@ -106,6 +111,7 @@ const AGENT_LABELS: Record<string, string> = {
       display:flex; align-items:center; justify-content:center; gap:.5rem;
     }
     .action-btn:hover { background:#202e4a; }
+    .action-btn:disabled { opacity:.5; cursor:default; }
 
     .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.7rem;
              font-family:'JetBrains Mono',monospace; }
@@ -116,6 +122,11 @@ const AGENT_LABELS: Record<string, string> = {
 
     /* Exam inline results */
     .spinner-wrap { display:flex; justify-content:center; padding:2rem 0; }
+
+    .exam-image {
+      width:100%; border-radius:8px; border:1px solid rgba(70,69,84,.2);
+      margin-bottom:.875rem; display:block;
+    }
 
     .agent-block {
       background:#0d1525; border:1px solid rgba(70,69,84,.2);
@@ -158,8 +169,36 @@ const AGENT_LABELS: Record<string, string> = {
     }
 
     .no-results { text-align:center; color:#6e6d80; font-size:.8rem; padding:1.5rem 0; }
+
+    /* PDF full-screen overlay */
+    .pdf-overlay {
+      position:fixed; inset:0; z-index:300;
+      background:#0b1326; display:flex; flex-direction:column;
+    }
+    .pdf-overlay-bar {
+      display:flex; align-items:center; gap:.75rem;
+      padding:.625rem 1rem; border-bottom:1px solid rgba(70,69,84,.25);
+      flex-shrink:0;
+    }
+    .pdf-overlay-bar span { flex:1; font-size:.85rem; color:#dae2fd; font-weight:600; }
+    .pdf-overlay-bar button {
+      background:none; border:none; color:#6e6d80; cursor:pointer; padding:0; line-height:1;
+    }
+    .pdf-overlay-bar button:hover { color:#dae2fd; }
+    .pdf-frame { flex:1; width:100%; border:none; }
   `],
   template: `
+    <!-- PDF full-screen overlay -->
+    @if (showPdfOverlay()) {
+      <div class="pdf-overlay">
+        <div class="pdf-overlay-bar">
+          <span>Laudo PDF</span>
+          <button (click)="closePdfOverlay()"><mat-icon>close</mat-icon></button>
+        </div>
+        <iframe class="pdf-frame" [src]="safePdfUrl()" title="PDF do exame"></iframe>
+      </div>
+    }
+
     <div class="backdrop" [class.open]="visible" (click)="close.emit()"></div>
 
     <div class="panel" [class.open]="visible" (keydown.escape)="close.emit()" tabindex="-1">
@@ -198,45 +237,63 @@ const AGENT_LABELS: Record<string, string> = {
 
               @if (examLoading()) {
                 <div class="spinner-wrap"><mat-spinner diameter="28"></mat-spinner></div>
-              } @else if (examDetail()?.results?.length) {
-                @for (r of examDetail()!.results!; track r.agent_type) {
-                  <div class="agent-block">
-                    <div class="agent-label">{{ agentLabel(r.agent_type) }}</div>
+              } @else {
+                <!-- Imagem anotada para exames de imagem -->
+                @if (examImageUrl()) {
+                  <img class="exam-image" [src]="examImageUrl()!" alt="Imagem do exame" />
+                }
 
-                    @if (r.alerts?.length) {
-                      <div class="alerts-row">
-                        @for (a of r.alerts; track a.marker) {
-                          <span class="alert-pill" [class]="severityCls(a.severity)">
-                            ⚠ {{ a.marker }}: {{ a.value }}
-                          </span>
-                        }
-                      </div>
-                    }
+                <!-- Botão PDF -->
+                @if (event.payload['file_type'] === 'pdf') {
+                  <button class="action-btn" [disabled]="loadingPdf()" (click)="openPdf(event.payload['id'])">
+                    <mat-icon style="font-size:16px;width:16px;height:16px;">picture_as_pdf</mat-icon>
+                    {{ loadingPdf() ? 'Carregando PDF...' : 'Ver laudo original (PDF)' }}
+                  </button>
+                }
 
-                    @if (r.risk_scores && objectKeys(r.risk_scores).length) {
-                      <div class="risk-grid">
-                        @for (k of objectKeys(r.risk_scores); track k) {
-                          <span class="risk-name">{{ k }}</span>
-                          <span class="risk-value" [class]="riskCls(r.risk_scores[k])">
-                            {{ (+r.risk_scores[k] * 100 | number:'1.0-0') }}%
-                          </span>
-                        }
-                      </div>
-                    }
+                <!-- Resultados IA -->
+                @if (examDetail()?.results?.length) {
+                  @for (r of examDetail()!.results!; track r.agent_type) {
+                    <div class="agent-block">
+                      <div class="agent-label">{{ agentLabel(r.agent_type) }}</div>
 
-                    @if (r.interpretation) {
-                      <div class="interpretation">{{ r.interpretation | slice:0:400 }}{{ r.interpretation.length > 400 ? '…' : '' }}</div>
+                      @if (r.alerts?.length) {
+                        <div class="alerts-row">
+                          @for (a of r.alerts; track a.marker) {
+                            <span class="alert-pill" [class]="severityCls(a.severity)">
+                              ⚠ {{ a.marker }}: {{ a.value }}
+                            </span>
+                          }
+                        </div>
+                      }
+
+                      @if (r.risk_scores && objectKeys(r.risk_scores).length) {
+                        <div class="risk-grid">
+                          @for (k of objectKeys(r.risk_scores); track k) {
+                            <span class="risk-name">{{ k }}</span>
+                            <span class="risk-value" [class]="riskCls(r.risk_scores[k])">
+                              {{ (+r.risk_scores[k] * 100 | number:'1.0-0') }}%
+                            </span>
+                          }
+                        </div>
+                      }
+
+                      @if (r.interpretation) {
+                        <div class="interpretation">
+                          {{ r.interpretation | slice:0:400 }}{{ r.interpretation.length > 400 ? '…' : '' }}
+                        </div>
+                      }
+                    </div>
+                  }
+                } @else {
+                  <div class="no-results">
+                    @if (event.payload['status'] === 'done') {
+                      Sem análise IA disponível para este exame.
+                    } @else {
+                      Análise ainda em processamento.
                     }
                   </div>
                 }
-              } @else if (!examLoading()) {
-                <div class="no-results">
-                  @if (event.payload['status'] === 'done') {
-                    Sem análise IA disponível para este exame.
-                  } @else {
-                    Análise ainda em processamento.
-                  }
-                </div>
               }
             }
 
@@ -270,7 +327,9 @@ const AGENT_LABELS: Record<string, string> = {
                     </div>
                   }
                   @if (aiResult()!.interpretation) {
-                    <div class="interpretation">{{ aiResult()!.interpretation | slice:0:400 }}{{ aiResult()!.interpretation.length > 400 ? '…' : '' }}</div>
+                    <div class="interpretation">
+                      {{ aiResult()!.interpretation | slice:0:400 }}{{ aiResult()!.interpretation.length > 400 ? '…' : '' }}
+                    </div>
                   }
                 </div>
               }
@@ -381,23 +440,35 @@ const AGENT_LABELS: Record<string, string> = {
     </div>
   `
 })
-export class TimelinePanelComponent implements OnChanges {
+export class TimelinePanelComponent implements OnChanges, OnDestroy {
   @Input() event: TimelineEvent | null = null;
   @Input() visible = false;
   @Output() close = new EventEmitter<void>();
 
-  private router = inject(Router);
-  private http = inject(HttpClient);
+  private router    = inject(Router);
+  private http      = inject(HttpClient);
+  private sanitizer = inject(DomSanitizer);
 
-  examLoading = signal(false);
-  examDetail = signal<ExamDetail | null>(null);
-  aiResult = signal<ExamResult | null>(null);
+  examLoading   = signal(false);
+  examDetail    = signal<ExamDetail | null>(null);
+  aiResult      = signal<ExamResult | null>(null);
+  examImageUrl  = signal<string | null>(null);
+  loadingPdf    = signal(false);
+  showPdfOverlay = signal(false);
+  private _pdfBlobUrl: string | null = null;
+  private _safePdfUrl: SafeResourceUrl | null = null;
+
+  safePdfUrl() { return this._safePdfUrl; }
 
   ngOnChanges(changes: SimpleChanges) {
     if (!changes['event']) return;
-    const ev = this.event;
+    this._revokeBlobUrls();
     this.examDetail.set(null);
     this.aiResult.set(null);
+    this.examImageUrl.set(null);
+    this.showPdfOverlay.set(false);
+
+    const ev = this.event;
     if (!ev) return;
 
     if (ev.event_type === 'exam' && ev.payload['id']) {
@@ -407,10 +478,21 @@ export class TimelinePanelComponent implements OnChanges {
     }
   }
 
+  ngOnDestroy() { this._revokeBlobUrls(); }
+
+  private _revokeBlobUrls() {
+    if (this._pdfBlobUrl) { URL.revokeObjectURL(this._pdfBlobUrl); this._pdfBlobUrl = null; }
+  }
+
   private fetchExam(examId: string) {
     this.examLoading.set(true);
     this.http.get<ExamDetail>(`${environment.apiUrl}/exams/${examId}`).subscribe({
-      next: (d) => { this.examDetail.set(d); this.examLoading.set(false); },
+      next: (d) => {
+        this.examDetail.set(d);
+        this.examLoading.set(false);
+        const hasImaging = (d.results ?? []).some(r => r.agent_type.startsWith('imaging_'));
+        if (hasImaging) this.fetchExamImage(examId);
+      },
       error: () => this.examLoading.set(false),
     });
   }
@@ -425,6 +507,32 @@ export class TimelinePanelComponent implements OnChanges {
       },
       error: () => this.examLoading.set(false),
     });
+  }
+
+  private fetchExamImage(examId: string) {
+    this.http.get(`${environment.apiUrl}/exams/${examId}/image`, { responseType: 'blob' }).subscribe({
+      next: (blob) => this.examImageUrl.set(URL.createObjectURL(blob)),
+      error: () => {},
+    });
+  }
+
+  openPdf(examId: string) {
+    this.loadingPdf.set(true);
+    this.http.get(`${environment.apiUrl}/exams/${examId}/file`, { responseType: 'blob' }).subscribe({
+      next: (blob) => {
+        this._revokeBlobUrls();
+        this._pdfBlobUrl = URL.createObjectURL(blob);
+        this._safePdfUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this._pdfBlobUrl);
+        this.showPdfOverlay.set(true);
+        this.loadingPdf.set(false);
+      },
+      error: () => this.loadingPdf.set(false),
+    });
+  }
+
+  closePdfOverlay() {
+    this.showPdfOverlay.set(false);
+    // Keep blob URL alive in case user reopens — revoked on next event change or destroy
   }
 
   panelTitle(): string {
@@ -442,8 +550,8 @@ export class TimelinePanelComponent implements OnChanges {
     this.router.navigate([path]);
   }
 
-  agentLabel(type: string) { return AGENT_LABELS[type] ?? type; }
-  severityCls(s: string)   { return SEVERITY_CLS[s] ?? 'alert-low'; }
+  agentLabel(type: string)  { return AGENT_LABELS[type] ?? type; }
+  severityCls(s: string)    { return SEVERITY_CLS[s] ?? 'alert-low'; }
   objectKeys(o: Record<string, string>) { return Object.keys(o ?? {}); }
 
   riskCls(val: string): string {

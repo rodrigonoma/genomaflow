@@ -385,6 +385,41 @@ module.exports = async function (fastify) {
     return reply.send(buffer);
   });
 
+  fastify.get('/:id/file', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { tenant_id } = request.user;
+    const { id } = request.params;
+
+    const exam = await withTenant(fastify.pg, tenant_id, async (client) => {
+      const { rows } = await client.query(
+        `SELECT id, file_path, file_type FROM exams WHERE id = $1 AND tenant_id = $2`,
+        [id, tenant_id]
+      );
+      return rows[0] ?? null;
+    });
+
+    if (!exam) return reply.status(404).send({ error: 'Exam not found' });
+    if (!exam.file_path) return reply.status(404).send({ error: 'Exam has no file' });
+
+    const { downloadFile, keyFromPath } = require('../storage/s3');
+    let buffer;
+    try {
+      buffer = await downloadFile(keyFromPath(exam.file_path));
+    } catch (err) {
+      if (err && (err.name === 'NoSuchKey' || err.Code === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404)) {
+        return reply.status(404).send({ error: 'Arquivo não disponível' });
+      }
+      throw err;
+    }
+
+    const contentType = exam.file_type === 'pdf' ? 'application/pdf'
+      : exam.file_type === 'image' ? 'image/jpeg'
+      : 'application/octet-stream';
+
+    reply.header('Content-Type', contentType);
+    reply.header('Cache-Control', 'private, max-age=300');
+    return reply.send(buffer);
+  });
+
   fastify.post('/:id/reprocess', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { id } = request.params;
     const { tenant_id } = request.user;
