@@ -1356,8 +1356,8 @@ interface ComparisonBlock {
           />
         </mat-tab>
 
-        <!-- ── EVOLUÇÃO ── -->
-        <mat-tab label="Evolução">
+        <!-- ── TENDÊNCIAS (gráficos de marcadores ao longo do tempo) ── -->
+        <mat-tab label="Tendências">
           <div class="evolution-mode-toggle">
             <button class="mode-btn" [class.active]="evolutionMode() === 'compare'"
                     (click)="evolutionMode.set('compare')">

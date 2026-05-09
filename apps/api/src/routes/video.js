@@ -474,17 +474,21 @@ module.exports = async function (fastify) {
   });
 
   // ── GET /video/consultations/:id/files ────────────────────────────────
+  // Médico autenticado via Bearer JWT OU paciente via join_token query param.
+  // Lista todos os arquivos da sala (do médico e do paciente).
   fastify.get('/consultations/:id/files', {
-    preHandler: [fastify.authenticate],
+    config: { rateLimit: { max: 120, timeWindow: '1 hour' } },
   }, async (request, reply) => {
-    const { tenant_id } = request.user;
+    const consultationId = request.params.id;
+    const uploadedBy = await resolveFileUploader(request, fastify.pg, consultationId);
+    if (!uploadedBy) return reply.status(401).send({ error: 'Não autorizado' });
+
     const { rows } = await fastify.pg.query(
       `SELECT f.id, f.uploaded_by, f.filename, f.mime_type, f.size_bytes, f.created_at
        FROM video_consultation_files f
-       JOIN video_consultations vc ON vc.id = f.consultation_id
-       WHERE f.consultation_id = $1 AND vc.tenant_id = $2
+       WHERE f.consultation_id = $1
        ORDER BY f.created_at ASC`,
-      [request.params.id, tenant_id]
+      [consultationId]
     );
     return rows;
   });

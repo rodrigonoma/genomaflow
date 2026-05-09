@@ -27,8 +27,11 @@ import { EncountersService, ClinicalEncounter } from './encounters.service';
     } @else if (items().length === 0) {
       <div class="empty">
         <mat-icon>description</mat-icon>
-        <div class="empty-title">Nenhuma evolução registrada</div>
-        <div class="empty-sub">As evoluções clínicas registradas aparecerão aqui em ordem cronológica.</div>
+        <div class="empty-title">Sem registros clínicos ainda</div>
+        <div class="empty-sub">
+          Aqui ficam os registros do prontuário deste paciente: consultas, retornos, evoluções clínicas,
+          procedimentos e telemedicina. Para começar, clique em <strong>Nova evolução</strong> acima.
+        </div>
       </div>
     } @else {
       <!-- Toolbar: contador + filtros -->

@@ -387,7 +387,11 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
   ngOnDestroy() {
     this.timerSub?.unsubscribe();
     this.wsFileSub?.unsubscribe();
-    this.meetingSession?.audioVideo?.stop();
+    try {
+      this.meetingSession?.audioVideo?.stopAudioInput?.();
+      this.meetingSession?.audioVideo?.stopVideoInput?.();
+      this.meetingSession?.audioVideo?.stop?.();
+    } catch { /* ok */ }
     this.localStream?.getTracks().forEach(t => t.stop());
     this.recorder?.state !== 'inactive' && this.recorder?.stop();
   }
@@ -596,7 +600,14 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.ending()) return;
     this.ending.set(true);
     const s3Key = await this.uploadRecording();
-    this.meetingSession?.audioVideo?.stop();
+    // stopAudioInput/stopVideoInput liberam as devices (apaga bolinha vermelha do Chrome).
+    // stop() sozinho fecha a sessão de rede mas não libera mic/cam — eles ficam até o tab fechar.
+    try {
+      this.meetingSession?.audioVideo?.stopAudioInput?.();
+      this.meetingSession?.audioVideo?.stopVideoInput?.();
+      this.meetingSession?.audioVideo?.stopLocalVideoTile?.();
+      this.meetingSession?.audioVideo?.stop?.();
+    } catch { /* ok */ }
     this.localStream?.getTracks().forEach(t => t.stop());
     this.videoSvc.endConsultation(this.consultationId, s3Key).subscribe({
       next: (res) => {

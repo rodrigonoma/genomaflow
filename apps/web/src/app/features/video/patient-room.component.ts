@@ -1,16 +1,17 @@
 import {
-  Component, OnInit, OnDestroy, inject, signal, ElementRef, ViewChild
+  Component, OnInit, OnDestroy, inject, signal, computed, ElementRef, ViewChild
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { VideoService, PublicJoinInfo } from './video.service';
+import { VideoService, PublicJoinInfo, ConsultationFile } from './video.service';
 import {
   ConsoleLogger, DefaultDeviceController, DefaultMeetingSession,
   LogLevel, MeetingSessionConfiguration,
 } from 'amazon-chime-sdk-js';
+import { interval, Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-patient-room',
@@ -79,6 +80,36 @@ import {
     }
     .upload-btn:hover { background:#202e4a; }
 
+    /* Barra de arquivos enviados pelo médico — overlay no topo da área de vídeo */
+    .files-bar {
+      position:absolute; top:12px; left:12px; right:12px; z-index:4;
+      max-height:38vh; overflow-y:auto;
+      background:rgba(11,19,38,0.92); backdrop-filter:blur(8px);
+      border:1px solid rgba(70,69,84,0.4); border-radius:8px;
+      padding:.625rem .75rem;
+    }
+    .files-bar-title {
+      font-family:'JetBrains Mono',monospace; font-size:.6rem;
+      text-transform:uppercase; letter-spacing:.12em; color:#7c7b8f;
+      margin-bottom:.5rem;
+    }
+    .file-card {
+      display:flex; align-items:center; gap:.5rem; padding:.5rem .625rem;
+      background:#171f33; border:1px solid rgba(70,69,84,0.25);
+      border-radius:6px; margin-bottom:.375rem; cursor:pointer;
+      transition:border-color 120ms, background 120ms;
+    }
+    .file-card:hover { border-color:rgba(192,193,255,0.5); background:#1c2645; }
+    .file-card.is-new { border-color:rgba(34,197,94,0.6); }
+    .file-name { font-size:.75rem; color:#dae2fd; flex:1;
+                 overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .file-new-badge {
+      font-size:.55rem; font-family:'JetBrains Mono',monospace;
+      background:rgba(34,197,94,0.18); color:#86efac;
+      border:1px solid rgba(34,197,94,0.4); border-radius:3px;
+      padding:1px 5px; text-transform:uppercase; letter-spacing:.08em;
+    }
+
     .loading-state {
       flex:1; display:flex; align-items:center; justify-content:center;
       flex-direction:column; gap:1rem; color:#6e6d80;
@@ -122,6 +153,19 @@ import {
         <video #remoteVideo class="remote-video" autoplay playsinline></video>
         <video #selfVideo class="self-video" autoplay playsinline muted></video>
 
+        @if (doctorFiles().length > 0) {
+          <div class="files-bar">
+            <div class="files-bar-title">Arquivos enviados pelo médico ({{ doctorFiles().length }})</div>
+            @for (f of doctorFiles(); track f.id) {
+              <div class="file-card" [class.is-new]="newFileIds().has(f.id)" (click)="openFile(f.id)">
+                <mat-icon style="font-size:16px;color:#c0c1ff;">attach_file</mat-icon>
+                <span class="file-name">{{ f.filename }}</span>
+                @if (newFileIds().has(f.id)) { <span class="file-new-badge">novo</span> }
+              </div>
+            }
+          </div>
+        }
+
         <div class="controls">
           <button class="ctrl-btn" [class.active]="!audioMuted()" (click)="toggleAudio()" title="Mute">
             <mat-icon>{{ audioMuted() ? 'mic_off' : 'mic' }}</mat-icon>
@@ -155,11 +199,16 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
   audioMuted = signal(false);
   videoOff = signal(false);
   hasLeft = signal(false);
+  files = signal<ConsultationFile[]>([]);
+  newFileIds = signal<Set<string>>(new Set());
+  // Apenas arquivos enviados pelo médico (paciente vê os próprios na lista da clínica)
+  doctorFiles = computed(() => this.files().filter(f => f.uploaded_by === 'doctor'));
 
   private joinToken = '';
   private consultationId = '';
   private meetingSession: any = null;
   private localStream: MediaStream | null = null;
+  private filesPollSub?: Subscription;
 
   ngOnInit() {
     this.joinToken = this.route.snapshot.paramMap.get('token') || '';
@@ -168,6 +217,7 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
         this.info.set(info);
         this.consultationId = info.consultation_id;
         await this.joinMeeting(info.meeting, info.patient_attendee);
+        this.startFilesPolling();
       },
       error: (err) => {
         this.loadError.set(
@@ -180,8 +230,61 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.meetingSession?.audioVideo?.stop();
+    this.filesPollSub?.unsubscribe();
+    this.stopMediaSession();
+  }
+
+  /** Para Chime SDK + libera devices (mic/cam) — usado em leaveCall e ngOnDestroy. */
+  private stopMediaSession() {
+    try {
+      // stopAudioInput/stopVideoInput liberam as devices (apaga bolinha vermelha do Chrome)
+      this.meetingSession?.audioVideo?.stopAudioInput?.();
+      this.meetingSession?.audioVideo?.stopVideoInput?.();
+      this.meetingSession?.audioVideo?.stopLocalVideoTile?.();
+      this.meetingSession?.audioVideo?.stop?.();
+    } catch { /* ok */ }
     this.localStream?.getTracks().forEach(t => t.stop());
+    this.meetingSession = null;
+    this.localStream = null;
+  }
+
+  /**
+   * Polling a cada 5s do GET /files — paciente é público (sem WS), então não recebe
+   * o evento video:file_shared. Polling cobre o gap até finalizar a consulta.
+   * Para de pollar quando hasLeft() é true.
+   */
+  private startFilesPolling() {
+    const poll = () => {
+      if (this.hasLeft() || !this.consultationId) return;
+      this.videoSvc.getFiles(this.consultationId, this.joinToken).subscribe({
+        next: (newList) => {
+          const prev = this.files();
+          const prevIds = new Set(prev.map(f => f.id));
+          this.files.set(newList);
+
+          // Detecta arquivos novos do médico desde o último poll
+          for (const f of newList) {
+            if (f.uploaded_by !== 'doctor' || prevIds.has(f.id)) continue;
+            // Não sinaliza no primeiro carregamento (prev.length === 0 e o paciente acabou de entrar)
+            if (prev.length === 0) continue;
+            this.newFileIds.update(s => new Set([...s, f.id]));
+            this.snack.open(`📎 Médico enviou: ${f.filename}`, 'Abrir', { duration: 6000 })
+              .onAction().subscribe(() => this.openFile(f.id));
+          }
+        },
+        error: () => { /* silencioso — tenta de novo no próximo tick */ },
+      });
+    };
+    poll(); // primeiro tick imediato (popula a lista)
+    this.filesPollSub = interval(5000).subscribe(poll);
+  }
+
+  openFile(fileId: string) {
+    this.newFileIds.update(s => { const c = new Set(s); c.delete(fileId); return c; });
+    this.videoSvc.getFileDownloadUrl(this.consultationId, fileId, this.joinToken).subscribe({
+      next: (res) => window.open(res.download_url, '_blank'),
+      error: () => this.snack.open('Não foi possível abrir o arquivo', 'OK', { duration: 4000 }),
+    });
   }
 
   private async joinMeeting(
@@ -246,13 +349,8 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
   leaveCall() {
     // Paciente "sair" = encerra apenas o lado dele (médico continua na sala).
     // Não chama POST /end — esse endpoint exige auth e debita créditos; é o médico que encerra.
-    try {
-      this.meetingSession?.audioVideo?.stopLocalVideoTile();
-      this.meetingSession?.audioVideo?.stop();
-    } catch { /* ok */ }
-    this.localStream?.getTracks().forEach(t => t.stop());
-    this.meetingSession = null;
-    this.localStream = null;
+    this.stopMediaSession();
+    this.filesPollSub?.unsubscribe();
     this.hasLeft.set(true);
   }
 
