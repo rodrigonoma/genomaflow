@@ -416,7 +416,7 @@ module.exports = async function (fastify) {
       WITH events AS (
         -- Cadastro do paciente (evento único)
         SELECT 'registered'::text AS event_type, s.id AS event_id, s.created_at AS event_at,
-               jsonb_build_object('id', s.id, 'name', s.name, 'subject_type', s.subject_type, 'module', s.module) AS payload
+               jsonb_build_object('id', s.id, 'name', s.name, 'subject_type', s.subject_type) AS payload
         FROM subjects s
         WHERE s.tenant_id = $1 AND s.id = $2
 
