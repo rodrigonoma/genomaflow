@@ -25,7 +25,7 @@ import { PrescriptionModalComponent, PrescriptionModalData } from '../../clinic/
 import { WsService } from '../../../core/ws/ws.service';
 import { EncounterFormComponent } from '../../encounters/encounter-form.component';
 import { EncounterListComponent } from '../../encounters/encounter-list.component';
-import { TimelineComponent } from '../../encounters/timeline.component';
+// TimelineComponent (encounters/timeline) removido — substituído pela aba dedicada "🕐 Timeline" (PatientTimelineComponent)
 import { VaccinesTabComponent } from '../../vaccines/vaccines-tab.component';
 import { AuthService } from '../../../core/auth/auth.service';
 import { isValidPhoneBR } from '../../../shared/utils/mask';
@@ -63,7 +63,7 @@ interface ComparisonBlock {
     MatFormFieldModule, MatInputModule, MatSelectModule,
     MatChipsModule, MatDialogModule, MatCheckboxModule, MatMenuModule, MatAutocompleteModule, MatSnackBarModule, MatTooltipModule, ExamCardComponent,
     PrescriptionModalComponent,
-    EncounterFormComponent, EncounterListComponent, TimelineComponent,
+    EncounterFormComponent, EncounterListComponent,
     VaccinesTabComponent,
     AiSuggestionsCardComponent,
     PatientTimelineComponent,
@@ -1072,13 +1072,8 @@ interface ComparisonBlock {
                 </button>
               </div>
 
-              <h3>Timeline unificada</h3>
-              <app-timeline
-                [subjectId]="patientId"
-                [refreshTick]="encounterRefreshTick()"
-              ></app-timeline>
-
-              <h3 style="margin-top: 24px;">Evoluções registradas</h3>
+              <!-- Lista de evoluções clínicas (cards expansíveis).
+                   Timeline unificada movida para a aba dedicada "🕐 Timeline". -->
               <app-encounter-list
                 [subjectId]="patientId"
                 [refreshTick]="encounterRefreshTick()"

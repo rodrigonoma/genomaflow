@@ -12,6 +12,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { VideoService, ConsultationFile } from './video.service';
 import { environment } from '../../../environments/environment';
 import { interval, Subscription } from 'rxjs';
+import { WsService } from '../../core/ws/ws.service';
 import {
   ConsoleLogger, DefaultDeviceController, DefaultMeetingSession,
   LogLevel, MeetingSessionConfiguration,
@@ -101,10 +102,19 @@ import {
     .file-card {
       background:#171f33; border:1px solid rgba(70,69,84,0.15);
       border-radius:5px; padding:.5rem .75rem; margin-bottom:.375rem;
-      display:flex; align-items:center; gap:.5rem;
+      display:flex; align-items:center; gap:.5rem; cursor:pointer;
+      transition:border-color 120ms, background 120ms;
     }
+    .file-card:hover { border-color:rgba(192,193,255,0.4); background:#1c2645; }
+    .file-card.is-new { border-color:rgba(34,197,94,0.55); }
     .file-name { font-size:.75rem; color:#c0c1ff; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .file-who { font-size:.65rem; color:#6e6d80; }
+    .file-new-badge {
+      font-size:.55rem; font-family:'JetBrains Mono',monospace;
+      background:rgba(34,197,94,0.18); color:#86efac;
+      border:1px solid rgba(34,197,94,0.4); border-radius:3px;
+      padding:1px 5px; text-transform:uppercase; letter-spacing:.08em;
+    }
 
     .upload-btn {
       width:100%; margin-top:.5rem; padding:.5rem;
@@ -312,18 +322,19 @@ import {
           <mat-tab label="📁 Arquivos">
             <div class="panel-content">
               @for (f of files(); track f.id) {
-                <div class="file-card">
+                <div class="file-card" [class.is-new]="newFileIds().has(f.id)" (click)="openFile(f.id)" title="Abrir arquivo">
                   <mat-icon style="font-size:16px;color:#c0c1ff;">attach_file</mat-icon>
                   <span class="file-name">{{ f.filename }}</span>
+                  @if (newFileIds().has(f.id)) { <span class="file-new-badge">novo</span> }
                   <span class="file-who">{{ f.uploaded_by === 'doctor' ? 'você' : 'paciente' }}</span>
                 </div>
               }
-              <label class="upload-btn">
+              <label class="upload-btn" (click)="$event.stopPropagation()">
                 <mat-icon style="font-size:18px;">upload</mat-icon>
                 Enviar arquivo
                 <input type="file" style="display:none" (change)="uploadFile($event)" accept="image/*,.pdf"/>
               </label>
-              <p class="pip-hint">Arquivos são salvos no prontuário ao encerrar</p>
+              <p class="pip-hint">Arquivos são salvos no prontuário ao encerrar. Clique para abrir em nova aba.</p>
             </div>
           </mat-tab>
 
@@ -341,6 +352,7 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
   private http = inject(HttpClient);
   private snack = inject(MatSnackBar);
   private videoSvc = inject(VideoService);
+  private ws = inject(WsService);
 
   consultationId = '';
   status = signal<string>('waiting');
@@ -352,6 +364,7 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
   subject = signal<any | null>(null);
   exams = signal<any[]>([]);
   files = signal<ConsultationFile[]>([]);
+  newFileIds = signal<Set<string>>(new Set());
   duration = signal(0);
 
   private meetingSession: any = null;
@@ -359,21 +372,45 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
   private recorder: MediaRecorder | null = null;
   private recordingChunks: Blob[] = [];
   private timerSub?: Subscription;
+  private wsFileSub?: Subscription;
   private startTime?: Date;
 
   ngOnInit() {
     this.consultationId = this.route.snapshot.paramMap.get('consultationId') || '';
     this.initChime();
     this.startTimer();
+    this.subscribeFileShared();
   }
 
   ngAfterViewInit() { }
 
   ngOnDestroy() {
     this.timerSub?.unsubscribe();
+    this.wsFileSub?.unsubscribe();
     this.meetingSession?.audioVideo?.stop();
     this.localStream?.getTracks().forEach(t => t.stop());
     this.recorder?.state !== 'inactive' && this.recorder?.stop();
+  }
+
+  private subscribeFileShared() {
+    this.wsFileSub = this.ws.videoFileShared$.subscribe(evt => {
+      if (evt.consultation_id !== this.consultationId) return;
+      // Recarrega lista do servidor (garante consistência) + marca como "novo"
+      this.loadFiles();
+      this.newFileIds.update(s => new Set([...s, evt.file.id]));
+      const who = evt.file.uploaded_by === 'patient' ? 'paciente' : 'médico';
+      this.snack.open(`📎 ${who} enviou: ${evt.file.filename}`, 'Abrir', { duration: 6000 })
+        .onAction().subscribe(() => this.openFile(evt.file.id));
+    });
+  }
+
+  openFile(fileId: string) {
+    // Limpa marcador de "novo" ao clicar
+    this.newFileIds.update(s => { const c = new Set(s); c.delete(fileId); return c; });
+    this.videoSvc.getFileDownloadUrl(this.consultationId, fileId).subscribe({
+      next: (res) => window.open(res.download_url, '_blank'),
+      error: () => this.snack.open('Não foi possível abrir o arquivo', 'OK', { duration: 4000 }),
+    });
   }
 
   statusLabel(): string {

@@ -94,4 +94,9 @@ export class VideoService {
   getFiles(consultationId: string): Observable<ConsultationFile[]> {
     return this.http.get<ConsultationFile[]>(`${this.base}/consultations/${consultationId}/files`);
   }
+
+  getFileDownloadUrl(consultationId: string, fileId: string, joinToken?: string): Observable<{ download_url: string; filename: string; mime_type: string | null }> {
+    const params = joinToken ? `?join_token=${joinToken}` : '';
+    return this.http.get<any>(`${this.base}/consultations/${consultationId}/files/${fileId}/download-url${params}`);
+  }
 }

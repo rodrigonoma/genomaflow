@@ -44,6 +44,7 @@ module.exports = fp(async function (fastify) {
     'chat:event:*',
     'appointment:event:*',
     'subject:upserted:*',
+    'video:event:*',
     (err) => {
       if (err) fastify.log.error('Redis psubscribe error:', err);
     }
@@ -79,6 +80,11 @@ module.exports = fp(async function (fastify) {
       // refrescar a tela de Pacientes em tempo real.
       tenantId = channel.replace('subject:upserted:', '');
       payload = { event: 'subject:upserted', ...JSON.parse(message) };
+    } else if (channel.startsWith('video:event:')) {
+      // Video consultation events: file_shared (paciente envia arquivo na sala),
+      // etc. Mensagem JSON já traz 'type' e payload.
+      tenantId = channel.replace('video:event:', '');
+      payload = JSON.parse(message);
     } else {
       return;
     }

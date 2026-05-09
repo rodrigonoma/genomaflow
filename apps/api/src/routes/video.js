@@ -488,6 +488,42 @@ module.exports = async function (fastify) {
     );
     return rows;
   });
+
+  // ── GET /video/consultations/:id/files/:fileId/download-url ───────────
+  // Retorna presigned GET URL para baixar/visualizar arquivo (médico autenticado
+  // ou paciente via join_token query param). TTL 1h. Valida tenant_id na query.
+  fastify.get('/consultations/:id/files/:fileId/download-url', {
+    config: { rateLimit: { max: 60, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
+    const consultationId = request.params.id;
+    const fileId = request.params.fileId;
+    const uploadedBy = await resolveFileUploader(request, fastify.pg, consultationId);
+    if (!uploadedBy) return reply.status(401).send({ error: 'Não autorizado' });
+
+    const { rows } = await fastify.pg.query(
+      `SELECT f.s3_key, f.filename, f.mime_type
+       FROM video_consultation_files f
+       JOIN video_consultations vc ON vc.id = f.consultation_id
+       WHERE f.id = $1 AND f.consultation_id = $2`,
+      [fileId, consultationId]
+    );
+    if (!rows[0]) return reply.status(404).send({ error: 'Arquivo não encontrado' });
+    const file = rows[0];
+
+    const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+    const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+    const s3 = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
+    const BUCKET = process.env.S3_BUCKET || 'genomaflow-uploads-prod';
+
+    const url = await getSignedUrl(s3, new GetObjectCommand({
+      Bucket: BUCKET,
+      Key: file.s3_key,
+      ResponseContentDisposition: `inline; filename="${encodeURIComponent(file.filename)}"`,
+      ResponseContentType: file.mime_type || 'application/octet-stream',
+    }), { expiresIn: 3600 });
+
+    return { download_url: url, filename: file.filename, mime_type: file.mime_type };
+  });
 };
 
 // Resolve uploaded_by: 'doctor' se JWT de user autenticado, 'patient' se join_token query param

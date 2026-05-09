@@ -37,6 +37,7 @@ export interface ClinicalEncounter {
   medications_in_use?: string | null;
   allergies?: string | null;
   attachments: any[];
+  source?: 'manual' | 'video_ai' | null;
   signed_at: string | null;
   signed_by_user_id: string | null;
   created_at: string;

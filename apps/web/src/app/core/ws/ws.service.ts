@@ -30,6 +30,9 @@ export class WsService {
   // Subject (paciente/animal) criado ou atualizado — emitido por patients.js + patient-chat-tools.js
   subjectUpserted$ = new Subject<{ subject_id: string }>();
 
+  // Video consultation events — emitidos por video.js (paciente envia arquivo na sala, etc)
+  videoFileShared$ = new Subject<{ consultation_id: string; file: { id: string; filename: string; mime_type: string | null; uploaded_by: 'doctor'|'patient'; created_at: string } }>();
+
   connect(token: string): void {
     this.disconnect();
     this.token = token;
@@ -86,6 +89,8 @@ export class WsService {
             this.appointmentEvent$.next(msg as any);
           } else if (kind === 'subject:upserted') {
             this.subjectUpserted$.next(msg as any);
+          } else if (kind === 'video:file_shared') {
+            this.videoFileShared$.next(msg as any);
           } else {
             this.examUpdates$.next(msg as { exam_id: string });
           }
