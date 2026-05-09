@@ -8,6 +8,12 @@ import { environment } from '../../../environments/environment';
 import { JwtPayload, UserProfile } from '../../shared/models/api.models';
 import { WsService } from '../ws/ws.service';
 
+// Chaves separadas pra impersonate — sessionStorage isola por aba.
+// Master abre nova aba pra "Acessar como tenant"; aba do master continua intacta.
+const IMPERSONATE_TOKEN_KEY = 'impersonate_token';
+const IMPERSONATE_PROFILE_KEY = 'impersonate_profile';
+const IMPERSONATE_META_KEY = 'impersonate_meta'; // { tenant_name, master_id, target_email }
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private http: HttpClient;
@@ -27,24 +33,90 @@ export class AuthService {
     this.router = router || inject(Router);
     this.ws = ws || inject(WsService);
 
-    const token = localStorage.getItem('token');
+    // Impersonate (sessionStorage) tem prioridade sobre login normal (localStorage).
+    // Se a aba foi aberta via /impersonate-launch, o token de impersonate é a sessão real desta aba.
+    const impToken = this.getImpersonateToken();
+    const token = impToken || localStorage.getItem('token');
     if (token) {
       try {
         const payload = this.decode(token);
         this.currentUserSubject.next(payload);
         this.ws.connect(token);
         // Hidrata o profile do cache imediatamente — evita flicker do chip no F5.
-        const cached = this.readCachedProfile();
+        const cached = impToken ? this.readImpersonateProfile() : this.readCachedProfile();
         if (cached) this.currentProfileSubject.next(cached);
         if (payload.role !== 'master') this.fetchProfile();
       } catch {
         // clearToken() is async — fire-and-forget here because the constructor
         // must remain synchronous. On web this resolves instantly (localStorage).
-        void this.clearToken();
-        localStorage.removeItem('profile');
+        if (impToken) this.clearImpersonateSession();
+        else {
+          void this.clearToken();
+          localStorage.removeItem('profile');
+        }
       }
     }
   }
+
+  // ───────── Impersonate (master atua como tenant em nova aba) ─────────
+  isImpersonating(): boolean { return !!this.getImpersonateToken(); }
+  getImpersonateToken(): string | null {
+    try { return sessionStorage.getItem(IMPERSONATE_TOKEN_KEY); } catch { return null; }
+  }
+  getImpersonateMeta(): { tenant_name: string; master_id: string; target_email: string } | null {
+    try {
+      const raw = sessionStorage.getItem(IMPERSONATE_META_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  }
+  private readImpersonateProfile(): UserProfile | null {
+    try {
+      const raw = sessionStorage.getItem(IMPERSONATE_PROFILE_KEY);
+      return raw ? JSON.parse(raw) as UserProfile : null;
+    } catch { return null; }
+  }
+
+  /**
+   * Inicia sessão de impersonate (chamado pela tela /impersonate-launch).
+   * Salva token em sessionStorage (não localStorage — isolada por aba).
+   * Recarrega o profile via /auth/me e navega pra home do role.
+   */
+  async startImpersonate(token: string, meta: { tenant_name: string; master_id: string; target_email: string }): Promise<void> {
+    sessionStorage.setItem(IMPERSONATE_TOKEN_KEY, token);
+    sessionStorage.setItem(IMPERSONATE_META_KEY, JSON.stringify(meta));
+    sessionStorage.removeItem(IMPERSONATE_PROFILE_KEY);
+    const payload = this.decode(token);
+    this.currentUserSubject.next(payload);
+    this.ws.connect(token);
+    // Não chama fetchProfile direto — deixa a navegação acontecer e o construtor cuidar do reload na próxima
+    this.http.get<UserProfile>(`${environment.apiUrl}/auth/me`).subscribe({
+      next: (p) => {
+        this.currentProfileSubject.next(p);
+        try { sessionStorage.setItem(IMPERSONATE_PROFILE_KEY, JSON.stringify(p)); } catch {}
+      },
+      error: () => {},
+    });
+  }
+
+  /** Encerra impersonate só na aba atual — não mexe em localStorage do master */
+  endImpersonate(): void {
+    this.clearImpersonateSession();
+    try { this.ws.disconnect(); } catch {}
+    this.currentUserSubject.next(null);
+    this.currentProfileSubject.next(null);
+    // Fecha a aba se foi aberta via window.open; senão, navega pra login.
+    try { window.close(); } catch {}
+    setTimeout(() => this.router.navigate(['/login']), 200);
+  }
+
+  private clearImpersonateSession(): void {
+    try {
+      sessionStorage.removeItem(IMPERSONATE_TOKEN_KEY);
+      sessionStorage.removeItem(IMPERSONATE_PROFILE_KEY);
+      sessionStorage.removeItem(IMPERSONATE_META_KEY);
+    } catch {}
+  }
+  // ───────── /Impersonate ─────────
 
   login(email: string, password: string): Observable<void> {
     return this.http
@@ -73,8 +145,15 @@ export class AuthService {
    * Encerra a sessão Angular (limpa localStorage) mas preserva o token seguro
    * em Preferences (Keychain/EncryptedSharedPreferences) para recuperação
    * biométrica no próximo acesso.
+   *
+   * Em sessão de impersonate (sessionStorage), só limpa a sessão da aba atual —
+   * a sessão real do user no localStorage de OUTRA aba (master) não é afetada.
    */
   async logout(): Promise<void> {
+    if (this.isImpersonating()) {
+      this.endImpersonate();
+      return;
+    }
     localStorage.removeItem('token');
     localStorage.removeItem('profile');
     try { this.ws.disconnect(); } catch {}
@@ -89,6 +168,11 @@ export class AuthService {
    * Preferences e biometric_enabled, forçando re-autenticação completa.
    */
   async forceLogout(): Promise<void> {
+    // Em impersonate, só encerra a sessão da aba — não toca no token do master.
+    if (this.isImpersonating()) {
+      this.endImpersonate();
+      return;
+    }
     await this.clearToken();
     localStorage.removeItem('profile');
     localStorage.removeItem('biometric_enabled');
@@ -134,7 +218,9 @@ export class AuthService {
    * on native. The durable copy lives in Keychain/EncryptedSharedPreferences.
    */
   getToken(): string | null {
-    return localStorage.getItem('token');
+    // Impersonate (sessionStorage) tem prioridade — abas de impersonate mandam o
+    // JWT especial; aba master continua com seu próprio token em localStorage.
+    return this.getImpersonateToken() || localStorage.getItem('token');
   }
 
   // ---------------------------------------------------------------------------

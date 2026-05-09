@@ -371,9 +371,32 @@ import { QuickSearchComponent } from './shared/components/quick-search/quick-sea
       }
 
       <main class="main-content" [style.margin-right]="chatOpen || helpOpen ? '420px' : '0'">
+        @if (auth.isImpersonating()) {
+          <div style="background:rgba(252,211,77,.18); color:#fcd34d; border-bottom:1px solid rgba(252,211,77,.4); padding:.55rem 1rem; display:flex; align-items:center; gap:.625rem; font-size:.78rem;">
+            <span>🎭</span>
+            <span>
+              <strong>Modo master ativo</strong> — atuando como
+              <strong>{{ auth.getImpersonateMeta()?.tenant_name }}</strong>
+              ({{ auth.getImpersonateMeta()?.target_email }})
+            </span>
+            <button (click)="auth.endImpersonate()"
+                    style="margin-left:auto; background:rgba(220,38,38,.85); color:#fff; border:none; border-radius:4px; padding:.3rem .75rem; cursor:pointer; font-size:.7rem; font-weight:600;">
+              Encerrar impersonate
+            </button>
+          </div>
+        }
         <router-outlet />
       </main>
     } @else {
+      @if (auth.isImpersonating()) {
+        <div style="background:rgba(252,211,77,.18); color:#fcd34d; border-bottom:1px solid rgba(252,211,77,.4); padding:.55rem 1rem; display:flex; align-items:center; gap:.625rem; font-size:.78rem;">
+          <span>🎭 Modo master ativo — atuando como {{ auth.getImpersonateMeta()?.tenant_name }}</span>
+          <button (click)="auth.endImpersonate()"
+                  style="margin-left:auto; background:rgba(220,38,38,.85); color:#fff; border:none; border-radius:4px; padding:.3rem .75rem; cursor:pointer; font-size:.7rem;">
+            Encerrar
+          </button>
+        </div>
+      }
       <router-outlet />
     }
   `

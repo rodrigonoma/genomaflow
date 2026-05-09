@@ -223,11 +223,17 @@ interface TenantDetail {
               {{ data()!.tenant.active ? 'Ativo' : 'Inativo' }}
             </span>
           </div>
-          <div style="margin-top:.875rem;">
+          <div style="margin-top:.875rem; display:flex; gap:.5rem; flex-wrap:wrap;">
             @if (data()!.tenant.active) {
               <button class="btn-warn" (click)="toggleTenant(false)">Desativar tenant</button>
             } @else {
               <button class="btn-primary" (click)="toggleTenant(true)">Ativar tenant</button>
+            }
+            @if (data()!.tenant.active) {
+              <button class="btn-ghost" (click)="impersonate()" matTooltip="Abre nova aba acessando como o admin do tenant — sua sessão master segue ativa">
+                <mat-icon style="font-size:14px;width:14px;height:14px;vertical-align:middle;margin-right:4px;">person_pin_circle</mat-icon>
+                Acessar como tenant
+              </button>
             }
           </div>
         </div>
@@ -441,6 +447,25 @@ export class MasterTenantDetailComponent implements OnInit {
         this.saving.set(false);
         this.snack.open(err.error?.error || 'Erro ao resetar senha', 'OK', { duration: 4000 });
       },
+    });
+  }
+
+  /** Master gera token de impersonate e abre nova aba — sessão master continua ativa */
+  impersonate() {
+    const d = this.data();
+    if (!d) return;
+    this.http.post<any>(`${environment.apiUrl}/master/tenants/${d.tenant.id}/impersonate`, {}).subscribe({
+      next: (res) => {
+        const params = new URLSearchParams({
+          token: res.token,
+          tenant_name: res.tenant_name,
+          master_id: '', // backend não devolve, é o master atual; não precisamos pra UI
+          target_email: res.user_email || '',
+        });
+        // Nova aba — isolada por sessionStorage. Aba master fica intocada.
+        window.open(`/impersonate-launch?${params.toString()}`, '_blank', 'noopener');
+      },
+      error: (err) => this.snack.open(err.error?.error || 'Erro ao iniciar impersonate', 'OK', { duration: 4000 }),
     });
   }
 

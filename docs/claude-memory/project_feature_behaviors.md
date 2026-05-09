@@ -144,6 +144,63 @@ Spec: `docs/superpowers/specs/2026-05-08-video-consultation-design.md`.
 
 ---
 
+## Master — impersonate sem derrubar tenant (2026-05-09)
+
+Master pode atuar como o admin de qualquer tenant ativo SEM forçar logout do user real.
+
+**Backend:**
+- `POST /master/tenants/:id/impersonate` — gera JWT especial com claim `impersonated_by: master_id` + tenant_id + user_id (admin do tenant) + role 'admin' + jti único + TTL 1h. Não toca em `session:{user_id}` no Redis.
+- `apps/api/src/plugins/auth.js` — quando JWT tem `impersonated_by`, **pula** a validação single-session JTI. Resultado: master não derruba o user real (jti dele continua no Redis), e user real não derruba o master (jti diferente).
+- Bloqueia se tenant inativo (409). Bloqueia se admin não existe/inativo (404).
+
+**Frontend (isolamento por aba via sessionStorage):**
+- `AuthService` checa `sessionStorage.impersonate_token` antes de `localStorage.token`. Construtor, `getToken()`, `logout()`, `forceLogout()` todos respeitam o token de impersonate.
+- `startImpersonate(token, meta)` salva sessionStorage + decodifica + WS connect + fetch profile.
+- `endImpersonate()` limpa sessionStorage + tenta `window.close()` (aba pode ter sido aberta via window.open) + fallback navigate `/login`.
+- `logout()` em modo impersonate só faz `endImpersonate` — **não toca em localStorage** (que pode ter o token master compartilhado entre abas).
+- `forceLogout()` (do interceptor 401) também respeita: em impersonate, só limpa a aba.
+- `ImpersonateLaunchComponent` (rota `/impersonate-launch`) recebe token via query, chama `startImpersonate`, navega pra `/clinic/dashboard`.
+- Banner global no `app.component.ts`: barra amarela "🎭 Modo master ativo — atuando como [tenant]" + botão "Encerrar impersonate" (renderiza tanto dentro do layout autenticado quanto fora).
+
+**Como o master abre:**
+- Botão "Acessar como tenant" no card Tenant do `master-tenant-detail` (visível só se tenant ativo)
+- Frontend faz POST → recebe `{token, tenant_name, user_email, ...}` → `window.open('/impersonate-launch?token=...&tenant_name=...&target_email=...', '_blank', 'noopener')`
+- Nova aba: sessionStorage isolada → master continua na aba original
+
+**Por que essa estrutura:**
+- Single-session JTI no Redis era o impedimento — fizemos exceção controlada (claim no JWT) ao invés de "desligar" a feature toda
+- sessionStorage isola por aba — master e impersonate convivem em janelas paralelas sem interferência
+- Banner amarelo persistente avisa o master onde está pra evitar ações acidentais como tenant
+- Audit trail: `impersonated_by` está no JWT → toda mutação passa pelo middleware → pode-se logar quem agiu (master vs admin real)
+
+**Limitações conhecidas:**
+- Mobile: não tem conceito de "abrir nova aba" — feature é web-only por design
+- TTL 1h: ao expirar, a aba de impersonate dá 401 → `forceLogout` (que chama `endImpersonate`) → fecha aba
+
+---
+
+## Master — erros graves only + stack trace clicável (2026-05-09)
+
+Antes: dashboard de erros do master mostrava 401, 403 e tudo, poluindo a visão. Agora:
+
+**Backend (migration 084):**
+- `error_log` ganhou colunas: `stack_trace TEXT`, `user_agent TEXT`, `request_body TEXT` (todas nullable). Index parcial `(created_at DESC) WHERE status_code IS NULL OR status_code >= 500` pra acelerar dashboard
+- `POST /error-log` aceita `stack_trace` + `request_body`, captura `User-Agent` do header, trunca campos longos (4k msg, 16k stack, 8k body) pra não estourar storage
+- `GET /master/errors` aceita `?severity=high|all` (default `high`): filtra `status_code IS NULL OR status_code >= 500` (ignora 401/403/404). 5xx são genuínos erros de servidor.
+- `GET /master/errors/:id` (NOVO): retorna detalhe completo (stack + body + user_agent + tenant + user)
+- `GET /master/stats.errors_24h` agora também só conta graves
+
+**Frontend:**
+- Linha do erro virou clicável (cursor:pointer) → abre `ErrorDetailDialogComponent`
+- Dialog mostra: badge de status colorido (5xx vermelho, 4xx amarelo), URL+method, contexto (quando, tenant, user, UA), mensagem em caixa vermelha, **stack trace em caixa pre-formatada com scroll**, body parcial, botão "Copiar tudo" (pro engenheiro colar no troubleshooting)
+
+**Por que essa estrutura:**
+- 401/403 são esperados (token expirado, sessão substituída) — não são bugs. Mostrar polui sinal.
+- 5xx + null = erros que precisam de investigação imediata do operador
+- Stack trace inline (não precisa dump no CloudWatch) acelera triagem
+
+---
+
 ## Master — gestão consolidada de tenant (2026-05-09)
 
 Tela `/master/tenants/:id` (master only) consolida ações que antes só eram possíveis via SQL direto no DB.
