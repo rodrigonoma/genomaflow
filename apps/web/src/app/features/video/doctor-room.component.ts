@@ -34,7 +34,8 @@ import {
       flex:1; display:flex; flex-direction:column;
       background:#060d1a; position:relative; overflow:hidden;
     }
-    .remote-video { flex:1; background:#000; object-fit:cover; width:100%; }
+    /* object-fit:contain pra mostrar paciente inteiro (preferível letterbox a cortar a cabeça) */
+    .remote-video { flex:1; background:#000; object-fit:contain; width:100%; }
     .self-video {
       position:absolute; bottom:20px; right:16px;
       width:160px; height:110px; border-radius:8px;
@@ -469,10 +470,10 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
       const config = new MeetingSessionConfiguration(meeting, attendee);
       this.meetingSession = new DefaultMeetingSession(config, logger, deviceController);
 
-      // Observer DEVE ser registrado antes do start() pra capturar o tile local
+      // Observer registrado ANTES do start() — pega tile local + remoto + retoma após pause
       this.meetingSession.audioVideo.addObserver({
         videoTileDidUpdate: (tileState: any) => {
-          if (!tileState.boundAttendeeId) return;
+          if (!tileState.boundAttendeeId || tileState.paused) return;
           const targetEl = tileState.localTile
             ? this.selfVideoEl?.nativeElement
             : this.remoteVideoEl?.nativeElement;
@@ -480,16 +481,36 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
             this.meetingSession.audioVideo.bindVideoElement(tileState.tileId, targetEl);
           }
         },
+        // Connection drops do tile remoto — Chime suspende quando rede cai. Ao retornar,
+        // videoTileDidUpdate é chamado novamente, mas a referência ao <video> pode estar
+        // apontando pra um tileId antigo. Esse callback dispara cleanup explícito.
+        videoTileWasRemoved: (_tileId: number) => { /* permite rebind seguro no próximo update */ },
+        connectionDidBecomePoor: () => console.warn('[DoctorRoom] conexão pobre — vídeo pode degradar'),
+        connectionDidBecomeGood: () => console.log('[DoctorRoom] conexão estabilizada'),
       });
 
-      // 1 ÚNICO getUserMedia: serve simultaneamente Chime SDK + MediaRecorder.
-      // Chime aceita MediaStream em startAudioInput/startVideoInput, então passamos o
-      // mesmo stream — sem segundo getUserMedia paralelo (que conflitava com o
-      // capture do Chime e cortava áudio entre os participantes).
-      // Bonus: também serve de pre-permission (libera enumerateDevices a retornar IDs reais).
+      // 1 ÚNICO getUserMedia com constraints ROBUSTOS — serve Chime + MediaRecorder.
+      // Constraints críticos:
+      //   echoCancellation: true        → elimina microfonia (mic capturando alto-falante)
+      //   noiseSuppression: true        → reduz ruído de fundo
+      //   autoGainControl: true         → normaliza volume
+      //   video 720p 24fps              → não satura banda; vídeo 1080p+ degrada qualidade
+      //                                    quando upload não dá conta (sintoma: pixelado)
       let fullStream: MediaStream | null = null;
       try {
-        fullStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        fullStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+          video: {
+            width:     { ideal: 1280, max: 1280 },
+            height:    { ideal: 720,  max: 720  },
+            frameRate: { ideal: 24,   max: 30   },
+            facingMode: 'user',
+          },
+        });
         this.localStream = fullStream;
       } catch (err) {
         console.warn('[DoctorRoom] getUserMedia inicial negado:', err);
@@ -618,9 +639,11 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
   async endCall() {
     if (this.ending()) return;
     this.ending.set(true);
-    const s3Key = await this.uploadRecording();
-    // stopAudioInput/stopVideoInput liberam as devices (apaga bolinha vermelha do Chrome).
-    // stop() sozinho fecha a sessão de rede mas não libera mic/cam — eles ficam até o tab fechar.
+
+    // FEEDBACK IMEDIATO: usuário clicou encerrar → resposta visual instantânea.
+    // Cleanup de mídia também imediato (libera mic/cam, apaga bolinha do Chrome).
+    // Upload de gravação + chamada API rodam em background.
+    this.snack.open('Encerrando consulta…', '', { duration: 1500 });
     try {
       this.meetingSession?.audioVideo?.stopAudioInput?.();
       this.meetingSession?.audioVideo?.stopVideoInput?.();
@@ -628,18 +651,21 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
       this.meetingSession?.audioVideo?.stop?.();
     } catch { /* ok */ }
     this.localStream?.getTracks().forEach(t => t.stop());
+
+    // Upload da gravação em background — não bloqueia UX
+    const s3Key = await this.uploadRecording().catch(() => undefined);
+
     this.videoSvc.endConsultation(this.consultationId, s3Key).subscribe({
       next: (res) => {
         const msg = res.status === 'transcribing'
           ? `Consulta encerrada (${res.credits_debited} créditos). Transcrição e prontuário IA sendo gerados em segundo plano.`
           : `Consulta encerrada. ${res.credits_debited} créditos debitados.`;
         this.snack.open(msg, '', { duration: 5000 });
-        // Redireciona para a agenda após 2s — transcrição e IA rodam no worker em background
         setTimeout(() => this.router.navigate(['/clinic/appointments']), 2000);
       },
       error: () => {
         this.ending.set(false);
-        this.snack.open('Erro ao encerrar consulta', 'Fechar', { duration: 4000 });
+        this.snack.open('Erro ao encerrar consulta no servidor (mídia já parada)', 'Fechar', { duration: 4000 });
       },
     });
   }

@@ -33,7 +33,8 @@ import { interval, Subscription } from 'rxjs';
 
     .video-area { flex:1; min-height:0; display:flex; flex-direction:column; background:#060d1a; position:relative; overflow:hidden; }
     /* min-height:0 + width:100% força <video> a respeitar o flex em vez de crescer pelo aspect ratio do stream */
-    .remote-video { flex:1; min-height:0; width:100%; object-fit:cover; background:#000; }
+    /* object-fit:contain pra mostrar médico inteiro (preferível letterbox a cortar) */
+    .remote-video { flex:1; min-height:0; width:100%; object-fit:contain; background:#000; }
     .self-video {
       position:absolute; bottom:80px; right:12px; z-index:2;
       width:120px; height:85px; border-radius:8px;
@@ -300,10 +301,10 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
       const config = new MeetingSessionConfiguration(meeting, attendee);
       this.meetingSession = new DefaultMeetingSession(config, logger, deviceController);
 
-      // Observer DEVE ser registrado antes do start() pra capturar o tile local quando ele aparece
+      // Observer registrado antes do start() — ignora tiles em pause (não tenta rebindar)
       this.meetingSession.audioVideo.addObserver({
         videoTileDidUpdate: (tileState: any) => {
-          if (!tileState.boundAttendeeId) return;
+          if (!tileState.boundAttendeeId || tileState.paused) return;
           const targetEl = tileState.localTile
             ? this.selfVideoEl?.nativeElement
             : this.remoteVideoEl?.nativeElement;
@@ -311,13 +312,26 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
             this.meetingSession.audioVideo.bindVideoElement(tileState.tileId, targetEl);
           }
         },
+        connectionDidBecomePoor: () => console.warn('[PatientRoom] conexão pobre'),
+        connectionDidBecomeGood: () => console.log('[PatientRoom] conexão estabilizada'),
       });
 
-      // 1 ÚNICO getUserMedia — passamos o stream direto pro Chime SDK (não chama
-      // getUserMedia interno, evita disputa pela mesma device).
+      // 1 ÚNICO getUserMedia com constraints (echo cancel + noise + 720p 24fps)
       let fullStream: MediaStream | null = null;
       try {
-        fullStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        fullStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+          video: {
+            width:     { ideal: 1280, max: 1280 },
+            height:    { ideal: 720,  max: 720  },
+            frameRate: { ideal: 24,   max: 30   },
+            facingMode: 'user',
+          },
+        });
         this.localStream = fullStream;
       } catch (err) {
         console.warn('[PatientRoom] getUserMedia negado:', err);
