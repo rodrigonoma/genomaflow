@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { DatePipe, DecimalPipe, JsonPipe } from '@angular/common';
 import { Router } from '@angular/router';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { AuthService } from '../../core/auth/auth.service';
 import { environment } from '../../../environments/environment';
 import { CreateTenantDialogComponent } from './create-tenant-dialog.component';
@@ -39,7 +39,7 @@ interface Stats {
 @Component({
   selector: 'app-master',
   standalone: true,
-  imports: [FormsModule, DatePipe, DecimalPipe, JsonPipe],
+  imports: [FormsModule, DatePipe, DecimalPipe, JsonPipe, MatDialogModule],
   styles: [`
     :host { display:block; position:fixed; inset:0; z-index:9999;
             background:#080e1c; color:#dae2fd; overflow:auto;
