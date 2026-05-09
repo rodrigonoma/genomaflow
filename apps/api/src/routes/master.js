@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { randomUUID } = require('crypto');
 const bcrypt = require('bcrypt');
 const { withTenant } = require('../db/tenant');
 const {
@@ -98,10 +99,18 @@ module.exports = async function masterRoutes(fastify) {
 
   // ── Errors ───────────────────────────────────────────────────────────────
 
+  // GET /master/errors
+  // Default `severity=high` filtra erros graves (5xx + nulos) e ignora ruído
+  // (401, 403, 404, etc). Use `severity=all` para ver tudo.
   fastify.get('/errors', auth(), async (request, reply) => {
     const page  = Math.max(1, parseInt(request.query.page)  || 1);
     const limit = Math.min(200, parseInt(request.query.limit) || 50);
     const offset = (page - 1) * limit;
+    const severity = (request.query.severity || 'high').toLowerCase();
+
+    const where = severity === 'all'
+      ? '1=1'
+      : '(el.status_code IS NULL OR el.status_code >= 500)';
 
     const [rows, countRes] = await Promise.all([
       fastify.pg.query(
@@ -110,14 +119,33 @@ module.exports = async function masterRoutes(fastify) {
          FROM error_log el
          LEFT JOIN tenants t ON t.id = el.tenant_id
          LEFT JOIN users u ON u.id = el.user_id
+         WHERE ${where}
          ORDER BY el.created_at DESC
          LIMIT $1 OFFSET $2`,
         [limit, offset]
       ),
-      fastify.pg.query('SELECT COUNT(*) FROM error_log')
+      fastify.pg.query(`SELECT COUNT(*) FROM error_log el WHERE ${where}`)
     ]);
 
-    return { items: rows.rows, total: parseInt(countRes.rows[0].count), page, limit };
+    return { items: rows.rows, total: parseInt(countRes.rows[0].count), page, limit, severity };
+  });
+
+  // GET /master/errors/:id — detalhe completo (stack trace + body + user agent)
+  fastify.get('/errors/:id', auth(), async (request, reply) => {
+    const { id } = request.params;
+    const { rows } = await fastify.pg.query(
+      `SELECT el.id, el.url, el.method, el.status_code, el.error_message,
+              el.stack_trace, el.user_agent, el.request_body, el.created_at,
+              el.tenant_id, el.user_id,
+              t.name AS tenant_name, u.email AS user_email
+       FROM error_log el
+       LEFT JOIN tenants t ON t.id = el.tenant_id
+       LEFT JOIN users u ON u.id = el.user_id
+       WHERE el.id = $1`,
+      [id]
+    );
+    if (!rows[0]) return reply.status(404).send({ error: 'Erro não encontrado' });
+    return rows[0];
   });
 
   // ── Feedback / Suggestions ───────────────────────────────────────────────
@@ -306,6 +334,66 @@ module.exports = async function masterRoutes(fastify) {
     }
 
     return reply.status(201).send({ tenant_id, user_id, email, active, initial_credits });
+  });
+
+  // ── Impersonate: master atua como admin do tenant sem derrubar sessão real ─
+  // Retorna um JWT especial com claim `impersonated_by: master_id`. O auth
+  // middleware reconhece esse claim e PULA a verificação single-session JTI,
+  // ou seja:
+  //  - Não toca no `session:{user_id}` do Redis (user real continua logado)
+  //  - O master não é derrubado (continua na sua sessão master em outra aba)
+  //  - O JWT de impersonate vive por 1h e morre sozinho
+  //
+  // Audit: cada request com `impersonated_by` carrega esse claim — qualquer
+  // mutação fica rastreável (request.user.impersonated_by no audit_log).
+  //
+  // Frontend deve usar sessionStorage (não localStorage) pra esse token —
+  // assim a aba de impersonate é isolada da aba do master.
+  fastify.post('/tenants/:id/impersonate', auth(), async (request, reply) => {
+    const { id: tenant_id } = request.params;
+    const master_id = request.user.user_id;
+
+    const t = await fastify.pg.query(
+      `SELECT t.id, t.name, t.module, t.active,
+              u.id AS admin_user_id, u.email AS admin_email
+       FROM tenants t
+       JOIN users u ON u.tenant_id = t.id AND u.role = 'admin' AND u.active = true
+       WHERE t.id = $1
+       ORDER BY u.created_at LIMIT 1`,
+      [tenant_id]
+    );
+    if (!t.rows[0]) return reply.status(404).send({ error: 'Tenant ou admin ativo não encontrado' });
+    const target = t.rows[0];
+
+    if (!target.active) {
+      return reply.status(409).send({ error: 'Tenant está inativo — ative antes de impersonar' });
+    }
+
+    // JWT separado, jti único, TTL curto (1h). NÃO toca no Redis session do user real.
+    const impersonation_jti = randomUUID();
+    const token = fastify.jwt.sign({
+      user_id:         target.admin_user_id,
+      tenant_id:       target.id,
+      role:            'admin',
+      module:          target.module || 'human',
+      jti:             impersonation_jti,
+      impersonated_by: master_id,
+    }, { expiresIn: '1h' });
+
+    request.log.info(
+      { master_id, target_user: target.admin_user_id, target_tenant: target.id, jti: impersonation_jti },
+      '[master/impersonate] sessão de impersonate emitida'
+    );
+
+    return reply.status(201).send({
+      token,
+      tenant_id:  target.id,
+      tenant_name: target.name,
+      tenant_module: target.module,
+      user_id:    target.admin_user_id,
+      user_email: target.admin_email,
+      expires_in_seconds: 3600,
+    });
   });
 
   // ── Gerar link de pagamento Stripe (assinatura ou crédito avulso) ─────────
@@ -530,7 +618,12 @@ module.exports = async function masterRoutes(fastify) {
   fastify.get('/stats', auth(), async (request, reply) => {
     const [tenants, errors, feedbacks, credits] = await Promise.all([
       fastify.pg.query(`SELECT COUNT(*) FROM tenants WHERE id != '00000000-0000-0000-0000-000000000001'`),
-      fastify.pg.query(`SELECT COUNT(*) FROM error_log WHERE created_at > NOW() - INTERVAL '24 hours'`),
+      // Stats só conta erros graves (5xx ou status null) — ignora ruído (401/403/404)
+      fastify.pg.query(
+        `SELECT COUNT(*) FROM error_log
+         WHERE created_at > NOW() - INTERVAL '24 hours'
+           AND (status_code IS NULL OR status_code >= 500)`
+      ),
       fastify.pg.query(`SELECT COUNT(*) FROM feedback`),
       fastify.pg.query(`SELECT COALESCE(SUM(amount),0) AS total FROM credit_ledger`)
     ]);

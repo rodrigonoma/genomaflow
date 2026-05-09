@@ -7,6 +7,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { AuthService } from '../../core/auth/auth.service';
 import { environment } from '../../../environments/environment';
 import { CreateTenantDialogComponent } from './create-tenant-dialog.component';
+import { ErrorDetailDialogComponent } from './error-detail-dialog.component';
 
 interface Tenant {
   id: string; name: string; type: string; module: string; plan: string;
@@ -404,7 +405,7 @@ interface Stats {
             </thead>
             <tbody>
               @for (e of errors(); track e.id) {
-                <tr>
+                <tr (click)="openErrorDetail(e.id)" style="cursor:pointer" title="Ver stack trace e detalhes">
                   <td class="mono text-muted" style="font-size:11px;white-space:nowrap">{{ e.created_at | date:'dd/MM HH:mm' }}</td>
                   <td style="font-size:12px">{{ e.tenant_name || '—' }}</td>
                   <td class="mono" style="font-size:11px">{{ e.user_email || '—' }}</td>
@@ -1249,6 +1250,16 @@ export class MasterComponent implements OnInit {
   /** Abre tela de gerenciamento consolidado do tenant (ações: ativar, créditos, users, reset senha, etc) */
   openTenantDetail(t: Tenant): void {
     this.router.navigate(['/master/tenants', t.id]);
+  }
+
+  /** Abre modal de detalhe de um erro (stack trace, body, user-agent, contexto) */
+  openErrorDetail(errorId: string): void {
+    this.dialog.open(ErrorDetailDialogComponent, {
+      width: '720px',
+      maxWidth: '92vw',
+      panelClass: 'dark-dialog',
+      data: { error_id: errorId },
+    });
   }
 
   /** Abre dialog para criar tenant manualmente (com opções de créditos iniciais, ativar, marcar email verificado, aceitar termos) */
