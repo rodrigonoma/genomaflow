@@ -17,7 +17,7 @@
  *   GET  /video/consultations/:id/files                  (authenticate)
  */
 
-const { randomBytes } = require('crypto');
+const { randomBytes, randomUUID } = require('crypto');
 const jwt = require('jsonwebtoken');
 const { withTenant } = require('../db/tenant');
 const { sendEmail } = require('../mailer');
@@ -135,6 +135,11 @@ module.exports = async function (fastify) {
       return reply.status(402).send({ error: `Saldo insuficiente. Necessário: ${creditsNeeded} créditos.` });
     }
 
+    // Pre-gera UUID — token e DB inseridos atomicamente em uma única operação
+    const consultationId = randomUUID();
+    const realToken = signJoinToken(consultationId);
+    const realJoinUrl = buildJoinUrl(realToken);
+
     // Cria Chime Meeting + Attendees
     let meeting, doctorAttendee, patientAttendee;
     try {
@@ -146,75 +151,51 @@ module.exports = async function (fastify) {
       return reply.status(502).send({ error: 'Falha ao criar sala de vídeo. Tente novamente.' });
     }
 
-    const joinToken = signJoinToken(null); // será atualizado abaixo com o ID real
-    const joinUrl = buildJoinUrl(joinToken);
-
-    // Persiste no banco
-    const consultation = await withTenant(fastify.pg, tenant_id, async (client) => {
-      const { rows } = await client.query(
+    // Persiste no banco — token inserido com o UUID já conhecido (sem UPDATE posterior)
+    await withTenant(fastify.pg, tenant_id, async (client) => {
+      await client.query(
         `INSERT INTO video_consultations
-           (tenant_id, appointment_id, meeting_id, doctor_attendee_id, patient_attendee_id,
+           (id, tenant_id, appointment_id, meeting_id, doctor_attendee_id, patient_attendee_id,
             join_token, modality, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'waiting')
-         RETURNING id`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'waiting')`,
         [
-          tenant_id, appointment_id,
+          consultationId, tenant_id, appointment_id,
           meeting.MeetingId,
           JSON.stringify(doctorAttendee),
           JSON.stringify(patientAttendee),
-          'placeholder',
+          realToken,
           modality,
         ]
       );
-      return rows[0];
     }, { userId: user_id, channel: 'ui' });
-
-    // Gera token real com o ID da consulta
-    const realToken = signJoinToken(consultation.id);
-    const realJoinUrl = buildJoinUrl(realToken);
-
-    await withTenant(fastify.pg, tenant_id, async (client) => {
-      await client.query(
-        `UPDATE video_consultations SET join_token = $1 WHERE id = $2 AND tenant_id = $3`,
-        [realToken, consultation.id, tenant_id]
-      );
-    });
 
     // Busca contato do paciente
     const contact = await getSubjectContact(fastify.pg, tenant_id, apt.subject_id, module_);
     const dateStr = formatDateBR(apt.start_at);
 
-    // Envia email (best-effort)
+    // Envia email (fire-and-forget — não bloqueia a resposta ao médico)
     if (contact?.email) {
-      try {
-        const tmpl = videoConsultationLink({
-          joinUrl: realJoinUrl,
-          doctorName: apt.doctor_name,
-          clinicName: apt.clinic_name,
-          dateFormatted: dateStr,
-          durationMinutes: apt.duration_minutes,
-        });
-        await sendEmail({ to: contact.email, subject: tmpl.subject, text: tmpl.text, html: tmpl.html, pg: fastify.pg, log: request.log });
-      } catch (err) {
-        request.log.warn({ err }, '[video] falha ao enviar email de link');
-      }
+      const tmpl = videoConsultationLink({
+        joinUrl: realJoinUrl,
+        doctorName: apt.doctor_name,
+        clinicName: apt.clinic_name,
+        dateFormatted: dateStr,
+        durationMinutes: apt.duration_minutes,
+      });
+      sendEmail({ to: contact.email, subject: tmpl.subject, text: tmpl.text, html: tmpl.html, pg: fastify.pg, log: request.log })
+        .catch(err => request.log.warn({ err }, '[video] falha ao enviar email de link'));
     }
 
-    // Envia WhatsApp (best-effort)
+    // Envia WhatsApp (fire-and-forget — não bloqueia a resposta ao médico)
     if (contact?.phone) {
-      try {
-        const wa = await getWhatsApp();
-        if (wa) {
-          const msg = `📹 *Consulta por vídeo agendada*\n\nOlá${contact.name ? ', ' + contact.name : ''}! Você tem uma consulta com *${apt.doctor_name}* em *${apt.clinic_name}*.\n\n📅 ${dateStr}\n\nClique no link para entrar:\n${realJoinUrl}\n\n_Não é necessário instalar nada — abre no navegador._`;
-          await wa.sendText({ phone: contact.phone, body: msg });
-        }
-      } catch (err) {
-        request.log.warn({ err }, '[video] falha ao enviar WhatsApp');
-      }
+      const waMsg = `📹 *Consulta por vídeo agendada*\n\nOlá${contact.name ? ', ' + contact.name : ''}! Você tem uma consulta com *${apt.doctor_name}* em *${apt.clinic_name}*.\n\n📅 ${dateStr}\n\nClique no link para entrar:\n${realJoinUrl}\n\n_Não é necessário instalar nada — abre no navegador._`;
+      getWhatsApp()
+        .then(wa => wa?.sendText({ phone: contact.phone, body: waMsg }))
+        .catch(err => request.log.warn({ err }, '[video] falha ao enviar WhatsApp'));
     }
 
     return reply.status(201).send({
-      consultation_id: consultation.id,
+      consultation_id: consultationId,
       join_url: realJoinUrl,
       meeting: {
         MeetingId: meeting.MeetingId,
