@@ -30,6 +30,7 @@ import { VaccinesTabComponent } from '../../vaccines/vaccines-tab.component';
 import { AuthService } from '../../../core/auth/auth.service';
 import { isValidPhoneBR } from '../../../shared/utils/mask';
 import { PortalTokenDialogComponent } from '../../portal/portal-token-dialog.component';
+import { OwnerDetailDialogComponent } from '../../owners/owner-detail-dialog.component';
 import { ClinicalDocumentDialogComponent } from '../../clinical-documents/clinical-document-dialog.component';
 import { ClinicalDocumentTemplatesModalComponent } from '../../clinical-documents/clinical-document-templates-modal.component';
 import { ClinicalDocumentsService, ClinicalDocument, DOC_TYPE_LABELS, DOC_TYPE_ICONS } from '../../clinical-documents/clinical-documents.service';
@@ -835,6 +836,10 @@ interface ComparisonBlock {
                     <button mat-stroked-button class="portal-link-btn" (click)="openPortalTokenDialog('owner')">
                       <span class="material-icons">groups</span>
                       Link portal do tutor (todos animais)
+                    </button>
+                    <button mat-stroked-button class="portal-link-btn" (click)="openOwnerDetailDialog()">
+                      <span class="material-icons">person</span>
+                      Ver/editar dados do tutor
                     </button>
                   }
                 </div>
@@ -2137,6 +2142,19 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
           phone: this.editForm.phone || subj.phone || null,
         };
     this.dialog.open(PortalTokenDialogComponent, { width: '640px', data });
+  }
+
+  openOwnerDetailDialog(): void {
+    const subj = this.subject();
+    if (!subj?.owner_id) return;
+    this.dialog.open(OwnerDetailDialogComponent, {
+      width: '640px',
+      panelClass: 'dark-dialog',
+      data: { owner_id: subj.owner_id },
+    }).afterClosed().subscribe(saved => {
+      // Recarrega subject para refletir mudanças no JOIN (owner_name, owner_phone)
+      if (saved && this.patientId) this.loadSubject(this.patientId);
+    });
   }
 
   // ── DOCUMENTOS CLÍNICOS ──────────────────────────────────────────────

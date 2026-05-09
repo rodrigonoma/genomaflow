@@ -96,6 +96,22 @@ module.exports = async function (fastify) {
     return reply.status(201).send(owner);
   });
 
+  fastify.get('/owners/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { tenant_id } = request.user;
+    const { id } = request.params;
+    const owner = await withTenant(fastify.pg, tenant_id, async (client) => {
+      const { rows } = await client.query(
+        `SELECT id, name, cpf_last4, phone, email, notes, observations, created_at, updated_at,
+                cep, street, number, complement, neighborhood, city, state
+         FROM owners WHERE id = $1 AND tenant_id = $2`,
+        [id, tenant_id]
+      );
+      return rows[0] || null;
+    });
+    if (!owner) return reply.status(404).send({ error: 'Owner not found' });
+    return owner;
+  });
+
   fastify.put('/owners/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { tenant_id } = request.user;
     const { id } = request.params;
