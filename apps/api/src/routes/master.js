@@ -206,6 +206,215 @@ module.exports = async function masterRoutes(fastify) {
     return { ok: true, ...rows[0], tenant_name: tenantCheck.rows[0].name };
   });
 
+  // ── Criar tenant manualmente (master bypass do flow Stripe) ───────────────
+  // Cria tenant + user admin em uma transação, com opções de:
+  //  - initial_credits (positivo, lança em credit_ledger)
+  //  - mark_email_verified (pula etapa de verificação SES)
+  //  - accept_all_terms (registra aceite dos 5 documentos legais ativos)
+  //  - active (default true — diferente do /auth/register que cria inativo)
+  // Não envia email de verificação automaticamente (master controla o flow).
+  fastify.post('/tenants', auth(), async (request, reply) => {
+    const {
+      clinic_name, email: rawEmail, password,
+      module: mod, professional_type: ptype = 'medico',
+      initial_credits = 0,
+      mark_email_verified = true,
+      accept_all_terms = true,
+      active = true,
+      require_password_change = true,
+    } = request.body || {};
+
+    if (!clinic_name || !rawEmail || !password || !mod) {
+      return reply.status(400).send({ error: 'clinic_name, email, password, module obrigatórios' });
+    }
+    if (password.length < 8) return reply.status(400).send({ error: 'password deve ter mínimo 8 caracteres' });
+    const { VALID_MODULES, VALID_PROFESSIONAL_TYPES } = require('../constants');
+    if (!VALID_MODULES.includes(mod)) return reply.status(400).send({ error: `module deve ser ${VALID_MODULES.join('|')}` });
+    if (!VALID_PROFESSIONAL_TYPES.includes(ptype)) return reply.status(400).send({ error: `professional_type inválido` });
+    if (typeof initial_credits !== 'number' || initial_credits < 0 || initial_credits > 100000) {
+      return reply.status(400).send({ error: 'initial_credits inválido (0-100000)' });
+    }
+
+    const email = rawEmail.toLowerCase().trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return reply.status(400).send({ error: 'Email inválido' });
+
+    const dup = await fastify.pg.query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]);
+    if (dup.rows.length > 0) return reply.status(409).send({ error: 'Email já cadastrado' });
+
+    const password_hash = await bcrypt.hash(password, 12);
+    const client = await fastify.pg.connect();
+    let tenant_id, user_id;
+    try {
+      await client.query('BEGIN');
+
+      const t = await client.query(
+        `INSERT INTO tenants (name, type, module, active)
+         VALUES ($1, 'clinic', $2, $3)
+         RETURNING id`,
+        [clinic_name, mod, !!active]
+      );
+      tenant_id = t.rows[0].id;
+
+      // RLS de users requer app.tenant_id setado
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenant_id]);
+      const u = await client.query(
+        `INSERT INTO users (tenant_id, email, password_hash, role, professional_type,
+                            email_verified_at, password_change_required, active)
+         VALUES ($1, $2, $3, 'admin', $4, $5, $6, true)
+         RETURNING id`,
+        [tenant_id, email, password_hash, ptype,
+         mark_email_verified ? new Date() : null,
+         !!require_password_change]
+      );
+      user_id = u.rows[0].id;
+
+      if (initial_credits > 0) {
+        await client.query(
+          `INSERT INTO credit_ledger (tenant_id, amount, kind, description)
+           VALUES ($1, $2, 'adjustment', 'Créditos iniciais (criação manual)')`,
+          [tenant_id, initial_credits]
+        );
+      }
+
+      if (accept_all_terms) {
+        // Catálogo dos 5 docs legais — espelhado de routes/terms.js (mesmas versões/hashes)
+        const DOCS = [
+          { type: 'contrato_saas',          version: '1.2', hash: '55d768782660c012bb0b957f2d8542718d1ee1b9f17422ad29041c59874acf60' },
+          { type: 'dpa',                    version: '1.2', hash: 'b3313f53a8a804a735a343b53520abf83598851d8c17268ead188dfc050c110c' },
+          { type: 'politica_incidentes',    version: '1.2', hash: '116fb20d8aefeeea3a8327eaf3e9fd2ea7740aecff0cb6c0e35e7a82f91a23a1' },
+          { type: 'politica_seguranca',     version: '1.2', hash: '3b5b2dd66a3824b09e16964b52420d09c92d2f0da60e3f617b22663b1c2c76a8' },
+          { type: 'politica_uso_aceitavel', version: '1.2', hash: 'b624af09829fb0b4095a37f252f93f6032f087465f5c792cb78b47dc8d9c28c5' },
+        ];
+        for (const d of DOCS) {
+          await client.query(
+            `INSERT INTO terms_acceptance (user_id, tenant_id, document_type, version, content_hash, ip, user_agent)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             ON CONFLICT (user_id, document_type, version) DO NOTHING`,
+            [user_id, tenant_id, d.type, d.version, d.hash, request.ip || '0.0.0.0', 'master/manual-create']
+          );
+        }
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      request.log.error({ err }, '[master/create-tenant] falhou');
+      return reply.status(500).send({ error: err.message || 'Falha ao criar tenant' });
+    } finally {
+      client.release();
+    }
+
+    return reply.status(201).send({ tenant_id, user_id, email, active, initial_credits });
+  });
+
+  // ── Gerar link de pagamento Stripe (assinatura ou crédito avulso) ─────────
+  // Cria Checkout Session apontando pro tenant existente. Webhook atual já
+  // reconhece via metadata.tenant_id (não precisa de ramo novo).
+  // Suporta desconto via coupon ad-hoc (1x) ou percent_off por N meses.
+  fastify.post('/tenants/:id/payment-link', auth(), async (request, reply) => {
+    const { id: tenant_id } = request.params;
+    const {
+      mode = 'subscription', // 'subscription' ou 'topup'
+      discount_percent,      // opcional: 0-100
+      duration_months,       // opcional: 1+ (default 'once' se não passar)
+      topup_credits,         // só pra mode='topup'
+      topup_amount_cents,    // só pra mode='topup' (preço total)
+    } = request.body || {};
+
+    if (!['subscription', 'topup'].includes(mode)) {
+      return reply.status(400).send({ error: "mode deve ser 'subscription' ou 'topup'" });
+    }
+    if (discount_percent != null && (discount_percent < 1 || discount_percent > 100)) {
+      return reply.status(400).send({ error: 'discount_percent inválido (1-100)' });
+    }
+
+    const t = await fastify.pg.query(
+      `SELECT t.id, t.name, u.email
+       FROM tenants t
+       JOIN users u ON u.tenant_id = t.id AND u.role = 'admin' AND u.active = true
+       WHERE t.id = $1
+       ORDER BY u.created_at LIMIT 1`,
+      [tenant_id]
+    );
+    if (!t.rows[0]) return reply.status(404).send({ error: 'Tenant ou admin não encontrado' });
+    const { name: tenantName, email: adminEmail } = t.rows[0];
+
+    const stripeClient = require('../services/stripe-client');
+    const stripe = stripeClient.getClient();
+    const frontendUrl = process.env.FRONTEND_URL || 'https://app.genomaflow.com.br';
+
+    // Coupon ad-hoc se houver desconto
+    let couponId = null;
+    if (discount_percent != null && discount_percent > 0) {
+      const couponDuration = duration_months && duration_months > 0 ? 'repeating' : 'once';
+      const coupon = await stripe.coupons.create({
+        percent_off: discount_percent,
+        duration: couponDuration,
+        ...(couponDuration === 'repeating' ? { duration_in_months: duration_months } : {}),
+        name: `Desconto ${discount_percent}% — ${tenantName}`,
+        metadata: { tenant_id, master_generated: 'true' },
+      });
+      couponId = coupon.id;
+    }
+
+    // Customer Stripe — busca por email ou cria
+    const customer = await stripeClient.findOrCreateCustomer({
+      email: adminEmail, name: tenantName, tenantId: tenant_id,
+    });
+
+    let session;
+    if (mode === 'subscription') {
+      const priceId = process.env.STRIPE_PRICE_SUBSCRIPTION;
+      if (!priceId) return reply.status(500).send({ error: 'STRIPE_PRICE_SUBSCRIPTION não configurado' });
+      session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        customer: customer.id,
+        line_items: [{ price: priceId, quantity: 1 }],
+        payment_method_types: ['card'],
+        client_reference_id: tenant_id,
+        metadata: { tenant_id, plan: 'starter', master_generated: 'true' },
+        subscription_data: { metadata: { tenant_id } },
+        ...(couponId ? { discounts: [{ coupon: couponId }] } : {}),
+        success_url: `${frontendUrl}/login?activated=true`,
+        cancel_url: `${frontendUrl}/login?cancelled=true`,
+      });
+    } else {
+      // topup — créditos avulsos
+      if (!topup_credits || !topup_amount_cents) {
+        return reply.status(400).send({ error: 'topup_credits e topup_amount_cents obrigatórios em mode=topup' });
+      }
+      const finalAmount = couponId
+        ? Math.round(topup_amount_cents * (1 - discount_percent / 100))
+        : topup_amount_cents;
+      session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        customer: customer.id,
+        line_items: [{
+          price_data: {
+            currency: 'brl',
+            product_data: { name: `Créditos GenomaFlow (${topup_credits})${discount_percent ? ` — ${discount_percent}% desc` : ''}` },
+            unit_amount: finalAmount,
+          },
+          quantity: 1,
+        }],
+        payment_method_types: ['card'],
+        client_reference_id: tenant_id,
+        metadata: { tenant_id, credits: String(topup_credits), kind: 'topup', master_generated: 'true' },
+        success_url: `${frontendUrl}/billing?topup=success`,
+        cancel_url: `${frontendUrl}/billing?topup=cancel`,
+      });
+    }
+
+    return reply.status(201).send({
+      url: session.url,
+      session_id: session.id,
+      expires_at: session.expires_at,
+      coupon_id: couponId,
+      discount_percent: discount_percent || 0,
+    });
+  });
+
   // ── Tenant detail (visão consolidada — info, saldo, users) ────────────────
   fastify.get('/tenants/:id/detail', auth(), async (request, reply) => {
     const { id } = request.params;

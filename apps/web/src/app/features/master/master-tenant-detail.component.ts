@@ -10,7 +10,9 @@ import { MatInputModule } from '@angular/material/input';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { environment } from '../../../environments/environment';
+import { PaymentLinkDialogComponent } from './payment-link-dialog.component';
 
 interface TenantInfo {
   id: string;
@@ -74,7 +76,7 @@ interface TenantDetail {
   imports: [
     CommonModule, DatePipe, FormsModule, RouterModule,
     MatIconModule, MatButtonModule, MatFormFieldModule, MatInputModule,
-    MatTooltipModule, MatSnackBarModule, MatProgressSpinnerModule,
+    MatTooltipModule, MatSnackBarModule, MatProgressSpinnerModule, MatDialogModule,
   ],
   styles: [`
     :host { display:block; padding:1.5rem 2rem 3rem; max-width:1200px; margin:0 auto; color:#dae2fd; }
@@ -242,6 +244,12 @@ interface TenantDetail {
           <input type="text" [(ngModel)]="creditDescription" placeholder="Motivo (opcional)"
                  style="margin-top:.5rem; width:100%; padding:.45rem .625rem; border-radius:4px; border:1px solid rgba(70,69,84,.4); background:#0e1525; color:#dae2fd; font-size:.8rem;"/>
 
+          <button class="btn-ghost" style="margin-top:.75rem; width:100%;"
+                  (click)="openPaymentLink()" matTooltip="Cria Stripe Checkout Session pra esse tenant (suporta desconto via coupon)">
+            <mat-icon style="font-size:14px;width:14px;height:14px;vertical-align:middle;margin-right:4px;">credit_card</mat-icon>
+            Gerar link de pagamento Stripe
+          </button>
+
           @if (data()!.credit_history.length > 0) {
             <div style="font-family:'JetBrains Mono',monospace; font-size:.65rem; color:#7c7b8f; margin-top:1rem; text-transform:uppercase; letter-spacing:.1em;">Últimos lançamentos</div>
             <div class="credit-history">
@@ -325,6 +333,7 @@ export class MasterTenantDetailComponent implements OnInit {
   private router = inject(Router);
   private http   = inject(HttpClient);
   private snack  = inject(MatSnackBar);
+  private dialog = inject(MatDialog);
 
   data       = signal<TenantDetail | null>(null);
   loading    = signal(true);
@@ -432,6 +441,16 @@ export class MasterTenantDetailComponent implements OnInit {
         this.saving.set(false);
         this.snack.open(err.error?.error || 'Erro ao resetar senha', 'OK', { duration: 4000 });
       },
+    });
+  }
+
+  openPaymentLink() {
+    const d = this.data();
+    if (!d) return;
+    this.dialog.open(PaymentLinkDialogComponent, {
+      width: '560px',
+      panelClass: 'dark-dialog',
+      data: { tenant_id: d.tenant.id, tenant_name: d.tenant.name },
     });
   }
 

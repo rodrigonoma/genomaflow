@@ -3,8 +3,10 @@ import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { DatePipe, DecimalPipe, JsonPipe } from '@angular/common';
 import { Router } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
 import { AuthService } from '../../core/auth/auth.service';
 import { environment } from '../../../environments/environment';
+import { CreateTenantDialogComponent } from './create-tenant-dialog.component';
 
 interface Tenant {
   id: string; name: string; type: string; module: string; plan: string;
@@ -259,6 +261,9 @@ interface Stats {
           <button class="filter-btn" [class.active]="tenantFilter() === 'all'" (click)="tenantFilter.set('all')">Todos</button>
           <button class="filter-btn" [class.active]="tenantFilter() === 'pending'" (click)="tenantFilter.set('pending')">
             Pendentes @if (pendingCount() > 0) { ({{ pendingCount() }}) }
+          </button>
+          <button class="btn btn-sm-green" style="margin-left:auto" (click)="openCreateTenant()">
+            + Criar tenant
           </button>
         </div>
         @if (tenantsLoading()) {
@@ -877,6 +882,7 @@ export class MasterComponent implements OnInit {
   private http   = inject(HttpClient);
   private auth   = inject(AuthService);
   private router = inject(Router);
+  private dialog = inject(MatDialog);
 
   tabs = [
     { id: 'tenants',     label: 'Tenants',    icon: 'business' },
@@ -1243,6 +1249,16 @@ export class MasterComponent implements OnInit {
   /** Abre tela de gerenciamento consolidado do tenant (ações: ativar, créditos, users, reset senha, etc) */
   openTenantDetail(t: Tenant): void {
     this.router.navigate(['/master/tenants', t.id]);
+  }
+
+  /** Abre dialog para criar tenant manualmente (com opções de créditos iniciais, ativar, marcar email verificado, aceitar termos) */
+  openCreateTenant(): void {
+    this.dialog.open(CreateTenantDialogComponent, {
+      width: '560px',
+      panelClass: 'dark-dialog',
+    }).afterClosed().subscribe((res) => {
+      if (res) this.loadTenants(); // refrescar lista
+    });
   }
 
   toggleExpand(t: Tenant): void {

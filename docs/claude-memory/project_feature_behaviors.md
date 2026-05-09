@@ -181,6 +181,56 @@ Tela `/master/tenants/:id` (master only) consolida ações que antes só eram po
 
 ---
 
+## Master — criar tenant manual + payment link Stripe (2026-05-09)
+
+Estende a tela master de gestão consolidada com 2 ações novas que antes só eram possíveis via fluxo Stripe + manual SQL.
+
+**Backend:**
+- `POST /master/tenants` — cria tenant + user admin em transação. Body:
+  ```
+  { clinic_name, email, password, module, professional_type,
+    initial_credits=0, mark_email_verified=true, accept_all_terms=true,
+    active=true, require_password_change=true }
+  ```
+  - Aceita os 5 documentos legais ativos automaticamente (catálogo espelhado de routes/terms.js)
+  - Adiciona créditos iniciais como `kind='adjustment'` no credit_ledger
+  - Marca email_verified_at = NOW() (pula verificação SES)
+  - Marca password_change_required = true (recomendado pra senhas temporárias)
+- `POST /master/tenants/:id/payment-link` — gera Stripe Checkout Session apontando pra tenant existente. Body:
+  ```
+  { mode: 'subscription'|'topup',
+    discount_percent?: 1-100,
+    duration_months?: N (só pra subscription, default 'once'),
+    topup_credits?, topup_amount_cents? (só pra topup) }
+  ```
+  - Usa `stripeClient.findOrCreateCustomer` (busca por email ou cria)
+  - Subscription: usa STRIPE_PRICE_SUBSCRIPTION (preço padrão)
+  - Topup: cria line_item com price_data inline (centavos)
+  - Desconto: cria Stripe Coupon ad-hoc com `percent_off` e `duration='once'` ou `'repeating'+duration_in_months`. Para topup, aplica desconto manualmente no `unit_amount` (Coupon não funciona em modo `payment` no Stripe)
+  - Retorna `{ url, session_id, expires_at, coupon_id, discount_percent }`
+
+**Webhook (sem mudança):** o handler atual já reconhece sessions com `metadata.tenant_id` como pagamento normal — ativa subscription / credita ledger conforme o evento. O master_generated:'true' na metadata é só informativo, não afeta o flow.
+
+**Frontend:**
+- `create-tenant-dialog.component.ts` — dialog standalone com form completo:
+  - Campos obrigatórios: clinic_name, email, password (≥8), module, professional_type
+  - Toggles defaults ON: tenant ativo, marcar email verificado, aceitar todos termos, exigir troca de senha no primeiro login
+  - Mostra IDs criados em caixa verde após sucesso
+  - Aberto via botão "+ Criar tenant" na aba Tenants do master
+- `payment-link-dialog.component.ts` — dialog com toggle modo (Assinatura/Créditos avulsos):
+  - Subscription: usa preço fixo configurado
+  - Topup: input qtd + valor em R$ (converte pra centavos no submit)
+  - Desconto opcional: input %; em subscription, opcional duração em meses (vazio = só 1ª fatura)
+  - Mostra link gerado em caixa verde + botão Copiar (clipboard API)
+  - Aberto via botão "Gerar link de pagamento Stripe" no card Créditos do master-tenant-detail
+
+**Por que essa estrutura:**
+- Antes: criar tenant exigia rodar `/auth/register` + master ativar + master verificar email + (futuro) registrar termos. Agora: 1 ação atômica
+- Antes: gerar pagamento exigia o cliente ir pelo `/onboarding/checkout` (que cria tenant novo) ou usar fluxo de upgrade complicado. Agora: master gera link customizado pra tenant existente, com desconto opcional, e o webhook trata igual qualquer outro pagamento
+- `master_generated:'true'` na metadata permite filtrar/distinguir pagamentos gerados por master no futuro (analytics, audit)
+
+---
+
 ## Tutor (módulo veterinary) — visualizar/editar dados completos (2026-05-09)
 
 Antes só dava pra cadastrar tutor novo (em `patient-list`) ou ver `owner_name + owner_phone` read-only no `patient-detail`. Agora há UI completa de visualizar e editar.
