@@ -49,7 +49,31 @@ jobs:
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
 
-      - name: Build Android AAB
+      - name: Build Android APK (debug para sideload / release se keystore presente)
+        working-directory: apps/web/android
+        run: |
+          if [ -n "$KEYSTORE_PASSWORD" ]; then
+            ./gradlew assembleRelease
+            APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          else
+            ./gradlew assembleDebug
+            APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
+          fi
+          echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
+        env:
+          KEYSTORE_PATH: app/genomaflow-release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: genomaflow
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: genomaflow-android-${{ github.ref_name }}
+          path: apps/web/android/${{ env.APK_PATH }}
+          retention-days: 30
+
+      - name: Build Android AAB (para Play Store)
         working-directory: apps/web/android
         run: ./gradlew bundleRelease
         env:
