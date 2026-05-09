@@ -30,15 +30,19 @@ import {
     .header-title { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1rem; color:#c0c1ff; }
     .header-sub { font-family:'JetBrains Mono',monospace; font-size:.7rem; color:#6e6d80; }
 
-    .video-area { flex:1; display:flex; flex-direction:column; background:#060d1a; position:relative; }
-    .remote-video { flex:1; object-fit:cover; background:#000; }
+    .video-area { flex:1; min-height:0; display:flex; flex-direction:column; background:#060d1a; position:relative; overflow:hidden; }
+    /* min-height:0 + width:100% força <video> a respeitar o flex em vez de crescer pelo aspect ratio do stream */
+    .remote-video { flex:1; min-height:0; width:100%; object-fit:cover; background:#000; }
     .self-video {
-      position:absolute; bottom:80px; right:12px;
+      position:absolute; bottom:80px; right:12px; z-index:2;
       width:120px; height:85px; border-radius:8px;
       border:2px solid rgba(192,193,255,0.3); object-fit:cover; background:#111;
     }
 
+    /* Controls absolute igual ao doctor-room — quando o stream remoto chega, o flex
+       não é empurrado pra fora da viewport */
     .controls {
+      position:absolute; bottom:0; left:0; right:0; z-index:3;
       height:64px; background:#111929;
       display:flex; align-items:center; justify-content:center; gap:1rem;
       border-top:1px solid rgba(70,69,84,0.3);
