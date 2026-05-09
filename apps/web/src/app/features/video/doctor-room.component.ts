@@ -43,6 +43,7 @@ import {
       z-index:2;
     }
     .video-area:hover .self-video { bottom:80px; }
+    .remote-audio { display:none; } /* hidden but bound for autoplay reliability */
 
     .controls {
       position:absolute; bottom:0; left:0; right:0; z-index:3;
@@ -180,6 +181,7 @@ import {
 
         <video #remoteVideo class="remote-video" autoplay playsinline></video>
         <video #selfVideo class="self-video" autoplay playsinline muted></video>
+        <audio #remoteAudio class="remote-audio" autoplay></audio>
 
         <div class="controls">
           <button class="ctrl-btn" [class.active]="!audioMuted()" (click)="toggleAudio()" title="Mute">
@@ -346,6 +348,7 @@ import {
 export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('remoteVideo') remoteVideoEl!: ElementRef<HTMLVideoElement>;
   @ViewChild('selfVideo') selfVideoEl!: ElementRef<HTMLVideoElement>;
+  @ViewChild('remoteAudio') remoteAudioEl!: ElementRef<HTMLAudioElement>;
 
   private route = inject(ActivatedRoute);
   private router = inject(Router);
@@ -479,28 +482,44 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
         },
       });
 
-      // Lista e seleciona devices via Chime SDK (Chime gerencia o stream — getUserMedia
-      // direto não roteia áudio/vídeo até o outro participante)
-      const audioInputs = await deviceController.listAudioInputDevices();
-      const videoInputs = await deviceController.listVideoInputDevices();
-      if (audioInputs.length > 0) {
-        await this.meetingSession.audioVideo.startAudioInput(audioInputs[0].deviceId);
+      // 1 ÚNICO getUserMedia: serve simultaneamente Chime SDK + MediaRecorder.
+      // Chime aceita MediaStream em startAudioInput/startVideoInput, então passamos o
+      // mesmo stream — sem segundo getUserMedia paralelo (que conflitava com o
+      // capture do Chime e cortava áudio entre os participantes).
+      // Bonus: também serve de pre-permission (libera enumerateDevices a retornar IDs reais).
+      let fullStream: MediaStream | null = null;
+      try {
+        fullStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        this.localStream = fullStream;
+      } catch (err) {
+        console.warn('[DoctorRoom] getUserMedia inicial negado:', err);
       }
-      if (videoInputs.length > 0) {
-        await this.meetingSession.audioVideo.startVideoInput(videoInputs[0].deviceId);
+
+      // Lista devices (apenas para diagnóstico — não usamos os deviceIds quando temos o stream)
+      await deviceController.listAudioInputDevices().catch(() => []);
+      await deviceController.listVideoInputDevices().catch(() => []);
+
+      if (fullStream) {
+        // Chime SDK lê do MediaStream diretamente — não cria getUserMedia interno
+        await this.meetingSession.audioVideo.startAudioInput(fullStream);
+        await this.meetingSession.audioVideo.startVideoInput(fullStream);
+      }
+
+      // Bind do <audio> remoto — defesa contra autoplay restrito
+      if (this.remoteAudioEl?.nativeElement) {
+        this.meetingSession.audioVideo.bindAudioElement?.(this.remoteAudioEl.nativeElement);
       }
 
       // Inicia sessão Chime
       this.meetingSession.audioVideo.start();
       this.meetingSession.audioVideo.startLocalVideoTile();
 
-      // Grava áudio para transcrição (via getUserMedia separado — Chime SDK não expõe stream cru)
-      try {
-        const recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        this.localStream = recStream;
-        this.startRecording(recStream);
-      } catch (err) {
-        console.warn('[DoctorRoom] gravação local falhou (transcrição indisponível):', err);
+      // Grava o MESMO stream pro MediaRecorder (Whisper transcreve áudio do médico).
+      // Mix local+remoto fica como melhoria futura — gravar fala do médico já é útil
+      // pra pré-preencher o prontuário (médico documenta verbalmente).
+      if (fullStream && fullStream.getAudioTracks().length) {
+        const audioStream = new MediaStream(fullStream.getAudioTracks());
+        this.startRecording(audioStream);
       }
 
     } catch (err: any) {

@@ -39,6 +39,7 @@ import { interval, Subscription } from 'rxjs';
       width:120px; height:85px; border-radius:8px;
       border:2px solid rgba(192,193,255,0.3); object-fit:cover; background:#111;
     }
+    .remote-audio { display:none; } /* hidden but bound for autoplay reliability */
 
     /* Controls absolute igual ao doctor-room — quando o stream remoto chega, o flex
        não é empurrado pra fora da viewport */
@@ -152,6 +153,7 @@ import { interval, Subscription } from 'rxjs';
       <div class="video-area">
         <video #remoteVideo class="remote-video" autoplay playsinline></video>
         <video #selfVideo class="self-video" autoplay playsinline muted></video>
+        <audio #remoteAudio class="remote-audio" autoplay></audio>
 
         @if (doctorFiles().length > 0) {
           <div class="files-bar">
@@ -189,6 +191,7 @@ import { interval, Subscription } from 'rxjs';
 export class PatientRoomComponent implements OnInit, OnDestroy {
   @ViewChild('remoteVideo') remoteVideoEl!: ElementRef<HTMLVideoElement>;
   @ViewChild('selfVideo') selfVideoEl!: ElementRef<HTMLVideoElement>;
+  @ViewChild('remoteAudio') remoteAudioEl!: ElementRef<HTMLAudioElement>;
 
   private route = inject(ActivatedRoute);
   private snack = inject(MatSnackBar);
@@ -310,15 +313,27 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
         },
       });
 
-      // Lista e seleciona devices via Chime SDK (não getUserMedia direto — Chime precisa
-      // gerenciar o stream pra rotear áudio/vídeo até o outro participante)
-      const audioInputs = await deviceController.listAudioInputDevices();
-      const videoInputs = await deviceController.listVideoInputDevices();
-      if (audioInputs.length > 0) {
-        await this.meetingSession.audioVideo.startAudioInput(audioInputs[0].deviceId);
+      // 1 ÚNICO getUserMedia — passamos o stream direto pro Chime SDK (não chama
+      // getUserMedia interno, evita disputa pela mesma device).
+      let fullStream: MediaStream | null = null;
+      try {
+        fullStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        this.localStream = fullStream;
+      } catch (err) {
+        console.warn('[PatientRoom] getUserMedia negado:', err);
       }
-      if (videoInputs.length > 0) {
-        await this.meetingSession.audioVideo.startVideoInput(videoInputs[0].deviceId);
+
+      await deviceController.listAudioInputDevices().catch(() => []);
+      await deviceController.listVideoInputDevices().catch(() => []);
+
+      if (fullStream) {
+        await this.meetingSession.audioVideo.startAudioInput(fullStream);
+        await this.meetingSession.audioVideo.startVideoInput(fullStream);
+      }
+
+      // Bind do <audio> remoto pra garantir reprodução em navegadores com autoplay restrito
+      if (this.remoteAudioEl?.nativeElement) {
+        this.meetingSession.audioVideo.bindAudioElement?.(this.remoteAudioEl.nativeElement);
       }
 
       this.meetingSession.audioVideo.start();
