@@ -147,12 +147,50 @@ module.exports = async function (fastify) {
     });
   });
 
+  // POST /auth/change-password — usuário autenticado troca a própria senha.
+  // Requer current_password (defesa). Limpa flag password_change_required ao salvar.
+  fastify.post('/change-password', {
+    config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+    preHandler: [fastify.authenticate],
+  }, async (request, reply) => {
+    const { user_id } = request.user;
+    const { current_password, new_password } = request.body || {};
+    if (!current_password || !new_password) {
+      return reply.status(400).send({ error: 'current_password e new_password são obrigatórios' });
+    }
+    if (new_password.length < 8) {
+      return reply.status(400).send({ error: 'Nova senha deve ter no mínimo 8 caracteres' });
+    }
+    if (current_password === new_password) {
+      return reply.status(400).send({ error: 'Nova senha deve ser diferente da atual' });
+    }
+
+    const { rows } = await fastify.pg.query(
+      `SELECT password_hash FROM users WHERE id = $1`, [user_id]
+    );
+    if (!rows[0]) return reply.status(404).send({ error: 'Usuário não encontrado' });
+
+    const ok = await bcrypt.compare(current_password, rows[0].password_hash);
+    if (!ok) return reply.status(401).send({ error: 'Senha atual incorreta' });
+
+    const new_hash = await bcrypt.hash(new_password, 12);
+    await fastify.pg.query(
+      `UPDATE users
+         SET password_hash = $1,
+             password_change_required = false
+       WHERE id = $2`,
+      [new_hash, user_id]
+    );
+
+    return { ok: true };
+  });
+
   fastify.get('/me', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { user_id, tenant_id } = request.user;
     const { rows } = await fastify.pg.query(
       `SELECT u.id, u.email, u.role, u.specialty, u.created_at,
               u.crm_number, u.crm_uf, u.professional_data_confirmed_at,
-              u.professional_type,
+              u.professional_type, u.password_change_required,
               t.module, t.name AS tenant_name, t.billing_status
        FROM users u
        JOIN tenants t ON t.id = u.tenant_id

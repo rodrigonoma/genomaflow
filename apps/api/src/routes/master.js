@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 const { withTenant } = require('../db/tenant');
 const {
   resolveTargetTenants,
@@ -203,6 +204,116 @@ module.exports = async function masterRoutes(fastify) {
 
     fastify.redis.publish(`billing:updated:${tenant_id}`, '{}').catch(() => {});
     return { ok: true, ...rows[0], tenant_name: tenantCheck.rows[0].name };
+  });
+
+  // ── Tenant detail (visão consolidada — info, saldo, users) ────────────────
+  fastify.get('/tenants/:id/detail', auth(), async (request, reply) => {
+    const { id } = request.params;
+    const t = await fastify.pg.query(
+      `SELECT t.id, t.name, t.module, t.type, t.active, t.created_at
+       FROM tenants t WHERE t.id = $1`,
+      [id]
+    );
+    if (!t.rows[0]) return reply.status(404).send({ error: 'Tenant não encontrado' });
+
+    const [bal, users, recent] = await Promise.all([
+      fastify.pg.query(
+        `SELECT COALESCE(SUM(amount),0)::int AS balance FROM credit_ledger WHERE tenant_id = $1`,
+        [id]
+      ),
+      fastify.pg.query(
+        `SELECT id, email, role, specialty, professional_type, active,
+                email_verified_at, password_change_required, created_at
+         FROM users WHERE tenant_id = $1 AND role != 'master'
+         ORDER BY created_at`,
+        [id]
+      ),
+      fastify.pg.query(
+        `SELECT id, amount, kind, description, created_at
+         FROM credit_ledger WHERE tenant_id = $1
+         ORDER BY created_at DESC LIMIT 30`,
+        [id]
+      ),
+    ]);
+
+    return {
+      tenant: t.rows[0],
+      balance: bal.rows[0].balance,
+      users: users.rows,
+      credit_history: recent.rows,
+    };
+  });
+
+  // ── User actions (master gerencia users de qualquer tenant) ───────────────
+
+  // Marca email como verificado (não envia link, master pula a etapa de verificação)
+  fastify.post('/users/:userId/verify-email', auth(), async (request, reply) => {
+    const { userId } = request.params;
+    const { rowCount, rows } = await fastify.pg.query(
+      `UPDATE users SET email_verified_at = NOW()
+       WHERE id = $1 AND role != 'master' AND email_verified_at IS NULL
+       RETURNING id, email, email_verified_at`,
+      [userId]
+    );
+    if (!rowCount) {
+      // Pode estar já verificado OU não existe OU é master (não permitido)
+      const check = await fastify.pg.query(
+        `SELECT id, email, email_verified_at, role FROM users WHERE id = $1`,
+        [userId]
+      );
+      if (!check.rows[0]) return reply.status(404).send({ error: 'Usuário não encontrado' });
+      if (check.rows[0].role === 'master') return reply.status(403).send({ error: 'Não permitido em conta master' });
+      return reply.status(409).send({ error: 'Email já verificado', user: check.rows[0] });
+    }
+    return { ok: true, user: rows[0] };
+  });
+
+  // Reseta senha (master define ou gera temporária) + opção de forçar troca no 1º login
+  fastify.post('/users/:userId/reset-password', auth(), async (request, reply) => {
+    const { userId } = request.params;
+    const { password, require_change = true } = request.body || {};
+    if (!password || typeof password !== 'string' || password.length < 8) {
+      return reply.status(400).send({ error: 'password obrigatório (mín 8 caracteres)' });
+    }
+
+    const userCheck = await fastify.pg.query(
+      `SELECT id, email, role, tenant_id FROM users WHERE id = $1`, [userId]
+    );
+    if (!userCheck.rows[0]) return reply.status(404).send({ error: 'Usuário não encontrado' });
+    if (userCheck.rows[0].role === 'master') {
+      return reply.status(403).send({ error: 'Use o fluxo próprio para resetar senha master' });
+    }
+
+    const password_hash = await bcrypt.hash(password, 12);
+    const { rows } = await fastify.pg.query(
+      `UPDATE users
+         SET password_hash = $1,
+             password_change_required = $2
+       WHERE id = $3
+       RETURNING id, email, password_change_required`,
+      [password_hash, !!require_change, userId]
+    );
+
+    // Invalida sessão atual (single-session JTI) — força novo login
+    try {
+      await fastify.redis.del(`session:${userId}`);
+    } catch { /* ok */ }
+
+    return { ok: true, user: rows[0] };
+  });
+
+  // Força (ou cancela) troca de senha no próximo login — sem mudar a senha
+  fastify.patch('/users/:userId/require-password-change', auth(), async (request, reply) => {
+    const { userId } = request.params;
+    const { required = true } = request.body || {};
+    const { rows, rowCount } = await fastify.pg.query(
+      `UPDATE users SET password_change_required = $1
+       WHERE id = $2 AND role != 'master'
+       RETURNING id, email, password_change_required`,
+      [!!required, userId]
+    );
+    if (!rowCount) return reply.status(404).send({ error: 'Usuário não encontrado ou é master' });
+    return { ok: true, user: rows[0] };
   });
 
   // ── Stats ─────────────────────────────────────────────────────────────────
