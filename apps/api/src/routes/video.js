@@ -355,8 +355,9 @@ module.exports = async function (fastify) {
       return reply.status(401).send({ error: 'Link inválido ou expirado' });
     }
 
+    // 1. Busca pelo ID (sem filtrar por token na query — token verificado em seguida)
     const { rows } = await fastify.pg.query(
-      `SELECT vc.id, vc.meeting_id, vc.patient_attendee_id, vc.modality, vc.status,
+      `SELECT vc.id, vc.join_token, vc.meeting_id, vc.patient_attendee_id, vc.modality, vc.status,
               vc.started_at, vc.tenant_id,
               t.name AS clinic_name,
               u.email AS doctor_name,
@@ -365,11 +366,24 @@ module.exports = async function (fastify) {
        JOIN appointments a ON a.id = vc.appointment_id
        JOIN tenants t ON t.id = vc.tenant_id
        JOIN users u ON u.id = a.user_id
-       WHERE vc.id = $1 AND vc.join_token = $2`,
-      [payload.consultation_id, request.params.token]
+       WHERE vc.id = $1`,
+      [payload.consultation_id]
     );
 
-    if (!rows[0]) return reply.status(404).send({ error: 'Consulta não encontrada' });
+    if (!rows[0]) {
+      request.log.warn({ consultation_id: payload.consultation_id }, '[video/join] consulta não encontrada no banco');
+      return reply.status(404).send({ error: 'Consulta não encontrada' });
+    }
+
+    // 2. Valida token na camada de aplicação (separa "consulta não existe" de "link errado")
+    if (rows[0].join_token !== request.params.token) {
+      request.log.warn(
+        { consultation_id: payload.consultation_id, stored_tail: rows[0].join_token.slice(-12), received_tail: request.params.token.slice(-12) },
+        '[video/join] token não confere com o armazenado no banco'
+      );
+      return reply.status(401).send({ error: 'Link inválido ou expirado' });
+    }
+
     const vc = rows[0];
 
     // Busca MediaPlacement fresco do Chime para o paciente iniciar o SDK
