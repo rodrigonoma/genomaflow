@@ -165,24 +165,32 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
       const config = new MeetingSessionConfiguration(meeting, attendee);
       this.meetingSession = new DefaultMeetingSession(config, logger, deviceController);
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      this.localStream = stream;
-      if (this.selfVideoEl?.nativeElement) {
-        this.selfVideoEl.nativeElement.srcObject = stream;
+      // Observer DEVE ser registrado antes do start() pra capturar o tile local quando ele aparece
+      this.meetingSession.audioVideo.addObserver({
+        videoTileDidUpdate: (tileState: any) => {
+          if (!tileState.boundAttendeeId) return;
+          const targetEl = tileState.localTile
+            ? this.selfVideoEl?.nativeElement
+            : this.remoteVideoEl?.nativeElement;
+          if (targetEl) {
+            this.meetingSession.audioVideo.bindVideoElement(tileState.tileId, targetEl);
+          }
+        },
+      });
+
+      // Lista e seleciona devices via Chime SDK (não getUserMedia direto — Chime precisa
+      // gerenciar o stream pra rotear áudio/vídeo até o outro participante)
+      const audioInputs = await deviceController.listAudioInputDevices();
+      const videoInputs = await deviceController.listVideoInputDevices();
+      if (audioInputs.length > 0) {
+        await this.meetingSession.audioVideo.startAudioInput(audioInputs[0].deviceId);
+      }
+      if (videoInputs.length > 0) {
+        await this.meetingSession.audioVideo.startVideoInput(videoInputs[0].deviceId);
       }
 
       this.meetingSession.audioVideo.start();
       this.meetingSession.audioVideo.startLocalVideoTile();
-
-      this.meetingSession.audioVideo.addObserver({
-        videoTileDidUpdate: (tileState: any) => {
-          if (!tileState.localTile && this.remoteVideoEl?.nativeElement) {
-            this.meetingSession.audioVideo.bindVideoElement(
-              tileState.tileId, this.remoteVideoEl.nativeElement
-            );
-          }
-        },
-      });
     } catch (err) {
       console.error('[PatientRoom] join error:', err);
       this.snack.open('Erro ao acessar câmera/microfone', 'Fechar', { duration: 5000 });
@@ -190,13 +198,20 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
   }
 
   toggleAudio() {
-    this.audioMuted.set(!this.audioMuted());
-    this.localStream?.getAudioTracks().forEach(t => { t.enabled = !this.audioMuted(); });
+    const next = !this.audioMuted();
+    this.audioMuted.set(next);
+    if (next) this.meetingSession?.audioVideo?.realtimeMuteLocalAudio();
+    else this.meetingSession?.audioVideo?.realtimeUnmuteLocalAudio();
   }
 
-  toggleVideo() {
-    this.videoOff.set(!this.videoOff());
-    this.localStream?.getVideoTracks().forEach(t => { t.enabled = !this.videoOff(); });
+  async toggleVideo() {
+    const next = !this.videoOff();
+    this.videoOff.set(next);
+    if (next) {
+      this.meetingSession?.audioVideo?.stopLocalVideoTile();
+    } else {
+      this.meetingSession?.audioVideo?.startLocalVideoTile();
+    }
   }
 
   async uploadFile(event: Event) {

@@ -425,30 +425,42 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
       const config = new MeetingSessionConfiguration(meeting, attendee);
       this.meetingSession = new DefaultMeetingSession(config, logger, deviceController);
 
-      // Câmera e microfone locais
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      this.localStream = stream;
-      if (this.selfVideoEl?.nativeElement) {
-        this.selfVideoEl.nativeElement.srcObject = stream;
+      // Observer DEVE ser registrado antes do start() pra capturar o tile local
+      this.meetingSession.audioVideo.addObserver({
+        videoTileDidUpdate: (tileState: any) => {
+          if (!tileState.boundAttendeeId) return;
+          const targetEl = tileState.localTile
+            ? this.selfVideoEl?.nativeElement
+            : this.remoteVideoEl?.nativeElement;
+          if (targetEl) {
+            this.meetingSession.audioVideo.bindVideoElement(tileState.tileId, targetEl);
+          }
+        },
+      });
+
+      // Lista e seleciona devices via Chime SDK (Chime gerencia o stream — getUserMedia
+      // direto não roteia áudio/vídeo até o outro participante)
+      const audioInputs = await deviceController.listAudioInputDevices();
+      const videoInputs = await deviceController.listVideoInputDevices();
+      if (audioInputs.length > 0) {
+        await this.meetingSession.audioVideo.startAudioInput(audioInputs[0].deviceId);
+      }
+      if (videoInputs.length > 0) {
+        await this.meetingSession.audioVideo.startVideoInput(videoInputs[0].deviceId);
       }
 
       // Inicia sessão Chime
       this.meetingSession.audioVideo.start();
       this.meetingSession.audioVideo.startLocalVideoTile();
 
-      // Recebe vídeo remoto
-      this.meetingSession.audioVideo.addObserver({
-        videoTileDidUpdate: (tileState: any) => {
-          if (!tileState.localTile && this.remoteVideoEl?.nativeElement) {
-            this.meetingSession.audioVideo.bindVideoElement(
-              tileState.tileId, this.remoteVideoEl.nativeElement
-            );
-          }
-        },
-      });
-
-      // Grava áudio mixed para transcrição
-      this.startRecording(stream);
+      // Grava áudio para transcrição (via getUserMedia separado — Chime SDK não expõe stream cru)
+      try {
+        const recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        this.localStream = recStream;
+        this.startRecording(recStream);
+      } catch (err) {
+        console.warn('[DoctorRoom] gravação local falhou (transcrição indisponível):', err);
+      }
 
     } catch (err: any) {
       console.error('[DoctorRoom] Chime join error:', err);
@@ -515,13 +527,20 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   toggleAudio() {
-    this.audioMuted.set(!this.audioMuted());
-    this.localStream?.getAudioTracks().forEach(t => { t.enabled = !this.audioMuted(); });
+    const next = !this.audioMuted();
+    this.audioMuted.set(next);
+    if (next) this.meetingSession?.audioVideo?.realtimeMuteLocalAudio();
+    else this.meetingSession?.audioVideo?.realtimeUnmuteLocalAudio();
   }
 
   toggleVideo() {
-    this.videoOff.set(!this.videoOff());
-    this.localStream?.getVideoTracks().forEach(t => { t.enabled = !this.videoOff(); });
+    const next = !this.videoOff();
+    this.videoOff.set(next);
+    if (next) {
+      this.meetingSession?.audioVideo?.stopLocalVideoTile();
+    } else {
+      this.meetingSession?.audioVideo?.startLocalVideoTile();
+    }
   }
 
   async pipToggle() {
