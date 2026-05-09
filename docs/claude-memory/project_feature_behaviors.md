@@ -121,6 +121,13 @@ Dois modos: simples (2 créditos, só vídeo) e completa (6 créditos, vídeo + 
 - Arquivos recebidos durante a consulta ganham badge verde "novo" + borda destacada até serem clicados
 - Snackbar "📎 paciente enviou: filename" com botão Abrir aparece em real-time
 
+**Sala do paciente — UX dos arquivos (médico→paciente):**
+- Paciente é público (sem auth/WS) — não recebe `video:file_shared`. Em vez disso, faz **polling a cada 5s** em `GET /files?join_token=...` (interval rxjs)
+- Quando detecta arquivo novo do médico (uploaded_by='doctor' que não estava na lista anterior): mostra snackbar "📎 Médico enviou: X" com botão Abrir, badge "novo" no card até ser clicado
+- Lista de arquivos do médico aparece como overlay no topo da área de vídeo (`.files-bar`), backdrop blur, max 38vh com scroll
+- Polling para quando `hasLeft()` é true (paciente saiu da chamada)
+- Helper `stopMediaSession()` em ambos os lados libera mic/cam corretamente (chama `stopAudioInput`/`stopVideoInput` antes de `stop()`)
+
 Botão "📹 Iniciar vídeo" no edit-appointment-dialog ao appointment_type='telemedicina'. IAM Chime obrigatório em prod: `chime:CreateMeeting/DeleteMeeting/CreateAttendee/DeleteAttendee` na task role ECS. Créditos: `video_simple` -2, `video_complete` -6, `video_transcription_refund` +4 (estorno em falha).
 
 **Pegadinhas críticas (incidentes 2026-05-09):**
@@ -186,7 +193,19 @@ A aba **Prontuário** do `patient-detail.component.ts` mostra **somente lista de
 - Distinção visual entre encounter manual e gerado por IA (vídeo) — médico sabe a origem do registro
 - Estado vazio bem desenhado com ícone + descrição
 
-**Aba "Evolução" (separada)** continua mostrando comparação de exames + gráficos de marcadores ao longo do tempo. NÃO confundir com "evolução clínica" (que vai pro Prontuário). Nome da aba mantido por compatibilidade visual com fluxo do médico.
+**Aba "Tendências" (renomeada de "Evolução" em 2026-05-09)** continua mostrando comparação de exames + gráficos de marcadores ao longo do tempo. **Renomeação por decisão das personas (PO/PM/UX/UI/Design):** "Evolução" no jargão clínico é encontro/registro contínuo (CFM/CRMV) — usar essa palavra para "gráficos de marcadores" cria conflito semântico. "Tendências" comunica diretamente que é análise temporal de valores laboratoriais.
+
+**Estrutura final das abas (após refatoração 2026-05-09):**
+Perfil | Prontuário | Vacinas (vet only) | Exames | Tratamentos | 🕐 Timeline | Tendências
+
+Cada aba tem propósito único:
+- **Perfil**: identificação + dados clínicos editáveis
+- **Prontuário**: encounters cronológicos (consultas, retornos, evoluções, procedimentos, telemedicina) — REGISTRO MÉDICO
+- **Vacinas** (vet): calendário e histórico de doses
+- **Exames**: laboratoriais com análise IA
+- **Tratamentos**: prescrições + planos terapêuticos
+- **Timeline**: visão cronológica transversal de TODOS os eventos do paciente
+- **Tendências**: gráficos comparativos de marcadores ao longo do tempo
 
 ---
 
