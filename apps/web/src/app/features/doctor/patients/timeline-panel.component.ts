@@ -9,6 +9,7 @@ import { Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { TimelineEvent } from './patient-timeline.component';
 import { environment } from '../../../../environments/environment';
 
@@ -27,6 +28,16 @@ interface ExamDetail {
   status: string;
   file_type: string;
   results: ExamResult[] | null;
+}
+
+interface PrescriptionItem {
+  name?: string;
+  label?: string;
+  dose?: string;
+  value?: string;
+  frequency?: string;
+  duration?: string;
+  instructions?: string;
 }
 
 const SEVERITY_CLS: Record<string, string> = {
@@ -52,10 +63,55 @@ const AGENT_LABELS: Record<string, string> = {
   imaging_mri:          'Ressonância Magnética',
 };
 
+const NOTIF_LABELS: Record<string, string> = {
+  post_consultation_followup: 'Pós-consulta',
+  exam_alert_followup:        'Alerta de exame',
+  vaccine_dose_reminder:      'Lembrete de dose',
+  appointment_reminder:       'Lembrete de consulta',
+  nps_request:                'Pesquisa de satisfação',
+  custom:                     'Personalizado',
+};
+
+const CHANNEL_LABELS: Record<string, string> = {
+  whatsapp: 'WhatsApp',
+  email:    'E-mail',
+  sms:      'SMS',
+};
+
+const APPT_TYPE_LABELS: Record<string, string> = {
+  consulta:             'Consulta',
+  retorno:              'Retorno',
+  exame:                'Exame',
+  procedimento:         'Procedimento',
+  telemedicina:         'Telemedicina',
+  banho_tosa:           'Banho e Tosa',
+  avaliacao_estetica:   'Avaliação Estética',
+  procedimento_estetico:'Procedimento Estético',
+  retorno_estetica:     'Retorno Estética',
+  outro:                'Outro',
+};
+
+const APPT_STATUS_LABELS: Record<string, string> = {
+  scheduled:  'Agendado',
+  confirmed:  'Confirmado',
+  completed:  'Realizado',
+  cancelled:  'Cancelado',
+  no_show:    'Não compareceu',
+  blocked:    'Bloqueado',
+};
+
+const SEX_LABELS: Record<string, string> = {
+  male:   'Masculino',
+  female: 'Feminino',
+  other:  'Outro',
+  M:      'Masculino',
+  F:      'Feminino',
+};
+
 @Component({
   selector: 'app-timeline-panel',
   standalone: true,
-  imports: [CommonModule, DatePipe, DecimalPipe, MatIconModule, MatButtonModule, MatProgressSpinnerModule],
+  imports: [CommonModule, DatePipe, DecimalPipe, MatIconModule, MatButtonModule, MatProgressSpinnerModule, MatSnackBarModule],
   styles: [`
     .backdrop {
       position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200;
@@ -103,6 +159,11 @@ const AGENT_LABELS: Record<string, string> = {
       text-transform:uppercase; letter-spacing:.08em; margin-bottom:.25rem;
     }
     .field-value { font-size:.82rem; color:#dae2fd; line-height:1.5; }
+    .field-value.muted { color:#a09fb2; }
+
+    .section-divider {
+      border:none; border-top:1px solid rgba(70,69,84,.2); margin:.75rem 0;
+    }
 
     .action-btn {
       width:100%; margin-top:1rem; padding:.625rem;
@@ -119,6 +180,35 @@ const AGENT_LABELS: Record<string, string> = {
     .badge-high     { background:#78350f; color:#fde68a; }
     .badge-done     { background:#14532d; color:#86efac; }
     .badge-tele     { background:#164e63; color:#67e8f9; }
+    .badge-ok       { background:#14532d; color:#86efac; }
+    .badge-warn     { background:#78350f; color:#fde68a; }
+    .badge-neutral  { background:#1e2a40; color:#a09fb2; }
+
+    /* Prescription items table */
+    .items-table {
+      width:100%; border-collapse:collapse; font-size:.75rem;
+      margin-top:.25rem;
+    }
+    .items-table th {
+      color:#6e6d80; font-family:'JetBrains Mono',monospace;
+      font-size:.62rem; text-transform:uppercase; letter-spacing:.06em;
+      text-align:left; padding:.25rem .375rem;
+      border-bottom:1px solid rgba(70,69,84,.2);
+    }
+    .items-table td {
+      color:#dae2fd; padding:.35rem .375rem;
+      border-bottom:1px solid rgba(70,69,84,.1);
+      vertical-align:top;
+    }
+    .items-table tr:last-child td { border-bottom:none; }
+
+    /* Followup body preview */
+    .msg-preview {
+      background:#0d1525; border:1px solid rgba(70,69,84,.2);
+      border-radius:6px; padding:.625rem .75rem;
+      font-size:.75rem; color:#a09fb2; line-height:1.6;
+      white-space:pre-wrap; word-break:break-word;
+    }
 
     /* Exam inline results */
     .spinner-wrap { display:flex; justify-content:center; padding:2rem 0; }
@@ -214,6 +304,7 @@ const AGENT_LABELS: Record<string, string> = {
         <div class="panel-body">
           @switch (event.event_type) {
 
+            <!-- ── CADASTRO ─────────────────────────────────── -->
             @case ('registered') {
               <div class="field">
                 <div class="field-label">Nome</div>
@@ -223,11 +314,124 @@ const AGENT_LABELS: Record<string, string> = {
                 <div class="field-label">Tipo</div>
                 <div class="field-value">{{ event.payload['subject_type'] === 'animal' ? 'Animal' : 'Humano' }}</div>
               </div>
+              @if (event.payload['birth_date']) {
+                <div class="field">
+                  <div class="field-label">Data de nascimento</div>
+                  <div class="field-value">{{ event.payload['birth_date'] | date:'dd/MM/yyyy' }}</div>
+                </div>
+              }
+              @if (event.payload['sex']) {
+                <div class="field">
+                  <div class="field-label">Sexo</div>
+                  <div class="field-value">{{ sexLabel(event.payload['sex']) }}</div>
+                </div>
+              }
+              @if (event.payload['cpf_last4']) {
+                <div class="field">
+                  <div class="field-label">CPF (últimos 4)</div>
+                  <div class="field-value">***{{ event.payload['cpf_last4'] }}</div>
+                </div>
+              }
+              @if (event.payload['phone']) {
+                <div class="field">
+                  <div class="field-label">Telefone</div>
+                  <div class="field-value">{{ event.payload['phone'] }}</div>
+                </div>
+              }
+              <!-- Animal-specific -->
+              @if (event.payload['species']) {
+                <div class="field">
+                  <div class="field-label">Espécie</div>
+                  <div class="field-value">{{ event.payload['species'] }}</div>
+                </div>
+              }
+              @if (event.payload['breed']) {
+                <div class="field">
+                  <div class="field-label">Raça</div>
+                  <div class="field-value">{{ event.payload['breed'] }}</div>
+                </div>
+              }
+              @if (event.payload['microchip']) {
+                <div class="field">
+                  <div class="field-label">Microchip</div>
+                  <div class="field-value">{{ event.payload['microchip'] }}</div>
+                </div>
+              }
+              @if (event.payload['neutered'] !== null && event.payload['neutered'] !== undefined && event.payload['species']) {
+                <div class="field">
+                  <div class="field-label">Castrado</div>
+                  <div class="field-value">{{ event.payload['neutered'] ? 'Sim' : 'Não' }}</div>
+                </div>
+              }
+              <!-- Medidas -->
+              @if (event.payload['weight'] || event.payload['height']) {
+                <hr class="section-divider" />
+                @if (event.payload['weight']) {
+                  <div class="field">
+                    <div class="field-label">Peso</div>
+                    <div class="field-value">{{ event.payload['weight'] }} kg</div>
+                  </div>
+                }
+                @if (event.payload['height']) {
+                  <div class="field">
+                    <div class="field-label">Altura</div>
+                    <div class="field-value">{{ event.payload['height'] }} cm</div>
+                  </div>
+                }
+                @if (event.payload['blood_type']) {
+                  <div class="field">
+                    <div class="field-label">Tipo sanguíneo</div>
+                    <div class="field-value">{{ event.payload['blood_type'] }}</div>
+                  </div>
+                }
+              }
+              <!-- Histórico clínico -->
+              @if (event.payload['allergies'] || event.payload['comorbidities'] || event.payload['medications']) {
+                <hr class="section-divider" />
+                @if (event.payload['allergies']) {
+                  <div class="field">
+                    <div class="field-label">Alergias</div>
+                    <div class="field-value">{{ event.payload['allergies'] }}</div>
+                  </div>
+                }
+                @if (event.payload['comorbidities']) {
+                  <div class="field">
+                    <div class="field-label">Comorbidades</div>
+                    <div class="field-value">{{ event.payload['comorbidities'] }}</div>
+                  </div>
+                }
+                @if (event.payload['medications']) {
+                  <div class="field">
+                    <div class="field-label">Medicações em uso</div>
+                    <div class="field-value">{{ event.payload['medications'] }}</div>
+                  </div>
+                }
+              }
+              <!-- Plano / emergência -->
+              @if (event.payload['insurance_name']) {
+                <hr class="section-divider" />
+                <div class="field">
+                  <div class="field-label">Plano de saúde</div>
+                  <div class="field-value">{{ event.payload['insurance_name'] }}</div>
+                </div>
+              }
+              @if (event.payload['emergency_contact_name']) {
+                <div class="field">
+                  <div class="field-label">Contato de emergência</div>
+                  <div class="field-value">
+                    {{ event.payload['emergency_contact_name'] }}
+                    @if (event.payload['emergency_contact_phone']) {
+                      — {{ event.payload['emergency_contact_phone'] }}
+                    }
+                  </div>
+                </div>
+              }
             }
 
+            <!-- ── EXAME ────────────────────────────────────── -->
             @case ('exam') {
               <div class="field">
-                <div class="field-label">Tipo</div>
+                <div class="field-label">Tipo de arquivo</div>
                 <div class="field-value">{{ event.payload['file_type'] ?? 'N/A' }}</div>
               </div>
               <div class="field">
@@ -238,25 +442,19 @@ const AGENT_LABELS: Record<string, string> = {
               @if (examLoading()) {
                 <div class="spinner-wrap"><mat-spinner diameter="28"></mat-spinner></div>
               } @else {
-                <!-- Imagem anotada para exames de imagem -->
                 @if (examImageUrl()) {
                   <img class="exam-image" [src]="examImageUrl()!" alt="Imagem do exame" />
                 }
-
-                <!-- Botão PDF -->
                 @if (event.payload['file_type'] === 'pdf') {
                   <button class="action-btn" [disabled]="loadingPdf()" (click)="openPdf(event.payload['id'])">
                     <mat-icon style="font-size:16px;width:16px;height:16px;">picture_as_pdf</mat-icon>
                     {{ loadingPdf() ? 'Carregando PDF...' : 'Ver laudo original (PDF)' }}
                   </button>
                 }
-
-                <!-- Resultados IA -->
                 @if (examDetail()?.results?.length) {
                   @for (r of examDetail()!.results!; track r.agent_type) {
                     <div class="agent-block">
                       <div class="agent-label">{{ agentLabel(r.agent_type) }}</div>
-
                       @if (r.alerts?.length) {
                         <div class="alerts-row">
                           @for (a of r.alerts; track a.marker) {
@@ -266,7 +464,6 @@ const AGENT_LABELS: Record<string, string> = {
                           }
                         </div>
                       }
-
                       @if (r.risk_scores && objectKeys(r.risk_scores).length) {
                         <div class="risk-grid">
                           @for (k of objectKeys(r.risk_scores); track k) {
@@ -277,7 +474,6 @@ const AGENT_LABELS: Record<string, string> = {
                           }
                         </div>
                       }
-
                       @if (r.interpretation) {
                         <div class="interpretation">
                           {{ r.interpretation | slice:0:400 }}{{ r.interpretation.length > 400 ? '…' : '' }}
@@ -297,12 +493,12 @@ const AGENT_LABELS: Record<string, string> = {
               }
             }
 
+            <!-- ── ANÁLISE IA ───────────────────────────────── -->
             @case ('ai_analysis') {
               <div class="field">
                 <div class="field-label">Agente</div>
                 <div class="field-value">{{ agentLabel(event.payload['agent_type']) }}</div>
               </div>
-
               @if (examLoading()) {
                 <div class="spinner-wrap"><mat-spinner diameter="28"></mat-spinner></div>
               } @else if (aiResult()) {
@@ -335,31 +531,61 @@ const AGENT_LABELS: Record<string, string> = {
               }
             }
 
+            <!-- ── AGENDAMENTO ─────────────────────────────── -->
             @case ('appointment') {
               <div class="field">
                 <div class="field-label">Tipo</div>
-                <div class="field-value">{{ event.payload['appointment_type'] ?? 'N/A' }}</div>
+                <div class="field-value">{{ apptTypeLabel(event.payload['appointment_type']) }}</div>
               </div>
+              <div class="field">
+                <div class="field-label">Status</div>
+                <div class="field-value">
+                  <span class="badge" [class]="apptStatusBadge(event.payload['status'])">
+                    {{ apptStatusLabel(event.payload['status']) }}
+                  </span>
+                </div>
+              </div>
+              @if (event.payload['start_at']) {
+                <div class="field">
+                  <div class="field-label">Data/hora</div>
+                  <div class="field-value">{{ event.payload['start_at'] | date:'dd/MM/yyyy HH:mm' }}</div>
+                </div>
+              }
               <div class="field">
                 <div class="field-label">Duração</div>
                 <div class="field-value">{{ event.payload['duration_minutes'] }} min</div>
               </div>
-              <div class="field">
-                <div class="field-label">Status</div>
-                <div class="field-value">{{ event.payload['status'] }}</div>
-              </div>
+              @if (event.payload['doctor_email']) {
+                <div class="field">
+                  <div class="field-label">Médico</div>
+                  <div class="field-value">{{ event.payload['doctor_email'] }}</div>
+                </div>
+              }
+              @if (event.payload['reason']) {
+                <div class="field">
+                  <div class="field-label">Motivo</div>
+                  <div class="field-value">{{ event.payload['reason'] }}</div>
+                </div>
+              }
               @if (event.payload['notes']) {
                 <div class="field">
-                  <div class="field-label">Notas</div>
+                  <div class="field-label">Observações</div>
                   <div class="field-value">{{ event.payload['notes'] }}</div>
                 </div>
               }
             }
 
+            <!-- ── TELECONSULTA ────────────────────────────── -->
             @case ('video_consultation') {
               <div class="field">
                 <div class="field-label">Modalidade</div>
-                <div class="field-value">{{ event.payload['modality'] === 'complete' ? 'Completa (IA)' : 'Simples' }}</div>
+                <div class="field-value">{{ event.payload['modality'] === 'complete' ? 'Completa (com IA)' : 'Simples (só vídeo)' }}</div>
+              </div>
+              <div class="field">
+                <div class="field-label">Status</div>
+                <div class="field-value">
+                  <span class="badge badge-tele">{{ event.payload['status'] }}</span>
+                </div>
               </div>
               <div class="field">
                 <div class="field-label">Duração</div>
@@ -373,12 +599,6 @@ const AGENT_LABELS: Record<string, string> = {
                 <div class="field-label">Créditos debitados</div>
                 <div class="field-value">{{ event.payload['credits_debited'] ?? 0 }}</div>
               </div>
-              <div class="field">
-                <div class="field-label">Status</div>
-                <div class="field-value">
-                  <span class="badge badge-tele">{{ event.payload['status'] }}</span>
-                </div>
-              </div>
               @if (event.payload['encounter_id']) {
                 <button class="action-btn" (click)="navigate('/clinic/encounters/' + event.payload['encounter_id'])">
                   <mat-icon style="font-size:16px;width:16px;height:16px;">description</mat-icon>
@@ -387,6 +607,7 @@ const AGENT_LABELS: Record<string, string> = {
               }
             }
 
+            <!-- ── PRONTUÁRIO ─────────────────────────────── -->
             @case ('encounter') {
               @if (event.payload['chief_complaint']) {
                 <div class="field">
@@ -410,28 +631,78 @@ const AGENT_LABELS: Record<string, string> = {
               </button>
             }
 
+            <!-- ── PRESCRIÇÃO ─────────────────────────────── -->
             @case ('prescription') {
+              <div class="field">
+                <div class="field-label">Agente IA</div>
+                <div class="field-value">{{ agentLabel(event.payload['agent_type']) }}</div>
+              </div>
               <div class="field">
                 <div class="field-label">Itens prescritos</div>
                 <div class="field-value">{{ event.payload['item_count'] }} item(s)</div>
               </div>
-              @if (event.payload['agent_type']) {
-                <div class="field">
-                  <div class="field-label">Agente IA</div>
-                  <div class="field-value">{{ agentLabel(event.payload['agent_type']) }}</div>
+
+              @if (prescriptionItems(event.payload['items']).length) {
+                <table class="items-table">
+                  <thead>
+                    <tr>
+                      <th>Medicamento / nutriente</th>
+                      <th>Dose</th>
+                      <th>Frequência</th>
+                      <th>Duração</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (item of prescriptionItems(event.payload['items']); track $index) {
+                      <tr>
+                        <td>{{ item.name ?? item.label ?? '—' }}</td>
+                        <td>{{ item.dose ?? item.value ?? '—' }}</td>
+                        <td>{{ item.frequency ?? '—' }}</td>
+                        <td>{{ item.duration ?? '—' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+
+              @if (event.payload['notes']) {
+                <div class="field" style="margin-top:.875rem">
+                  <div class="field-label">Observações</div>
+                  <div class="field-value">{{ event.payload['notes'] }}</div>
                 </div>
               }
             }
 
+            <!-- ── FOLLOW-UP ──────────────────────────────── -->
             @case ('followup') {
               <div class="field">
                 <div class="field-label">Tipo</div>
-                <div class="field-value">{{ event.payload['notification_type'] }}</div>
+                <div class="field-value">{{ notifLabel(event.payload['notification_type']) }}</div>
               </div>
               <div class="field">
                 <div class="field-label">Canal</div>
-                <div class="field-value">{{ event.payload['channel'] }}</div>
+                <div class="field-value">{{ channelLabel(event.payload['channel']) }}</div>
               </div>
+              <div class="field">
+                <div class="field-label">Status</div>
+                <div class="field-value">
+                  <span class="badge" [class]="followupStatusBadge(event.payload['status'])">
+                    {{ followupStatusLabel(event.payload['status']) }}
+                  </span>
+                </div>
+              </div>
+              @if (event.payload['scheduled_for']) {
+                <div class="field">
+                  <div class="field-label">Agendado para</div>
+                  <div class="field-value">{{ event.payload['scheduled_for'] | date:'dd/MM/yyyy HH:mm' }}</div>
+                </div>
+              }
+              @if (event.payload['body']) {
+                <div class="field">
+                  <div class="field-label">Mensagem enviada</div>
+                  <div class="msg-preview">{{ event.payload['body'] }}</div>
+                </div>
+              }
             }
 
           }
@@ -448,12 +719,13 @@ export class TimelinePanelComponent implements OnChanges, OnDestroy {
   private router    = inject(Router);
   private http      = inject(HttpClient);
   private sanitizer = inject(DomSanitizer);
+  private snackBar  = inject(MatSnackBar);
 
-  examLoading   = signal(false);
-  examDetail    = signal<ExamDetail | null>(null);
-  aiResult      = signal<ExamResult | null>(null);
-  examImageUrl  = signal<string | null>(null);
-  loadingPdf    = signal(false);
+  examLoading    = signal(false);
+  examDetail     = signal<ExamDetail | null>(null);
+  aiResult       = signal<ExamResult | null>(null);
+  examImageUrl   = signal<string | null>(null);
+  loadingPdf     = signal(false);
   showPdfOverlay = signal(false);
   private _pdfBlobUrl: string | null = null;
   private _safePdfUrl: SafeResourceUrl | null = null;
@@ -526,13 +798,17 @@ export class TimelinePanelComponent implements OnChanges, OnDestroy {
         this.showPdfOverlay.set(true);
         this.loadingPdf.set(false);
       },
-      error: () => this.loadingPdf.set(false),
+      error: () => {
+        this.loadingPdf.set(false);
+        this.snackBar.open('Arquivo não disponível. Pode ter sido excluído do armazenamento.', 'OK', {
+          duration: 5000, panelClass: ['snack-warn'],
+        });
+      },
     });
   }
 
   closePdfOverlay() {
     this.showPdfOverlay.set(false);
-    // Keep blob URL alive in case user reopens — revoked on next event change or destroy
   }
 
   panelTitle(): string {
@@ -550,9 +826,36 @@ export class TimelinePanelComponent implements OnChanges, OnDestroy {
     this.router.navigate([path]);
   }
 
-  agentLabel(type: string)  { return AGENT_LABELS[type] ?? type; }
-  severityCls(s: string)    { return SEVERITY_CLS[s] ?? 'alert-low'; }
+  prescriptionItems(items: any): PrescriptionItem[] {
+    if (!Array.isArray(items)) return [];
+    return items;
+  }
+
+  agentLabel(type: string)         { return AGENT_LABELS[type] ?? type; }
+  notifLabel(type: string)         { return NOTIF_LABELS[type] ?? type; }
+  channelLabel(ch: string)         { return CHANNEL_LABELS[ch] ?? ch; }
+  apptTypeLabel(t: string)         { return APPT_TYPE_LABELS[t] ?? t; }
+  apptStatusLabel(s: string)       { return APPT_STATUS_LABELS[s] ?? s; }
+  sexLabel(s: string)              { return SEX_LABELS[s] ?? s; }
+  severityCls(s: string)           { return SEVERITY_CLS[s] ?? 'alert-low'; }
   objectKeys(o: Record<string, string>) { return Object.keys(o ?? {}); }
+
+  apptStatusBadge(s: string): string {
+    if (s === 'completed' || s === 'confirmed') return 'badge-ok';
+    if (s === 'cancelled' || s === 'no_show')   return 'badge-warn';
+    return 'badge-neutral';
+  }
+
+  followupStatusLabel(s: string): string {
+    const map: Record<string, string> = { sent: 'Enviado', failed: 'Falhou', pending: 'Pendente', cancelled: 'Cancelado' };
+    return map[s] ?? s;
+  }
+
+  followupStatusBadge(s: string): string {
+    if (s === 'sent')   return 'badge-ok';
+    if (s === 'failed') return 'badge-warn';
+    return 'badge-neutral';
+  }
 
   riskCls(val: string): string {
     const n = parseFloat(val);

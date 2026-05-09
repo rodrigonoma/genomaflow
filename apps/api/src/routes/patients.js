@@ -416,7 +416,26 @@ module.exports = async function (fastify) {
       WITH events AS (
         -- Cadastro do paciente (evento único)
         SELECT 'registered'::text AS event_type, s.id AS event_id, s.created_at AS event_at,
-               jsonb_build_object('id', s.id, 'name', s.name, 'subject_type', s.subject_type) AS payload
+               jsonb_build_object(
+                 'id', s.id, 'name', s.name, 'subject_type', s.subject_type,
+                 'birth_date', s.birth_date,
+                 'sex', s.sex,
+                 'species', s.species,
+                 'breed', s.breed,
+                 'weight', s.weight,
+                 'height', s.height,
+                 'blood_type', s.blood_type,
+                 'allergies', COALESCE(s.allergies_text, s.allergies),
+                 'comorbidities', s.comorbidities,
+                 'medications', s.medications,
+                 'phone', s.phone,
+                 'microchip', s.microchip,
+                 'neutered', s.neutered,
+                 'insurance_name', s.insurance_name,
+                 'emergency_contact_name', s.emergency_contact_name,
+                 'emergency_contact_phone', s.emergency_contact_phone,
+                 'cpf_last4', s.cpf_last4
+               ) AS payload
         FROM subjects s
         WHERE s.tenant_id = $1 AND s.id = $2
 
@@ -454,7 +473,9 @@ module.exports = async function (fastify) {
                  'created_by', p.created_by,
                  'exam_id', p.exam_id,
                  'agent_type', p.agent_type,
-                 'item_count', COALESCE(jsonb_array_length(p.items), 0)
+                 'item_count', COALESCE(jsonb_array_length(p.items), 0),
+                 'items', p.items,
+                 'notes', p.notes
                )
         FROM prescriptions p
         WHERE p.tenant_id = $1 AND p.subject_id = $2
@@ -481,9 +502,13 @@ module.exports = async function (fastify) {
                  'appointment_type', a.appointment_type,
                  'status', a.status,
                  'duration_minutes', a.duration_minutes,
-                 'notes', a.notes
+                 'start_at', a.start_at,
+                 'reason', a.reason,
+                 'notes', a.notes,
+                 'doctor_email', u.email
                )
         FROM appointments a
+        LEFT JOIN users u ON u.id = a.user_id AND u.tenant_id = $1
         WHERE a.tenant_id = $1 AND a.subject_id = $2
 
         UNION ALL
@@ -509,7 +534,10 @@ module.exports = async function (fastify) {
                jsonb_build_object(
                  'id', sn.id,
                  'notification_type', sn.notification_type,
-                 'channel', sn.channel
+                 'channel', sn.channel,
+                 'body', sn.body,
+                 'scheduled_for', sn.scheduled_for,
+                 'status', sn.status
                )
         FROM scheduled_notifications sn
         WHERE sn.tenant_id = $1 AND sn.subject_id = $2 AND sn.sent_at IS NOT NULL
