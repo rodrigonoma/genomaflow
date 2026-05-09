@@ -55,6 +55,18 @@ export const routes: Routes = [
       import('./features/master/master.component').then(m => m.MasterComponent)
   },
   {
+    path: 'master/tenants/:id',
+    canActivate: [authGuard, masterGuard],
+    loadComponent: () =>
+      import('./features/master/master-tenant-detail.component').then(m => m.MasterTenantDetailComponent)
+  },
+  {
+    path: 'account/change-password',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/account/change-password.component').then(m => m.ChangePasswordComponent)
+  },
+  {
     path: 'doctor',
     canActivate: [authGuard, termsGuard, professionalInfoGuard],
     loadChildren: () =>

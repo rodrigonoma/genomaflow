@@ -299,6 +299,8 @@ interface Stats {
                     </span>
                   </td>
                   <td (click)="$event.stopPropagation()">
+                    <button class="btn btn-sm-ghost" style="margin-right:4px"
+                            (click)="openTenantDetail(t)" title="Gerenciar tenant">⚙</button>
                     @if (t.active) {
                       <button class="btn btn-sm-red" (click)="toggleTenant(t)">Desativar</button>
                     } @else {
@@ -1236,6 +1238,11 @@ export class MasterComponent implements OnInit {
         this.loadStats();
       }
     });
+  }
+
+  /** Abre tela de gerenciamento consolidado do tenant (ações: ativar, créditos, users, reset senha, etc) */
+  openTenantDetail(t: Tenant): void {
+    this.router.navigate(['/master/tenants', t.id]);
   }
 
   toggleExpand(t: Tenant): void {

@@ -144,6 +144,43 @@ Spec: `docs/superpowers/specs/2026-05-08-video-consultation-design.md`.
 
 ---
 
+## Master — gestão consolidada de tenant (2026-05-09)
+
+Tela `/master/tenants/:id` (master only) consolida ações que antes só eram possíveis via SQL direto no DB.
+
+**Backend (`apps/api/src/routes/master.js`):**
+- `GET /master/tenants/:id/detail` — info do tenant + saldo de créditos + lista de users + histórico de créditos (30 últimos)
+- `POST /master/users/:userId/verify-email` — marca email_verified_at = NOW(). 404 se não existe; 403 se conta master; 409 se já verificado
+- `POST /master/users/:userId/reset-password` — body `{ password (min 8), require_change=true }`. Atualiza password_hash + flag de troca obrigatória + invalida sessão Redis (single-session JTI)
+- `PATCH /master/users/:userId/require-password-change` — body `{ required: true|false }`. Toggle da flag sem mexer na senha
+- Reuso: `PATCH /master/tenants/:id/activate|deactivate`, `PATCH /master/tenants/:id/users/:userId/toggle`, `POST /master/credits` (já existiam)
+
+**Schema (migration 083):**
+- `users.password_change_required BOOLEAN NOT NULL DEFAULT FALSE` — exposto no `/auth/me`
+- Default false → não afeta usuários existentes
+
+**Auth flow:**
+- `POST /auth/change-password` (autenticado, rate limit 10/h): valida current_password + new_password (min 8) → bcrypt + zera flag → cliente re-loga
+- `authGuard` redireciona para `/account/change-password` quando `currentProfile.password_change_required === true` (exceção: já está nessa tela ou no login — evita loop)
+
+**Frontend:**
+- `master-tenant-detail.component.ts` — tela com 3 cards: Tenant info + ações (ativar/desativar), Créditos (saldo + form de ajuste +/− + histórico 30 últimos), Usuários (toggle ativar, marcar email verificado, resetar senha com checkbox "exigir troca", forçar/cancelar exigência de troca)
+- `change-password.component.ts` — tela `/account/change-password` (modo "forced" quando flag setada vs trocar voluntária via menu)
+- `master.component.ts` lista de tenants ganhou botão ⚙ "Gerenciar tenant" → abre `/master/tenants/:id`
+
+**Não permite ações sobre conta master** (`role='master'`):
+- Backend bloqueia (verify-email, reset-password retornam 403)
+- Lista de users no detail filtra `role != 'master'`
+- Toggle existente já filtra master tenant id (`00000000-0000-0000-0000-000000000001`)
+
+**Por que essa estrutura:**
+- Master precisa de "gestão 360°" do tenant sem precisar SQL direto
+- Reset de senha + flag de troca obrigatória = padrão pra senhas temporárias (ex: master cria conta com `@Senha123` + flag → user troca no primeiro login)
+- Verify email pulável = master pode acelerar onboarding sem esperar verificação por email (caso SES esteja com problema, conta de teste, etc)
+- Sessão é invalidada no reset de senha (Redis del `session:{userId}`) → user logado é forçado a re-autenticar
+
+---
+
 ## Tutor (módulo veterinary) — visualizar/editar dados completos (2026-05-09)
 
 Antes só dava pra cadastrar tutor novo (em `patient-list`) ou ver `owner_name + owner_phone` read-only no `patient-detail`. Agora há UI completa de visualizar e editar.

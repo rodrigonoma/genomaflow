@@ -216,6 +216,8 @@ export interface UserProfile {
   crm_uf?: string | null;
   professional_data_confirmed_at?: string | null;
   professional_type: 'medico' | 'esteticista' | 'dentista' | 'biomedico' | 'outro';
+  // Quando true, master forçou troca de senha — UI redireciona pra /account/change-password no login
+  password_change_required?: boolean;
   module: 'human' | 'veterinary' | 'estetica';
   tenant_name: string;
   // Status de cobrança do tenant. Permite UI condicional (banner past_due,
