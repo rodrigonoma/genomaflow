@@ -341,13 +341,19 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
       await deviceController.listVideoInputDevices().catch(() => []);
 
       if (fullStream) {
-        await this.meetingSession.audioVideo.startAudioInput(fullStream);
-        await this.meetingSession.audioVideo.startVideoInput(fullStream);
+        // Separa tracks de audio e video em MediaStreams DISTINTOS — passar o mesmo
+        // stream pra ambos causava mute de áudio interromper vídeo (Chime SDK bug).
+        const audioStream = new MediaStream(fullStream.getAudioTracks());
+        const videoStream = new MediaStream(fullStream.getVideoTracks());
+        await this.meetingSession.audioVideo.startAudioInput(audioStream);
+        await this.meetingSession.audioVideo.startVideoInput(videoStream);
       }
 
-      // Bind do <audio> remoto pra garantir reprodução em navegadores com autoplay restrito
+      // Bind do <audio> remoto + volume máximo
       if (this.remoteAudioEl?.nativeElement) {
         this.meetingSession.audioVideo.bindAudioElement?.(this.remoteAudioEl.nativeElement);
+        this.remoteAudioEl.nativeElement.volume = 1.0;
+        this.remoteAudioEl.nativeElement.muted = false;
       }
 
       this.meetingSession.audioVideo.start();

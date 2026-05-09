@@ -63,6 +63,8 @@ Movido do CLAUDE.md em 2026-05-09 para reduzir contexto carregado em toda sessã
 - **Observer `videoTileDidUpdate` chamando `bindVideoElement` em tile pausado** → ao reconectar (rede caiu e voltou), Chime emite update com `paused:true` antes de retomar. Bind nesse estado pode deixar o `<video>` em estado inválido até o próximo update. Fix: ignorar updates com `tileState.paused === true`
 - **`<video>` com `object-fit: cover` em sala de telemedicina** → corta a imagem (ex: cabeça do paciente). Em UI clínica, **`object-fit: contain` é o correto** mesmo que gere letterbox preto — médico precisa ver paciente inteiro, não decorativo
 - **`endCall` com `await uploadRecording()` antes de cleanup de mídia** → usuário clica encerrar e fica sem feedback até upload terminar (pode levar 3–10s). Fix: feedback imediato (snack "Encerrando…") + cleanup de mídia imediato + upload + endConsultation em background
+- **Mesmo MediaStream passado pra `startAudioInput` E `startVideoInput`** → ao chamar `realtimeMuteLocalAudio()`, o stream inteiro é afetado e o vídeo local também cai (paciente para de ver médico). Fix: SEPARAR tracks em MediaStreams DISTINTOS: `new MediaStream(fullStream.getAudioTracks())` pro audio input e `new MediaStream(fullStream.getVideoTracks())` pro video input. As tracks são as mesmas (mesmo objeto), só os MediaStream containers são distintos — Chime trata cada um isoladamente (incidente 2026-05-09)
+- **`<audio>` element sem `volume = 1.0` explícito** → áudio remoto pode tocar baixo. Browser pode iniciar o elemento com volume default não-1.0 dependendo da política de autoplay/contexto. Fix: após `bindAudioElement`, setar `audioEl.volume = 1.0` e `audioEl.muted = false`
 
 ## Schema / SQL
 

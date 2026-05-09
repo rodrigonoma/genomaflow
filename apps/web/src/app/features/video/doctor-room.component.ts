@@ -521,14 +521,20 @@ export class DoctorRoomComponent implements OnInit, OnDestroy, AfterViewInit {
       await deviceController.listVideoInputDevices().catch(() => []);
 
       if (fullStream) {
-        // Chime SDK lê do MediaStream diretamente — não cria getUserMedia interno
-        await this.meetingSession.audioVideo.startAudioInput(fullStream);
-        await this.meetingSession.audioVideo.startVideoInput(fullStream);
+        // SEPARAR tracks de audio e video em MediaStreams DISTINTOS pro Chime.
+        // Passar o mesmo stream pra startAudioInput E startVideoInput causava bug:
+        // realtimeMuteLocalAudio interrompia o stream inteiro (incluindo video).
+        const audioStream = new MediaStream(fullStream.getAudioTracks());
+        const videoStream = new MediaStream(fullStream.getVideoTracks());
+        await this.meetingSession.audioVideo.startAudioInput(audioStream);
+        await this.meetingSession.audioVideo.startVideoInput(videoStream);
       }
 
-      // Bind do <audio> remoto — defesa contra autoplay restrito
+      // Bind do <audio> remoto — defesa contra autoplay restrito + volume máx
       if (this.remoteAudioEl?.nativeElement) {
         this.meetingSession.audioVideo.bindAudioElement?.(this.remoteAudioEl.nativeElement);
+        this.remoteAudioEl.nativeElement.volume = 1.0;
+        this.remoteAudioEl.nativeElement.muted = false;
       }
 
       // Inicia sessão Chime
