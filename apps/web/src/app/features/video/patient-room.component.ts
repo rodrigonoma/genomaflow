@@ -55,6 +55,21 @@ import {
     }
     .ctrl-btn:hover { background:#243050; }
     .ctrl-btn.active { background:#c0c1ff; color:#1000a9; border-color:#c0c1ff; }
+    .ctrl-btn.end { background:rgba(220,38,38,0.85); color:#fff; border-color:rgba(239,68,68,0.5); }
+    .ctrl-btn.end:hover { background:rgba(239,68,68,0.95); }
+
+    .left-state {
+      flex:1; display:flex; align-items:center; justify-content:center;
+      flex-direction:column; gap:.75rem; color:#dae2fd; padding:2rem;
+      text-align:center;
+    }
+    .left-state .icon-circle {
+      width:64px; height:64px; border-radius:50%;
+      background:rgba(34,197,94,0.15); border:1px solid rgba(34,197,94,0.4);
+      display:flex; align-items:center; justify-content:center;
+    }
+    .left-state .title { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.05rem; }
+    .left-state .desc { font-size:.8rem; color:#a09fb2; max-width:340px; }
 
     .upload-btn {
       padding:.5rem 1rem; background:#1a2440;
@@ -96,6 +111,12 @@ import {
         <mat-spinner diameter="40"></mat-spinner>
         <div>Carregando sala de vídeo...</div>
       </div>
+    } @else if (hasLeft()) {
+      <div class="left-state">
+        <div class="icon-circle"><mat-icon style="color:#86efac;">check</mat-icon></div>
+        <div class="title">Você saiu da consulta</div>
+        <div class="desc">Pode fechar esta janela. Se precisar voltar, abra novamente o link enviado pela clínica.</div>
+      </div>
     } @else {
       <div class="video-area">
         <video #remoteVideo class="remote-video" autoplay playsinline></video>
@@ -113,6 +134,9 @@ import {
             Enviar exame ou foto
             <input type="file" style="display:none" (change)="uploadFile($event)" accept="image/*,.pdf"/>
           </label>
+          <button class="ctrl-btn end" (click)="leaveCall()" title="Sair da chamada">
+            <mat-icon>call_end</mat-icon>
+          </button>
         </div>
       </div>
     }
@@ -130,6 +154,7 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
   loadError = signal<string | null>(null);
   audioMuted = signal(false);
   videoOff = signal(false);
+  hasLeft = signal(false);
 
   private joinToken = '';
   private consultationId = '';
@@ -216,6 +241,19 @@ export class PatientRoomComponent implements OnInit, OnDestroy {
     } else {
       this.meetingSession?.audioVideo?.startLocalVideoTile();
     }
+  }
+
+  leaveCall() {
+    // Paciente "sair" = encerra apenas o lado dele (médico continua na sala).
+    // Não chama POST /end — esse endpoint exige auth e debita créditos; é o médico que encerra.
+    try {
+      this.meetingSession?.audioVideo?.stopLocalVideoTile();
+      this.meetingSession?.audioVideo?.stop();
+    } catch { /* ok */ }
+    this.localStream?.getTracks().forEach(t => t.stop());
+    this.meetingSession = null;
+    this.localStream = null;
+    this.hasLeft.set(true);
   }
 
   async uploadFile(event: Event) {
