@@ -34,6 +34,8 @@ import { ClinicalDocumentDialogComponent } from '../../clinical-documents/clinic
 import { ClinicalDocumentTemplatesModalComponent } from '../../clinical-documents/clinical-document-templates-modal.component';
 import { ClinicalDocumentsService, ClinicalDocument, DOC_TYPE_LABELS, DOC_TYPE_ICONS } from '../../clinical-documents/clinical-documents.service';
 import { AiSuggestionsCardComponent } from '../../ai-suggestions/ai-suggestions-card.component';
+import { PatientTimelineComponent, TimelineEvent } from './patient-timeline.component';
+import { TimelinePanelComponent } from './timeline-panel.component';
 import { shortId, examTypeLabel } from '../../../shared/utils/id-format';
 import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
 import { Subscription } from 'rxjs';
@@ -64,6 +66,8 @@ interface ComparisonBlock {
     EncounterFormComponent, EncounterListComponent, TimelineComponent,
     VaccinesTabComponent,
     AiSuggestionsCardComponent,
+    PatientTimelineComponent,
+    TimelinePanelComponent,
   ],
   styles: [`
     :host { display: block; background: #0b1326; min-height: 100vh; }
@@ -1339,6 +1343,19 @@ interface ComparisonBlock {
           }
         </mat-tab>
 
+        <!-- ── TIMELINE ── -->
+        <mat-tab label="🕐 Timeline">
+          <app-patient-timeline
+            [subjectId]="patientId"
+            (select)="openTimelinePanel($event)"
+          />
+          <app-timeline-panel
+            [event]="timelineSelectedEvent()"
+            [visible]="timelinePanelOpen()"
+            (close)="timelinePanelOpen.set(false)"
+          />
+        </mat-tab>
+
         <!-- ── EVOLUÇÃO ── -->
         <mat-tab label="Evolução">
           <div class="evolution-mode-toggle">
@@ -1773,6 +1790,9 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   private wsSub?: Subscription;
   private pollInterval?: ReturnType<typeof setInterval>;
 
+  timelineSelectedEvent = signal<TimelineEvent | null>(null);
+  timelinePanelOpen = signal(false);
+
   subject   = signal<Subject | null>(null);
   exams     = signal<Exam[]>([]);
   aiResults = signal<Exam[]>([]);
@@ -2102,6 +2122,11 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
    * scope='owner': token cobre TODOS os animais do tutor (vet only — quando
    * subject é animal e tem owner_id).
    */
+  openTimelinePanel(event: TimelineEvent) {
+    this.timelineSelectedEvent.set(event);
+    this.timelinePanelOpen.set(true);
+  }
+
   openPortalTokenDialog(scope: 'subject' | 'owner' = 'subject'): void {
     const subj = this.subject();
     if (!subj) return;
