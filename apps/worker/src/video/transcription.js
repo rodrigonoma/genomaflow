@@ -14,7 +14,7 @@ const { sendToTenant } = require('../notifications/push');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 300_000 });
 
 const POLL_ATTEMPTS = 12;
 const POLL_DELAY_MS = 30_000; // 30s entre tentativas

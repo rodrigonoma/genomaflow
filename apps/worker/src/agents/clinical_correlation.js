@@ -1,6 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk').default;
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000 });
 
 const DISCLAIMER = 'Esta análise representa suporte à decisão clínica baseado nos marcadores laboratoriais apresentados e não constitui diagnóstico. A interpretação clínica deve ser realizada pelo profissional de saúde responsável.';
 

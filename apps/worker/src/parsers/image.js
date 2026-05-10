@@ -13,7 +13,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk').default;
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000 });
 const MODEL = 'claude-sonnet-4-6';
 
 /**

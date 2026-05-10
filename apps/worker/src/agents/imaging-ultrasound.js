@@ -1,6 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk').default;
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000 });
 
 const DISCLAIMER = 'Esta análise é um suporte à decisão clínica e não substitui avaliação ultrassonográfica profissional. As marcações indicam regiões aproximadas — validação profissional obrigatória.';
 

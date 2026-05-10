@@ -1,6 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk').default;
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000 });
 
 const DISCLAIMER = 'As sugestões terapêuticas são de suporte à decisão clínica e devem ser avaliadas e prescritas pelo profissional de saúde responsável. Os medicamentos, doses e frequências sugeridos são recomendações iniciais que DEVEM ser validados, ajustados ou descartados pelo médico ou veterinário antes de qualquer prescrição. Não substituem consulta médica ou veterinária.';
 

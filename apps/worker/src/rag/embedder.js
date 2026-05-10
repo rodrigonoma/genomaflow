@@ -1,6 +1,6 @@
 const OpenAI = require('openai');
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000 });
 
 /**
  * Generates a 1536-dimensional embedding using text-embedding-3-small.

@@ -1,6 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk').default;
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000 });
 
 const DISCLAIMER = 'As sugestões de nutrição e hábitos são de suporte à decisão clínica e devem ser avaliadas pelo profissional de saúde responsável. Não substituem consulta médica, veterinária ou com nutricionista.';
 
