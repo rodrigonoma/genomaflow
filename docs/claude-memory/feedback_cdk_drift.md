@@ -25,3 +25,8 @@ Resolução: 5 minutos de produção quebrada + cdk deploy de fix com `?sslmode=
 5. CI/CD que faz `aws ecs register-task-definition` copiando da última definition AINDA preserva valores out-of-band — mas o primeiro `cdk deploy` depois disso zera tudo.
 
 **Padrão preventivo:** todo env var, command, secret reference deve estar no `infra/lib/*.ts`. Se não está, é dívida técnica até virar incidente.
+
+**Drift catch-up 2026-05-10:** durante o `cdk deploy` da PR1 da auditoria (RDS Multi-AZ + ECS desiredCount), o `cdk diff` revelou drift no sentido inverso — código IaC tinha mudanças nunca aplicadas em prod:
+- IAM TaskRole faltava `s3:Put/Get/Delete` em prefix `video-consultations/*` → upload de vídeo em prod falhava silenciosamente (red flag conhecido)
+- IAM TaskRole faltava `chime:CreateMeeting/DeleteMeeting/CreateAttendee/DeleteAttendee/GetMeeting` → POST `/video/consultations` retornava 502
+Ambos foram aplicados de uma vez junto com Multi-AZ. Lição: **toda PR que toca `infra/lib/*.ts` deve disparar `cdk deploy` na mesma janela de aprovação**. Sem isso, código vai pra main mas stack continua antigo, gerando drift latente até alguém rodar deploy meses depois (aí "explode" tudo de uma vez).
