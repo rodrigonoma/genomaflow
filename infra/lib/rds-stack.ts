@@ -29,10 +29,10 @@ export class RdsStack extends cdk.Stack {
       credentials: rds.Credentials.fromGeneratedSecret('genomaflow', {
         secretName: '/genomaflow/prod/rds-credentials',
       }),
-      multiAz: false,
+      multiAz: true,
       allocatedStorage: 20,
       storageType: rds.StorageType.GP2,
-      backupRetention: cdk.Duration.days(0),
+      backupRetention: cdk.Duration.days(30),
       deletionProtection: true,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
       // Parâmetros para habilitar pgvector

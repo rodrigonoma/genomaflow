@@ -457,7 +457,7 @@ export class EcsStack extends cdk.Stack {
       cluster,
       taskDefinition:    apiTask,
       serviceName:       'genomaflow-api',
-      desiredCount:      1,
+      desiredCount:      2,
       securityGroups:    [sgEcs],
       assignPublicIp:    true, // necessário sem NAT gateway para pull do ECR
       vpcSubnets:        { subnetType: ec2.SubnetType.PUBLIC },
@@ -480,7 +480,7 @@ export class EcsStack extends cdk.Stack {
       cluster,
       taskDefinition: webTask,
       serviceName:    'genomaflow-web',
-      desiredCount:   1,
+      desiredCount:   2,
       securityGroups: [sgEcs],
       assignPublicIp: true,
       vpcSubnets:     { subnetType: ec2.SubnetType.PUBLIC },
