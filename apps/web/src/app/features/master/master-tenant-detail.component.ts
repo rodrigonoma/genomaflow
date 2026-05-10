@@ -79,7 +79,12 @@ interface TenantDetail {
     MatTooltipModule, MatSnackBarModule, MatProgressSpinnerModule, MatDialogModule,
   ],
   styles: [`
-    :host { display:block; padding:1.5rem 2rem 3rem; max-width:1200px; margin:0 auto; color:#dae2fd; }
+    /* fixed/inset/z-index igual ao MasterComponent — cobre a sidebar do AppComponent
+       (que sempre renderiza, mas master tem layout próprio). */
+    :host { display:block; position:fixed; inset:0; z-index:9999;
+            background:#080e1c; overflow:auto;
+            padding:1.5rem 2rem 3rem; color:#dae2fd; }
+    .inner { max-width:1200px; margin:0 auto; }
 
     .header { display:flex; align-items:center; gap:.75rem; margin-bottom:1.5rem; }
     .back-btn {
