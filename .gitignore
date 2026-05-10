@@ -15,6 +15,22 @@ APIKEY*.txt
 # OS / editor
 .DS_Store
 *.Zone.Identifier
+*:Zone.Identifier
+
+# Local agent/AI configs
+.claude/
+.codex
+.codex/
+
+# Local-only assets/scratch (não vão pro repositório)
+USUARIOS TESTES.txt
+docker/
+prototipo/
+prints/
+logo/
+exemplos/
+videos/
+stitch_*.zip
 
 # Build output
 dist/

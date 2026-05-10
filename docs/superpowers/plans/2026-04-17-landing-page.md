@@ -1,0 +1,634 @@
+# Landing Page Institucional — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Criar `apps/landing/index.html` — site estático do GenomaFlow baseado no design "Surgical Editorial", totalmente em PT-BR.
+
+**Architecture:** Arquivo HTML único com Tailwind CDN inline-config (mesma paleta do protótipo), SVG inline no hero (sem imagens externas), APP_URL JS variable para todos os CTAs. Sem build step — deployável como arquivo estático.
+
+**Tech Stack:** HTML5, Tailwind CSS CDN, Material Symbols, Space Grotesk + Inter + JetBrains Mono (Google Fonts), SVG inline.
+
+---
+
+## File Map
+
+- Create: `apps/landing/index.html`
+
+---
+
+### Task 1: Base HTML — head, tailwind config, CSS, APP_URL
+
+**Files:**
+- Create: `apps/landing/index.html`
+
+- [ ] **Step 1: Criar o arquivo com head completo**
+
+```html
+<!DOCTYPE html>
+<html class="dark" lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GenomaFlow — Inteligência Clínica em Tempo Real</title>
+  <meta name="description" content="Transforme laudos PDF em insights clínicos estruturados para médicos e veterinários. Pipeline multi-tenant com latência abaixo de 60 segundos."/>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "secondary-fixed": "#e1e0ff",
+            "on-surface-variant": "#c7c5d0",
+            "on-secondary-container": "#acaeff",
+            "outline": "#918f9a",
+            "inverse-surface": "#dbe2fd",
+            "error-container": "#93000a",
+            "secondary-container": "#2f2ebe",
+            "tertiary-container": "#c0c1ff",
+            "surface-bright": "#31394e",
+            "on-error-container": "#ffdad6",
+            "inverse-on-surface": "#283044",
+            "on-background": "#dbe2fd",
+            "secondary-fixed-dim": "#c0c1ff",
+            "surface-container-highest": "#2d3449",
+            "tertiary-fixed": "#e1e0ff",
+            "tertiary": "#e1dfff",
+            "on-tertiary-fixed": "#05006d",
+            "surface-variant": "#2d3449",
+            "on-primary": "#292b5e",
+            "on-tertiary-container": "#3e41bd",
+            "surface-container": "#171f33",
+            "on-error": "#690005",
+            "on-secondary-fixed-variant": "#2f2ebe",
+            "inverse-primary": "#585990",
+            "primary-container": "#c0c1ff",
+            "outline-variant": "#46464f",
+            "primary-fixed-dim": "#c0c1ff",
+            "on-primary-fixed": "#131449",
+            "on-secondary": "#1000a9",
+            "primary-fixed": "#e1e0ff",
+            "on-primary-container": "#4b4d83",
+            "surface-container-lowest": "#060d20",
+            "surface-dim": "#0b1326",
+            "on-surface": "#dbe2fd",
+            "secondary": "#c0c1ff",
+            "surface-tint": "#c0c1ff",
+            "surface-container-high": "#222a3e",
+            "surface": "#0b1326",
+            "on-tertiary": "#15129c",
+            "tertiary-fixed-dim": "#c0c1ff",
+            "surface-container-low": "#131b2e",
+            "on-secondary-fixed": "#06006c",
+            "background": "#0b1326",
+            "primary": "#e1dfff",
+            "on-primary-fixed-variant": "#404176",
+            "on-tertiary-fixed-variant": "#3133b1",
+            "error": "#ffb4ab"
+          },
+          borderRadius: {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          fontFamily: {
+            "headline": ["Space Grotesk"],
+            "body": ["Inter"],
+            "label": ["Inter"],
+            "mono": ["JetBrains Mono"]
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
+    .glass-card { background: rgba(192, 193, 255, 0.1); backdrop-filter: blur(20px); }
+    .ai-border { border-left: 2px solid #585990; }
+    body { background-color: #0b1326; color: #dbe2fd; font-family: 'Inter', sans-serif; }
+    .pulse-indicator { width: 8px; height: 8px; background: #c0c1ff; border-radius: 50%; box-shadow: 0 0 10px #c0c1ff; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 10px #c0c1ff; } 50% { opacity: 0.5; box-shadow: 0 0 20px #c0c1ff; } }
+    .ai-card-hover:hover { background: rgba(192, 193, 255, 0.15); box-shadow: 0 0 40px rgba(192, 193, 255, 0.08); }
+  </style>
+</head>
+<body class="selection:bg-primary-container selection:text-on-primary-container">
+
+  <!-- BODY CONTENT GOES HERE (Tasks 2-6) -->
+
+  <script>
+    const APP_URL = 'http://localhost:4200';
+    // Em produção: const APP_URL = 'https://app.genomaflow.com.br';
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('[data-cta]').forEach(el => {
+        const path = el.getAttribute('data-cta');
+        if (el.tagName === 'A') el.href = APP_URL + path;
+        else el.onclick = () => window.location.href = APP_URL + path;
+      });
+    });
+  </script>
+</body>
+</html>
+```
+
+- [ ] **Step 2: Abrir no browser e verificar fundo #0b1326 com sem erros de console**
+
+Abra `apps/landing/index.html` no browser (File → Open). Verifique: fundo escuro `#0b1326`, sem erros de console.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add apps/landing/index.html
+git commit -m "feat: landing page base structure — tailwind config, fonts, APP_URL"
+```
+
+---
+
+### Task 2: Nav + Hero com SVG inline
+
+**Files:**
+- Modify: `apps/landing/index.html` (substituir `<!-- BODY CONTENT GOES HERE -->` pelo conteúdo abaixo)
+
+- [ ] **Step 1: Adicionar Nav fixo e Hero ao body**
+
+Inserir antes do `<script>` de APP_URL:
+
+```html
+<!-- Nav -->
+<nav class="fixed top-0 w-full z-50 flex justify-between items-center px-12 py-4 bg-gradient-to-r from-[#0b1326] via-[#1a1f2e] to-[#0b1326]">
+  <div class="font-headline text-xl font-medium tracking-tighter text-secondary">GenomaFlow</div>
+  <div class="hidden md:flex gap-8 items-center">
+    <a href="#modulos" class="font-mono text-xs tracking-widest uppercase text-on-surface-variant hover:text-secondary transition-colors">Módulos</a>
+    <a href="#pipeline" class="font-mono text-xs tracking-widest uppercase text-on-surface-variant hover:text-secondary transition-colors">Pipeline</a>
+    <a href="#precos" class="font-mono text-xs tracking-widest uppercase text-on-surface-variant hover:text-secondary transition-colors">Preços</a>
+    <a href="#seguranca" class="font-mono text-xs tracking-widest uppercase text-on-surface-variant hover:text-secondary transition-colors">Segurança</a>
+  </div>
+  <div class="flex items-center gap-3">
+    <a data-cta="/login" class="font-mono text-xs uppercase tracking-widest text-on-surface-variant hover:text-secondary transition-colors px-4 py-2">Acessar Plataforma</a>
+    <a data-cta="/onboarding" class="bg-primary-container text-on-primary-container px-6 py-2 text-xs font-headline font-bold uppercase tracking-widest rounded-lg hover:scale-105 transition-transform">Começar Grátis</a>
+  </div>
+</nav>
+
+<main class="pt-24">
+
+<!-- Hero -->
+<section class="min-h-screen flex flex-col justify-center px-12 relative overflow-hidden">
+  <div class="max-w-5xl z-10">
+    <div class="flex items-center gap-4 mb-8">
+      <div class="pulse-indicator"></div>
+      <span class="font-mono text-xs tracking-widest text-secondary uppercase">Sistema: Inteligência Ativa</span>
+    </div>
+    <h1 class="font-headline text-7xl font-bold tracking-tighter leading-none mb-6">
+      Inteligência Clínica<br/>em <span class="text-secondary">Tempo Real</span>.
+    </h1>
+    <p class="font-body text-xl text-on-surface-variant max-w-2xl mb-12 leading-relaxed">
+      Transforme laudos PDF em insights clínicos estruturados para médicos e veterinários. Pipeline multi-tenant com latência abaixo de 60 segundos.
+    </p>
+    <div class="flex gap-6 items-center flex-wrap">
+      <a data-cta="/onboarding" class="bg-primary-container text-on-primary-container px-8 py-4 text-sm font-headline font-bold uppercase tracking-widest rounded-lg hover:scale-105 transition-transform">
+        Começar Agora — 15 minutos para integrar
+      </a>
+      <a href="#" class="text-secondary font-mono text-xs border-b border-secondary/30 pb-1 hover:border-secondary transition-all uppercase tracking-widest">
+        VER DOCUMENTAÇÃO.EXE
+      </a>
+    </div>
+  </div>
+
+  <!-- Hero SVG inline -->
+  <div class="absolute right-0 top-0 w-1/2 h-full opacity-20 pointer-events-none">
+    <div class="w-full h-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-secondary/40 via-transparent to-transparent"></div>
+    <svg class="absolute top-1/2 -translate-y-1/2 right-12 w-full h-auto mix-blend-screen" viewBox="0 0 800 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="heroGrad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#585990" stop-opacity="0.6"/>
+          <stop offset="100%" stop-color="#0b1326" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <ellipse cx="400" cy="300" rx="340" ry="260" fill="url(#heroGrad)"/>
+      <!-- Hexagonal grid -->
+      <g stroke="#c0c1ff" stroke-width="0.5" opacity="0.3">
+        <polygon points="400,160 434,180 434,220 400,240 366,220 366,180"/>
+        <polygon points="468,200 502,220 502,260 468,280 434,260 434,220"/>
+        <polygon points="332,200 366,220 366,260 332,280 298,260 298,220"/>
+        <polygon points="400,240 434,260 434,300 400,320 366,300 366,260"/>
+        <polygon points="468,280 502,300 502,340 468,360 434,340 434,300"/>
+        <polygon points="332,280 366,300 366,340 332,360 298,340 298,300"/>
+        <polygon points="400,320 434,340 434,380 400,400 366,380 366,340"/>
+        <polygon points="536,160 570,180 570,220 536,240 502,220 502,180"/>
+        <polygon points="264,160 298,180 298,220 264,240 230,220 230,180"/>
+        <polygon points="536,240 570,260 570,300 536,320 502,300 502,260"/>
+        <polygon points="264,240 298,260 298,300 264,320 230,300 230,260"/>
+      </g>
+      <!-- Neural network nodes -->
+      <g fill="#c0c1ff" opacity="0.8">
+        <circle cx="400" cy="200" r="5"/>
+        <circle cx="468" cy="240" r="4"/>
+        <circle cx="332" cy="240" r="4"/>
+        <circle cx="400" cy="280" r="6"/>
+        <circle cx="468" cy="320" r="4"/>
+        <circle cx="332" cy="320" r="4"/>
+        <circle cx="536" cy="200" r="3"/>
+        <circle cx="264" cy="200" r="3"/>
+        <circle cx="400" cy="360" r="4"/>
+        <circle cx="536" cy="280" r="3"/>
+        <circle cx="264" cy="280" r="3"/>
+      </g>
+      <!-- Connection lines -->
+      <g stroke="#c0c1ff" stroke-width="0.8" opacity="0.4">
+        <line x1="400" y1="200" x2="468" y2="240"/>
+        <line x1="400" y1="200" x2="332" y2="240"/>
+        <line x1="468" y1="240" x2="400" y2="280"/>
+        <line x1="332" y1="240" x2="400" y2="280"/>
+        <line x1="400" y1="280" x2="468" y2="320"/>
+        <line x1="400" y1="280" x2="332" y2="320"/>
+        <line x1="400" y1="280" x2="400" y2="360"/>
+        <line x1="536" y1="200" x2="468" y2="240"/>
+        <line x1="264" y1="200" x2="332" y2="240"/>
+        <line x1="536" y1="280" x2="468" y2="320"/>
+        <line x1="264" y1="280" x2="332" y2="320"/>
+      </g>
+    </svg>
+  </div>
+</section>
+
+<!-- Intelligence Pulse Divider -->
+<div class="px-12 py-12 flex items-center gap-8">
+  <div class="h-px flex-grow bg-outline-variant/30"></div>
+  <div class="pulse-indicator"></div>
+  <div class="h-px flex-grow bg-outline-variant/30"></div>
+</div>
+```
+
+- [ ] **Step 2: Verificar no browser**
+
+Abrir o arquivo. Verificar: nav fixo com gradiente, título H1 em 7xl, SVG visível no lado direito em opacidade 20%, botões CTA presentes.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add apps/landing/index.html
+git commit -m "feat: landing nav, hero section with inline SVG"
+```
+
+---
+
+### Task 3: Módulos (grid assimétrico 12 colunas)
+
+**Files:**
+- Modify: `apps/landing/index.html`
+
+- [ ] **Step 1: Adicionar seção de módulos após o divider**
+
+```html
+<!-- Módulos -->
+<section id="modulos" class="px-12 py-24 grid grid-cols-12 gap-12">
+
+  <!-- Coluna esquerda: 5 cols — Módulo Humano -->
+  <div class="col-span-12 md:col-span-5 flex flex-col gap-8">
+    <div class="space-y-4">
+      <span class="font-mono text-xs text-secondary tracking-[0.2em] uppercase">Human Modules</span>
+      <h2 class="font-headline text-4xl font-semibold">Módulo Humano</h2>
+      <p class="text-on-surface-variant font-body">Suporte à decisão clínica para vias metabólicas, cardiovasculares e hematológicas complexas.</p>
+    </div>
+    <!-- Terminal simulado -->
+    <div class="glass-card ai-border p-8 space-y-6 ai-card-hover transition-all">
+      <div class="flex items-center justify-between">
+        <span class="font-headline text-lg">Risco Cardiovascular</span>
+        <span class="material-symbols-outlined text-secondary">cardiology</span>
+      </div>
+      <div class="font-mono text-xs space-y-2 opacity-70">
+        <p>&gt; Analisando Painel Lipídico...</p>
+        <p>&gt; Correlacionando Escores Framingham...</p>
+        <p>&gt; RAG Insight: Sensibilidade a estatinas prevista.</p>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+      <div class="bg-surface-container-high p-6 rounded-lg">
+        <span class="block font-mono font-bold text-2xl text-secondary mb-1">0.98</span>
+        <span class="font-label text-[10px] uppercase tracking-wider text-on-surface-variant">Precision Score</span>
+      </div>
+      <div class="bg-surface-container-high p-6 rounded-lg">
+        <span class="block font-mono font-bold text-2xl text-secondary mb-1">METAB-1</span>
+        <span class="font-label text-[10px] uppercase tracking-wider text-on-surface-variant">Active Engine</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Coluna direita: 7 cols, offset mt-24 — Módulo Veterinário -->
+  <div class="col-span-12 md:col-span-7 flex flex-col gap-8 mt-0 md:mt-24">
+    <div class="space-y-4">
+      <span class="font-mono text-xs text-secondary tracking-[0.2em] uppercase">Veterinary Modules</span>
+      <h2 class="font-headline text-4xl font-semibold">Módulo Veterinário</h2>
+      <p class="text-on-surface-variant font-body">Pipelines de IA específicos por espécie para nutrição, terapêutica e automação diagnóstica.</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="glass-card ai-border p-8 ai-card-hover transition-all">
+        <span class="material-symbols-outlined text-secondary mb-4 block" style="font-variation-settings:'FILL' 1;">pets</span>
+        <h3 class="font-headline text-xl mb-2">IA Espécie-Específica</h3>
+        <p class="text-sm text-on-surface-variant leading-relaxed">Ajustes dinâmicos de inferência para parâmetros fisiológicos de felinos, caninos e equinos.</p>
+      </div>
+      <div class="glass-card ai-border p-8 ai-card-hover transition-all">
+        <span class="material-symbols-outlined text-secondary mb-4 block" style="font-variation-settings:'FILL' 1;">nutrition</span>
+        <h3 class="font-headline text-xl mb-2">Nutrição Clínica</h3>
+        <p class="text-sm text-on-surface-variant leading-relaxed">Geração automatizada de prescrições nutricionais baseada em marcadores renais e hepáticos.</p>
+      </div>
+    </div>
+    <div class="bg-surface-container-low p-8 rounded-lg flex items-center justify-between">
+      <div class="space-y-1">
+        <div class="text-xs font-mono text-secondary">PIPELINE ATIVO: EQUINE_ORTHO_V4</div>
+        <div class="text-2xl font-headline font-medium">92% Inference Match</div>
+      </div>
+      <div class="h-12 w-24 bg-surface-container-highest rounded flex items-center justify-center">
+        <div class="flex gap-1 items-end">
+          <div class="w-1 h-4 bg-secondary/40 rounded-sm"></div>
+          <div class="w-1 h-6 bg-secondary rounded-sm"></div>
+          <div class="w-1 h-3 bg-secondary/60 rounded-sm"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+```
+
+- [ ] **Step 2: Verificar no browser**
+
+Verificar: grid de 12 colunas, coluna vet com offset `mt-24`, glass-cards com ai-border visível, terminal simulado na coluna humano.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add apps/landing/index.html
+git commit -m "feat: landing modules section — human/vet asymmetric grid"
+```
+
+---
+
+### Task 4: Pipeline Bento Grid
+
+**Files:**
+- Modify: `apps/landing/index.html`
+
+- [ ] **Step 1: Adicionar seção pipeline após módulos**
+
+```html
+<!-- Pipeline -->
+<section id="pipeline" class="px-12 py-32 bg-surface-container-lowest">
+  <div class="mb-16">
+    <div class="pulse-indicator mb-6"></div>
+    <h2 class="font-headline text-5xl font-bold mb-4 tracking-tighter">Pipeline de Inteligência Clínica</h2>
+    <p class="font-mono text-sm text-secondary uppercase tracking-widest">SaaS Multi-tenant | RAG com pgvector | Insights &lt; 60s</p>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 auto-rows-[250px]">
+
+    <!-- Síntese Multimodal 2x2 -->
+    <div class="md:col-span-2 md:row-span-2 glass-card p-10 flex flex-col justify-between border-t border-secondary/10">
+      <div>
+        <h3 class="font-headline text-3xl font-bold mb-4">Síntese Multimodal</h3>
+        <p class="text-on-surface-variant">Ingestão unificada de laudos PDF, imagens DICOM, RX e ondas ECG em um único contexto clínico estruturado.</p>
+      </div>
+      <div class="flex gap-4 flex-wrap">
+        <span class="px-3 py-1 bg-surface-container-highest font-mono text-[10px] text-secondary border border-secondary/20">PDF</span>
+        <span class="px-3 py-1 bg-surface-container-highest font-mono text-[10px] text-secondary border border-secondary/20">DICOM</span>
+        <span class="px-3 py-1 bg-surface-container-highest font-mono text-[10px] text-secondary border border-secondary/20">HL7/FHIR</span>
+        <span class="px-3 py-1 bg-surface-container-highest font-mono text-[10px] text-secondary border border-secondary/20">OCR</span>
+      </div>
+    </div>
+
+    <!-- Integration Studio 2x1 -->
+    <div class="md:col-span-2 glass-card p-10 ai-border">
+      <h3 class="font-headline text-xl font-bold mb-2">Integration Studio</h3>
+      <p class="text-sm text-on-surface-variant mb-6">Conectores de API e File Drop seguro para sistemas legados.</p>
+      <div class="flex items-center justify-between p-4 bg-surface-container-highest rounded font-mono text-xs">
+        <span>POST /api/v1/ingest</span>
+        <span class="text-secondary">200 OK</span>
+      </div>
+    </div>
+
+    <!-- Histórico Longitudinal 1x1 -->
+    <div class="md:col-span-1 glass-card p-8 flex flex-col justify-between">
+      <span class="material-symbols-outlined text-secondary">timeline</span>
+      <div>
+        <h4 class="font-headline font-bold">Histórico Longitudinal</h4>
+        <p class="text-xs text-on-surface-variant mt-2">Mapeamento profundo de dados do paciente ao longo do tempo.</p>
+      </div>
+    </div>
+
+    <!-- RAG Ready 1x1 -->
+    <div class="md:col-span-1 glass-card p-8 flex flex-col justify-between">
+      <span class="material-symbols-outlined text-secondary">database</span>
+      <div>
+        <h4 class="font-headline font-bold">RAG Ready</h4>
+        <p class="text-xs text-on-surface-variant mt-2">Busca semântica com pgvector para contexto clínico instantâneo.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+```
+
+- [ ] **Step 2: Verificar no browser**
+
+Verificar: background `surface-container-lowest`, bento grid 4 colunas, Síntese Multimodal ocupa 2x2, Integration Studio ocupa 2x1, dois cards menores embaixo.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add apps/landing/index.html
+git commit -m "feat: landing pipeline bento grid section"
+```
+
+---
+
+### Task 5: Preços (assinatura + créditos + banner promoção)
+
+**Files:**
+- Modify: `apps/landing/index.html`
+
+- [ ] **Step 1: Adicionar seção de preços**
+
+```html
+<!-- Preços -->
+<section id="precos" class="px-12 py-32 grid grid-cols-1 md:grid-cols-2 gap-16 items-start">
+
+  <!-- Esquerda: texto descritivo -->
+  <div class="space-y-8">
+    <h2 class="font-headline text-5xl font-bold tracking-tight">Escalonamento Flexível</h2>
+    <p class="text-on-surface-variant text-lg leading-relaxed">Assine a plataforma e compre créditos conforme o consumo. Cada agente de IA executado consome 1 crédito.</p>
+    <ul class="space-y-4">
+      <li class="flex items-center gap-3">
+        <span class="material-symbols-outlined text-secondary text-sm">check_circle</span>
+        <span class="font-label text-sm uppercase tracking-wide">Arquitetura Multi-tenant</span>
+      </li>
+      <li class="flex items-center gap-3">
+        <span class="material-symbols-outlined text-secondary text-sm">check_circle</span>
+        <span class="font-label text-sm uppercase tracking-wide">RAG Prioritário</span>
+      </li>
+      <li class="flex items-center gap-3">
+        <span class="material-symbols-outlined text-secondary text-sm">check_circle</span>
+        <span class="font-label text-sm uppercase tracking-wide">Suporte 8/5</span>
+      </li>
+    </ul>
+  </div>
+
+  <!-- Direita: cards de planos -->
+  <div class="space-y-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <!-- Card Assinatura (destaque) -->
+      <div class="bg-surface-container-high p-8 rounded-lg space-y-6 border border-secondary/20 scale-105 origin-top-left">
+        <div>
+          <span class="font-mono text-[10px] text-secondary uppercase tracking-widest">Assinatura Mensal</span>
+          <div class="font-mono text-4xl text-secondary mt-2">R$&nbsp;199<span class="text-xs text-on-surface-variant">,00/mês</span></div>
+        </div>
+        <ul class="text-xs space-y-2 text-on-surface-variant font-body">
+          <li>✦ Acesso completo à plataforma</li>
+          <li>✦ Todos os módulos habilitados</li>
+          <li>✦ Suporte 8/5</li>
+        </ul>
+        <a data-cta="/onboarding" class="block w-full py-3 bg-primary-container text-on-primary-container rounded font-headline font-bold uppercase text-xs tracking-widest text-center hover:scale-105 transition-transform cursor-pointer">
+          Assinar agora
+        </a>
+      </div>
+
+      <!-- Card Créditos -->
+      <div class="bg-surface-container-high p-8 rounded-lg space-y-6">
+        <div>
+          <span class="font-mono text-[10px] text-secondary uppercase tracking-widest">Créditos de Consumo</span>
+          <div class="font-mono text-4xl text-secondary mt-2">R$&nbsp;0,49<span class="text-xs text-on-surface-variant">/crédito</span></div>
+        </div>
+        <ul class="text-xs space-y-2 text-on-surface-variant font-mono">
+          <li>100 créditos &nbsp;&nbsp;→ R$ &nbsp;49,90</li>
+          <li>250 créditos &nbsp;&nbsp;→ R$ 109,90</li>
+          <li>500 créditos &nbsp;&nbsp;→ R$ 199,90</li>
+        </ul>
+        <a data-cta="/onboarding" class="block w-full py-3 bg-surface-container-highest text-on-surface rounded font-headline font-bold uppercase text-xs tracking-widest text-center hover:bg-surface-container hover:text-secondary transition-colors cursor-pointer">
+          Comprar créditos
+        </a>
+      </div>
+
+    </div>
+
+    <!-- Banner promoção -->
+    <div class="glass-card ai-border p-6 space-y-2">
+      <div class="font-mono text-xs text-secondary uppercase tracking-widest">✦ Oferta de Boas-Vindas</div>
+      <p class="font-body text-sm text-on-surface-variant leading-relaxed">
+        No primeiro mês, <span class="text-secondary font-semibold">30% do valor da assinatura é convertido em créditos grátis</span>. R$&nbsp;199,00 → ~122 créditos inclusos. Válido na primeira assinatura.
+      </p>
+    </div>
+
+  </div>
+</section>
+```
+
+- [ ] **Step 2: Verificar no browser**
+
+Verificar: card assinatura com `scale-105` e border `secondary/20`, valores em JetBrains Mono, banner promoção com ai-border e glassmorphism.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add apps/landing/index.html
+git commit -m "feat: landing pricing section — subscription, credits, promo banner"
+```
+
+---
+
+### Task 6: Segurança, Compliance e Footer
+
+**Files:**
+- Modify: `apps/landing/index.html`
+
+- [ ] **Step 1: Adicionar seção segurança e footer, fechar `</main>`**
+
+```html
+<!-- Segurança & Compliance -->
+<section id="seguranca" class="mx-12 mb-32 bg-surface-container p-12 rounded-lg flex flex-col md:flex-row justify-between items-center gap-12 border-l-4 border-secondary">
+  <div class="max-w-xl space-y-6">
+    <h3 class="font-headline text-2xl">Conformidade Regulatória & Clínica</h3>
+    <p class="text-on-surface-variant text-sm leading-relaxed">
+      GenomaFlow é uma ferramenta de suporte à decisão clínica assistiva. Os insights de Inteligência Artificial são projetados para auxiliar clínicos, não para substituir o diagnóstico médico primário. Todos os sistemas estão em conformidade com as diretrizes da ANVISA e do CFM para Saúde Digital. Dados de pacientes são anonimizados conforme a LGPD.
+    </p>
+    <div class="flex gap-6 flex-wrap">
+      <div class="font-mono text-[10px] border border-outline-variant/50 p-2 text-on-surface-variant">ANVISA CERTIFIED</div>
+      <div class="font-mono text-[10px] border border-outline-variant/50 p-2 text-on-surface-variant">LGPD COMPLIANT</div>
+      <div class="font-mono text-[10px] border border-outline-variant/50 p-2 text-on-surface-variant">CFM R-891-2</div>
+    </div>
+  </div>
+  <div class="flex flex-col items-center flex-shrink-0">
+    <div class="text-secondary font-headline font-bold text-6xl">256-bit</div>
+    <div class="font-mono text-xs uppercase tracking-widest mt-2 text-on-surface-variant">AES Data Encryption</div>
+  </div>
+</section>
+
+</main><!-- /main -->
+
+<!-- Footer -->
+<footer class="w-full py-12 px-12 flex flex-col md:flex-row justify-between items-center gap-8 border-t border-secondary/10 bg-surface">
+  <div class="flex flex-col gap-2">
+    <div class="font-mono text-xs text-secondary uppercase">GenomaFlow Sentinel v2.4.0</div>
+    <div class="font-body text-[10px] uppercase tracking-[0.1em] text-on-surface-variant">© 2026 GenomaFlow. Inteligência Clínica.</div>
+  </div>
+  <div class="flex gap-8 flex-wrap justify-center">
+    <a href="#" class="font-body text-[10px] uppercase tracking-[0.1em] text-on-surface-variant hover:text-secondary transition-colors">LGPD</a>
+    <a href="#" class="font-body text-[10px] uppercase tracking-[0.1em] text-on-surface-variant hover:text-secondary transition-colors">ANVISA</a>
+    <a href="#" class="font-body text-[10px] uppercase tracking-[0.1em] text-on-surface-variant hover:text-secondary transition-colors">Documentação</a>
+    <a href="#" class="font-body text-[10px] uppercase tracking-[0.1em] text-on-surface-variant hover:text-secondary transition-colors">Status do Sistema</a>
+  </div>
+</footer>
+```
+
+- [ ] **Step 2: Verificar no browser**
+
+Verificar: seção segurança com `border-l-4 border-secondary` (azul), badges de compliance, "256-bit" em destaque. Footer com links e versão.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add apps/landing/index.html
+git commit -m "feat: landing security section and footer"
+```
+
+---
+
+### Task 7: Wiring final — APP_URL, âncoras, smoke test visual
+
+**Files:**
+- Modify: `apps/landing/index.html`
+
+- [ ] **Step 1: Verificar que todos os `data-cta` estão presentes**
+
+Os elementos com `data-cta` devem ser:
+- Nav "Acessar Plataforma": `data-cta="/login"`
+- Nav "Começar Grátis": `data-cta="/onboarding"`
+- Hero "Começar Agora": `data-cta="/onboarding"`
+- Pricing "Assinar agora": `data-cta="/onboarding"`
+- Pricing "Comprar créditos": `data-cta="/onboarding"`
+
+Fazer grep para confirmar:
+```bash
+grep -c 'data-cta' apps/landing/index.html
+# Esperado: 5
+```
+
+- [ ] **Step 2: Smoke test — abrir no browser e verificar golden path**
+
+Abrir `apps/landing/index.html` no browser:
+1. Nav fixo visível no topo com gradiente escuro
+2. Scroll suave até âncoras `#modulos`, `#pipeline`, `#precos`, `#seguranca` funcionam
+3. SVG hexagonal visível no hero (lado direito, opacidade ~20%)
+4. Módulos: coluna humano (5 cols) + vet (7 cols, offset 24)
+5. Pipeline: bento 4 cols com auto-rows de 250px
+6. Preços: card assinatura com scale-105, banner promoção com ai-border
+7. Segurança: border-left 4px secondary
+8. Footer: versão e links
+9. Console sem erros
+
+- [ ] **Step 3: Commit final**
+
+```bash
+git add apps/landing/index.html
+git commit -m "feat: landing page complete — GenomaFlow institucional"
+```
