@@ -267,6 +267,9 @@ export class EcsStack extends cdk.Stack {
 
     const apiContainer = apiTask.addContainer('api', {
       image:       ecs.ContainerImage.fromEcrRepository(apiRepo, 'latest'),
+      // Drena conexões HTTP em andamento antes do SIGKILL (default 30s pode
+      // cortar requests longas — uploads grandes, SSE streaming).
+      stopTimeout: cdk.Duration.seconds(60),
       environment: { ...backendEnv, PORT: '3000' },
       secrets:     backendSecrets,
       // DATABASE_URL montada via script de inicialização
@@ -297,6 +300,11 @@ export class EcsStack extends cdk.Stack {
 
     const workerContainer = workerTask.addContainer('worker', {
       image:       ecs.ContainerImage.fromEcrRepository(workerRepo, 'latest'),
+      // Máximo Fargate (120s). Worker tem jobs de exam que podem durar
+      // 60-90s (PDF parse + agentes IA + persist). PR2 adicionou graceful
+      // SIGTERM no app — isso garante que ECS espera o BullMQ.close()
+      // finalizar antes do SIGKILL. Sem isso, default 30s mata jobs no meio.
+      stopTimeout: cdk.Duration.seconds(120),
       environment: backendEnv,
       secrets:     backendSecrets,
       command: [
