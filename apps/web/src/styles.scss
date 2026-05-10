@@ -298,6 +298,11 @@ body.is-mobile select {
   font-size: 16px !important;
 }
 
+/* CDK overlay (dialogs Material, menus, tooltips) DEVE ficar acima do MasterComponent
+ * que tem :host{ z-index:9999 } pra bloquear interação fora dele. Sem essa regra,
+ * dialogs abertos do master ficam invisíveis (atrás do próprio host). Default Material é 1000. */
+.cdk-overlay-container { z-index: 100000 !important; }
+
 /* Diálogos Material: fullscreen no mobile */
 body.is-mobile .cdk-overlay-pane.dark-dialog {
   max-width: 100vw !important;
