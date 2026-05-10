@@ -119,20 +119,19 @@ import { TermsService, LegalDocument } from './terms.service';
       </div>
 
       <div class="card">
-        <div class="instructions">⬇ Abra cada documento e marque como lido</div>
+        <div class="instructions">É sua responsabilidade ler cada documento antes de aceitar.</div>
 
         <div class="doc-list">
           @for (d of pending(); track d.type) {
             <div class="doc-row" [class.accepted]="isChecked(d.type)">
               <mat-checkbox color="primary"
                             [checked]="isChecked(d.type)"
-                            [disabled]="!wasOpened(d.type)"
                             (change)="toggle(d.type, $event.checked)"/>
               <div class="doc-info">
                 <div class="doc-title">{{ d.title }}</div>
-                <div class="doc-version">Versão {{ d.version }} · clique abaixo para ler</div>
+                <div class="doc-version">Versão {{ d.version }}</div>
               </div>
-              <a class="open-btn" [href]="d.pdf_url" target="_blank" rel="noopener" (click)="markOpened(d.type)">
+              <a class="open-btn" [href]="d.pdf_url" target="_blank" rel="noopener">
                 <mat-icon style="font-size:14px;width:14px;height:14px">open_in_new</mat-icon>
                 Abrir PDF
               </a>
@@ -168,7 +167,6 @@ export class TermsAcceptanceComponent implements OnInit {
 
   pending = signal<LegalDocument[]>([]);
   checked = signal<Set<string>>(new Set());
-  opened  = signal<Set<string>>(new Set());
   submitting = signal(false);
 
   checkedCount = computed(() => this.checked().size);
@@ -187,22 +185,11 @@ export class TermsAcceptanceComponent implements OnInit {
     });
   }
 
-  markOpened(type: string): void {
-    const s = new Set(this.opened());
-    s.add(type);
-    this.opened.set(s);
-  }
-
-  wasOpened(type: string): boolean {
-    return this.opened().has(type);
-  }
-
   isChecked(type: string): boolean {
     return this.checked().has(type);
   }
 
   toggle(type: string, checked: boolean): void {
-    if (!this.wasOpened(type)) return;
     const s = new Set(this.checked());
     checked ? s.add(type) : s.delete(type);
     this.checked.set(s);
