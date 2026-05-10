@@ -11,11 +11,33 @@ const SPECIES_LABELS = {
   bird: 'Ave', reptile: 'Réptil', other: 'Outro'
 };
 
+// Retry exponencial só pra erros transientes (429 throttle, 5xx, network).
+// 400 (bad request) e 401 (auth) propagam imediatamente — retry não resolve.
+async function callWithRetry(fn, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isLast = attempt === maxRetries - 1;
+      const isTransient =
+        err.status === 429 ||
+        (err.status >= 500 && err.status < 600) ||
+        ['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN'].includes(err.code);
+      if (isLast || !isTransient) throw err;
+      const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+      console.warn(`[embedBatch] retry ${attempt + 1}/${maxRetries - 1} after ${delay}ms (${err.message})`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+}
+
 async function embedBatch(texts) {
   const embeddings = [];
   for (let i = 0; i < texts.length; i += 100) {
     const batch = texts.slice(i, i + 100).map(t => t.slice(0, 8000));
-    const res   = await openai.embeddings.create({ model: 'text-embedding-3-small', input: batch });
+    const res   = await callWithRetry(() =>
+      openai.embeddings.create({ model: 'text-embedding-3-small', input: batch })
+    );
     embeddings.push(...res.data.map(d => d.embedding));
   }
   return embeddings;

@@ -13,7 +13,12 @@ const videoConn   = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: nul
 const worker = new Worker('exam-processing', async (job) => {
   console.log(`[worker] Processing job ${job.id}: exam ${job.data.exam_id}`);
   await processExam(job.data);
-}, { connection, concurrency: 3 });
+}, {
+  connection,
+  concurrency: 3,
+  removeOnComplete: { age: 3600 },        // retém histórico de 1h pós-sucesso
+  removeOnFail:     { age: 86400 },       // retém falhas por 24h pra debug
+});
 
 worker.on('completed', (job) => console.log(`[worker] Job ${job.id} completed`));
 worker.on('failed',    (job, err) => console.error(`[worker] Job ${job.id} failed: ${err.message}`));
@@ -21,7 +26,12 @@ worker.on('failed',    (job, err) => console.error(`[worker] Job ${job.id} faile
 const videoWorker = new Worker('video-transcription', async (job) => {
   console.log(`[video-worker] Job ${job.id}: consultation ${job.data.consultation_id}`);
   await processVideoTranscription(job.data);
-}, { connection: videoConn, concurrency: 2 });
+}, {
+  connection: videoConn,
+  concurrency: 2,
+  removeOnComplete: { age: 3600 },
+  removeOnFail:     { age: 86400 },
+});
 
 videoWorker.on('completed', (job) => console.log(`[video-worker] Job ${job.id} completed`));
 videoWorker.on('failed',    (job, err) => console.error(`[video-worker] Job ${job.id} failed: ${err.message}`));
@@ -53,5 +63,30 @@ subscriber.on('pmessage', async (_pattern, channel, message) => {
 
 // Fase 3 PMS expansion — scheduler de lembretes WhatsApp/email
 startScheduler();
+
+// Graceful shutdown: ECS envia SIGTERM antes de matar o container.
+// Sem isso, jobs em andamento ficam stuck em 'processing' e o BullMQ retenta infinitamente.
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[worker] ${signal} received, closing gracefully...`);
+  const results = await Promise.allSettled([
+    worker.close(),
+    videoWorker.close(),
+    subscriber.quit(),
+    connection.quit(),
+    videoConn.quit(),
+  ]);
+  const failures = results.filter(r => r.status === 'rejected');
+  if (failures.length) {
+    console.error('[worker] Shutdown errors:', failures.map(f => f.reason?.message));
+    process.exit(1);
+  }
+  console.log('[worker] Shutdown complete');
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
 
 console.log('[worker] Listening for exam-processing, video-transcription jobs and index events...');
