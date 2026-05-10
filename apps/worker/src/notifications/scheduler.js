@@ -512,6 +512,32 @@ async function sendPendingNotifications() {
   }
 }
 
+// Cleanup diário de error_log antigo. Mantém últimos 90 dias.
+// Em memória — em restart do worker re-executa em ~30s (idempotente, DELETE
+// não duplica). Multi-instância (desiredCount>1) cada uma roda uma vez por dia,
+// custo desprezível dado o índice em created_at (migration 085).
+const ERROR_LOG_RETENTION_DAYS = 90;
+let lastErrorLogCleanup = 0;
+async function cleanupOldErrorLogs() {
+  const now = Date.now();
+  if (now - lastErrorLogCleanup < 23 * 60 * 60 * 1000) return; // <23h desde última
+  lastErrorLogCleanup = now;
+  const client = await getPool().connect();
+  try {
+    const { rowCount } = await client.query(
+      `DELETE FROM error_log WHERE created_at < NOW() - ($1 || ' days')::interval`,
+      [String(ERROR_LOG_RETENTION_DAYS)]
+    );
+    if (rowCount > 0) {
+      console.log(`[notif] Cleaned ${rowCount} error_log entries >${ERROR_LOG_RETENTION_DAYS}d old`);
+    }
+  } catch (err) {
+    console.error('[notif] error_log cleanup failed:', err.message);
+  } finally {
+    client.release();
+  }
+}
+
 async function tick() {
   const startTs = Date.now();
   try {
@@ -522,6 +548,7 @@ async function tick() {
     await generateExamAlertFollowups();
     await generateVaccineDoseReminders();
     await sendPendingNotifications();
+    await cleanupOldErrorLogs();
     console.log(`[notif] tick done in ${Date.now() - startTs}ms`);
   } catch (err) {
     console.error('[notif] tick error:', err.message, err.stack?.split('\n').slice(0, 3).join(' | '));
@@ -542,4 +569,5 @@ module.exports = {
   generateExamAlertFollowups,
   generateVaccineDoseReminders,
   sendPendingNotifications,
+  cleanupOldErrorLogs,
 };
