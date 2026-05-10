@@ -3,6 +3,7 @@
 .env
 .env.*
 !.env.example
+env
 
 # Dependencies
 node_modules/
@@ -11,6 +12,11 @@ node_modules/
 # API keys and credentials
 APIKEY*.txt
 "APIKEY*.txt"
+aws/
+**/aws/credentials
+**/aws/config
+*.pem
+*.key
 
 # OS / editor
 .DS_Store
