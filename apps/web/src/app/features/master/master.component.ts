@@ -1264,21 +1264,12 @@ export class MasterComponent implements OnInit {
 
   /** Abre dialog para criar tenant manualmente (com opções de créditos iniciais, ativar, marcar email verificado, aceitar termos) */
   openCreateTenant(): void {
-    console.log('[master] openCreateTenant clicado — abrindo dialog');
-    try {
-      const ref = this.dialog.open(CreateTenantDialogComponent, {
-        width: '560px',
-        panelClass: 'dark-dialog',
-      });
-      console.log('[master] dialog ref criado:', ref);
-      ref.afterClosed().subscribe((res) => {
-        console.log('[master] dialog fechado com resultado:', res);
-        if (res) this.loadTenants();
-      });
-    } catch (err) {
-      console.error('[master] erro ao abrir dialog:', err);
-      alert('Erro ao abrir dialog — abra o F12 console e me mande o erro: ' + (err as any)?.message);
-    }
+    this.dialog.open(CreateTenantDialogComponent, {
+      width: '560px',
+      panelClass: 'dark-dialog',
+    }).afterClosed().subscribe((res) => {
+      if (res) this.loadTenants();
+    });
   }
 
   toggleExpand(t: Tenant): void {

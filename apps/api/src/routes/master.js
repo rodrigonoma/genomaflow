@@ -182,12 +182,14 @@ module.exports = async function masterRoutes(fastify) {
 
   fastify.get('/tenants/:id/exams', auth(), async (request, reply) => {
     const { id } = request.params;
+    // patients foi renomeada → subjects + exams.patient_id → exams.subject_id
+    // pela migration 012_patients_to_subjects. Esse endpoint estava com SQL legado.
     const { rows } = await fastify.pg.query(
       `SELECT e.id, e.status, e.file_path, e.created_at,
-              p.name AS patient_name, p.species
+              s.name AS patient_name, s.species
        FROM exams e
-       JOIN patients p ON p.id = e.patient_id
-       WHERE p.tenant_id = $1
+       JOIN subjects s ON s.id = e.subject_id
+       WHERE s.tenant_id = $1
        ORDER BY e.created_at DESC
        LIMIT 100`,
       [id]

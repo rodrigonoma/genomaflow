@@ -66,6 +66,15 @@ Movido do CLAUDE.md em 2026-05-09 para reduzir contexto carregado em toda sessã
 - **Mesmo MediaStream passado pra `startAudioInput` E `startVideoInput`** → ao chamar `realtimeMuteLocalAudio()`, o stream inteiro é afetado e o vídeo local também cai (paciente para de ver médico). Fix: SEPARAR tracks em MediaStreams DISTINTOS: `new MediaStream(fullStream.getAudioTracks())` pro audio input e `new MediaStream(fullStream.getVideoTracks())` pro video input. As tracks são as mesmas (mesmo objeto), só os MediaStream containers são distintos — Chime trata cada um isoladamente (incidente 2026-05-09)
 - **`<audio>` element sem `volume = 1.0` explícito** → áudio remoto pode tocar baixo. Browser pode iniciar o elemento com volume default não-1.0 dependendo da política de autoplay/contexto. Fix: após `bindAudioElement`, setar `audioEl.volume = 1.0` e `audioEl.muted = false`
 
+## Angular Material / CDK Overlay
+
+- **Componente com `:host { z-index: alto }` esconde dialogs Material** → o `cdk-overlay-container` do CDK tem z-index padrão **1000**. Se um componente standalone (ex: MasterComponent) usa `:host { position: fixed; inset: 0; z-index: 9999 }` pra ocupar toda viewport, **TODOS os dialogs abertos a partir desse componente ficam invisíveis** — são criados (referência válida em `dialog.open().afterClosed()`) mas renderizam ATRÁS do host. Sintoma: `dialog.open()` retorna ref normal, log "dialog ref criado: k {...}" aparece, mas nada visual. Fix: adicionar regra global `.cdk-overlay-container { z-index: 100000 !important; }` no `styles.scss` (cobre dialogs, menus, tooltips, snackbars). Não derruba o z-index do host pra preservar o bloqueio de interação. Incidente 2026-05-09 — 5 prompts de debug pra achar a causa
+- **Standalone component sem `MatDialogModule` nos imports** → `inject(MatDialog)` funciona (DI providedIn: root), mas `dialog.open()` falha silenciosamente. SEMPRE adicionar `MatDialogModule` ao array `imports:` do `@Component({ standalone: true })` que abre dialog
+
+## Schema legado / Tabelas renomeadas
+
+- **Migration 012_patients_to_subjects renomeou `patients` → `subjects` + `exams.patient_id` → `exams.subject_id`** mas vários endpoints ainda têm SQL antigo (`FROM patients`, `JOIN patients`, etc) que retornam `relation "patients" does not exist` (Postgres 42P01). Pegou em produção 2026-05-09: `GET /master/tenants/:id/exams`. Quando criar/auditar query nova, **NUNCA escrever `patients`** — sempre `subjects`. FK column é `subject_id`, não `patient_id`. Mesma regra para owners/users/etc — sempre conferir com `git grep "patients\|patient_id" apps/api/src/routes/`
+
 ## Schema / SQL
 
 - **`owners` não tem `subject_id`** → FK é `subjects.owner_id → owners.id`. JOIN errado: `ON o.subject_id = s.id`; correto: `ON o.id = s.owner_id`
