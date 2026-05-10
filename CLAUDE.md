@@ -71,6 +71,19 @@ Tabela completa de diferenças relevantes (sujeito, owner, agentes IA, campos cl
 
 ---
 
+## Sem Regressão e Sem Gambiarra (OBRIGATÓRIO)
+
+Toda feature nova, ajuste ou correção de bug DEVE ser entregue sem quebrar funcionalidade existente E utilizando as melhores práticas/técnicas. Gambiarra é proibida.
+
+- **Sem regressão**: mapear impacto antes de mudar, smoke test (login admin/master + telas críticas), `npm run test:unit` (api) + `npm test` (worker/web) localmente, multi-módulo (human/vet/estetica) preservado, defesa em profundidade preservada (RLS, `withTenant`, `AND tenant_id`, ACL master), migrations sempre aditivas, sync mobile junto.
+- **Sem gambiarra**: causa raiz sempre, padrões consagrados do projeto, SDK oficial vence solução caseira, idempotência onde repete, erros explícitos com código + status correto, sem `console.log`/debug em prod, sem TODO sem issue, sem skip de teste/`--no-verify`/bypass de RLS pra contornar problema, sem código duplicado por preguiça.
+- **Red flags de gambiarra**: "por enquanto", "depois eu refatoro", "funciona aqui deve funcionar lá", "vou ignorar esse erro/teste", "RLS já cobre, não preciso filtrar".
+- **Trade-off legítimo é documentado** no commit/memória (alternativa considerada + por que descartada).
+
+Detalhes: `docs/claude-memory/feedback_no_regression_no_gambiarra.md`.
+
+---
+
 ## Fluxo de Desenvolvimento (OBRIGATÓRIO)
 
 1. **Branch de desenvolvimento**: todo trabalho começa em uma branch criada a partir da `main`. Nunca commitar direto na main.
