@@ -61,6 +61,13 @@ export const routes: Routes = [
       import('./features/master/master-tenant-detail.component').then(m => m.MasterTenantDetailComponent)
   },
   {
+    path: 'master/aesthetic-catalog',
+    canActivate: [authGuard, masterGuard],
+    loadComponent: () =>
+      import('./features/aesthetic/components/master/master-treatment-catalog.component')
+        .then(m => m.MasterTreatmentCatalogComponent)
+  },
+  {
     // Impersonate launch — recebe token via query param e salva em sessionStorage.
     // Sem authGuard pq nesse momento ainda não tem sessão; o componente cria.
     path: 'impersonate-launch',

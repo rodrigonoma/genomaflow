@@ -226,6 +226,10 @@ interface Stats {
           }
         </div>
       }
+      <div class="nav-item" (click)="goToAestheticCatalog()">
+        <span class="nav-icon material-icons">spa</span>
+        Catálogo Estética
+      </div>
     </div>
 
     <!-- Main content -->
@@ -1250,6 +1254,11 @@ export class MasterComponent implements OnInit {
   /** Abre tela de gerenciamento consolidado do tenant (ações: ativar, créditos, users, reset senha, etc) */
   openTenantDetail(t: Tenant): void {
     this.router.navigate(['/master/tenants', t.id]);
+  }
+
+  /** Navega para o catálogo global de tratamentos estéticos */
+  goToAestheticCatalog(): void {
+    this.router.navigate(['/master/aesthetic-catalog']);
   }
 
   /** Abre modal de detalhe de um erro (stack trace, body, user-agent, contexto) */
