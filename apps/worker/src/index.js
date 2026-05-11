@@ -5,10 +5,12 @@ const { processExam } = require('./processors/exam');
 const { processVideoTranscription } = require('./video/transcription');
 const { indexSubject, indexAggregates } = require('./rag/indexer');
 const { startScheduler } = require('./notifications/scheduler');
+const { processAestheticAnalysis } = require('./processors/aesthetic-analysis');
 
-const connection  = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
-const subscriber  = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
-const videoConn   = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+const connection    = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+const subscriber    = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+const videoConn     = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+const aestheticConn = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
 
 const worker = new Worker('exam-processing', async (job) => {
   console.log(`[worker] Processing job ${job.id}: exam ${job.data.exam_id}`);
@@ -35,6 +37,19 @@ const videoWorker = new Worker('video-transcription', async (job) => {
 
 videoWorker.on('completed', (job) => console.log(`[video-worker] Job ${job.id} completed`));
 videoWorker.on('failed',    (job, err) => console.error(`[video-worker] Job ${job.id} failed: ${err.message}`));
+
+const aestheticWorker = new Worker('aesthetic-analysis', async (job) => {
+  console.log(`[aesthetic-worker] Job ${job.id}: analysis ${job.data.analysis_id}`);
+  await processAestheticAnalysis({ data: job.data });
+}, {
+  connection: aestheticConn,
+  concurrency: 2,
+  removeOnComplete: { age: 3600 },
+  removeOnFail:     { age: 86400 },
+});
+
+aestheticWorker.on('completed', (job) => console.log(`[aesthetic-worker] Job ${job.id} completed`));
+aestheticWorker.on('failed',    (job, err) => console.error(`[aesthetic-worker] Job ${job.id} failed: ${err.message}`));
 
 subscriber.psubscribe('subject:upserted:*', 'billing:updated:*', (err) => {
   if (err) console.error('[worker] Subscribe error:', err.message);
@@ -74,9 +89,11 @@ async function shutdown(signal) {
   const results = await Promise.allSettled([
     worker.close(),
     videoWorker.close(),
+    aestheticWorker.close(),
     subscriber.quit(),
     connection.quit(),
     videoConn.quit(),
+    aestheticConn.quit(),
   ]);
   const failures = results.filter(r => r.status === 'rejected');
   if (failures.length) {
@@ -89,4 +106,4 @@ async function shutdown(signal) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
 
-console.log('[worker] Listening for exam-processing, video-transcription jobs and index events...');
+console.log('[worker] Listening for exam-processing, video-transcription, aesthetic-analysis jobs and index events...');
