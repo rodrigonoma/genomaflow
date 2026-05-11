@@ -1777,9 +1777,9 @@ interface ComparisonBlock {
           </div>
         </mat-tab>
 
-        <!-- ── ANÁLISE FACIAL IA (módulo estetica) ── -->
+        <!-- ── ANÁLISE IA — facial + corporal (módulo estetica) ── -->
         @if (auth.currentProfile?.module === 'estetica') {
-          <mat-tab label="Análise Facial IA" data-tab="aesthetic-facial">
+          <mat-tab label="Análise IA" data-tab="aesthetic">
             @if (subject()) {
               <app-facial-analysis-tab
                 [subject]="{ id: subject()!.id, name: subject()!.name }">
