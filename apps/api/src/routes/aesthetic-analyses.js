@@ -4,7 +4,7 @@ const { requireEsteticaModule } = require('../middleware/aesthetic-module-gate')
 const { VALID_ANALYSIS_TYPES } = require('../constants/aesthetic-metrics');
 const { getBalance, debit } = require('../services/aesthetic-credits');
 const { getConsent } = require('../services/aesthetic-consent');
-const { createPending, validatePhotosOwnership } = require('../services/aesthetic-analyses');
+const { createPending, validatePhotosOwnership, listForSubject, getDetail, softDelete, getMetricsOnly, computeDeltas } = require('../services/aesthetic-analyses');
 const { enqueue } = require('../queues/aesthetic-analysis-queue');
 
 const COST_BY_TYPE = {
@@ -87,6 +87,67 @@ module.exports = async function (fastify) {
       analysis_id: analysis.id,
       status: 'pending',
       credits_charged: cost,
+    });
+  });
+
+  // GET /aesthetic/analyses?subject_id=&type=&limit=&offset=
+  fastify.get('/analyses', {
+    preHandler: [fastify.authenticate, requireEsteticaModule],
+    config: { rateLimit: { max: 120, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
+    const { subject_id, type, limit, offset } = request.query;
+    if (!subject_id) return reply.status(400).send({ error: 'subject_id obrigatório' });
+    const items = await listForSubject(fastify.pg, {
+      tenantId: request.user.tenant_id,
+      subjectId: subject_id,
+      analysisType: type,
+      limit: Math.min(100, Math.max(1, parseInt(limit) || 20)),
+      offset: Math.max(0, parseInt(offset) || 0),
+    });
+    return reply.send({ items });
+  });
+
+  // GET /aesthetic/analyses/:id
+  fastify.get('/analyses/:id', {
+    preHandler: [fastify.authenticate, requireEsteticaModule],
+    config: { rateLimit: { max: 120, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
+    const a = await getDetail(fastify.pg, request.params.id, request.user.tenant_id);
+    if (!a) return reply.status(404).send({ error: 'Análise não encontrada' });
+    return reply.send(a);
+  });
+
+  // DELETE /aesthetic/analyses/:id
+  fastify.delete('/analyses/:id', {
+    preHandler: [fastify.authenticate, requireEsteticaModule],
+    config: { rateLimit: { max: 30, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
+    const ok = await softDelete(fastify.pg, request.params.id, request.user.tenant_id, request.user.user_id);
+    if (!ok) return reply.status(404).send({ error: 'Análise não encontrada' });
+    return reply.status(204).send();
+  });
+
+  // POST /aesthetic/analyses/:id/compare
+  fastify.post('/analyses/:id/compare', {
+    preHandler: [fastify.authenticate, requireEsteticaModule],
+    config: { rateLimit: { max: 60, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
+    const { baseline_id } = request.body || {};
+    if (!baseline_id) return reply.status(400).send({ error: 'baseline_id obrigatório' });
+    const tenantId = request.user.tenant_id;
+    const [baseline, current] = await Promise.all([
+      getMetricsOnly(fastify.pg, baseline_id, tenantId),
+      getMetricsOnly(fastify.pg, request.params.id, tenantId),
+    ]);
+    if (!baseline || !current) {
+      return reply.status(404).send({ error: 'Análise (baseline ou atual) não encontrada ou ainda não concluída' });
+    }
+    const result = computeDeltas(baseline.metrics, current.metrics);
+    return reply.send({
+      baseline_id: baseline.id,
+      current_id: current.id,
+      deltas: result.deltas,
+      overall_change: result.overall_change,
     });
   });
 };

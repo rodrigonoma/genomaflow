@@ -105,3 +105,78 @@ describe('POST /aesthetic/analyses', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe('GET /aesthetic/analyses', () => {
+  test('lista com filtro de subject_id', async () => {
+    const app = await buildApp();
+    app.pg.query.mockImplementation(async (sql, params) => {
+      if (/SELECT id, analysis_type, status, created_at/i.test(sql)) {
+        return { rows: [{ id: 'a1', analysis_type: 'facial', status: 'done', created_at: '2026-05-11' }] };
+      }
+      return { rows: [] };
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/aesthetic/analyses?subject_id=sub1' });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).items).toHaveLength(1);
+  });
+});
+
+describe('GET /aesthetic/analyses/:id', () => {
+  test('retorna detalhe da análise do tenant', async () => {
+    const app = await buildApp();
+    app.pg.query.mockImplementation(async (sql, params) => {
+      if (/SELECT \* FROM aesthetic_analyses/i.test(sql)) {
+        if (params[0] === 'a-yes' && params[1] === 't1') {
+          return { rows: [{ id: 'a-yes', analysis_type: 'facial', status: 'done', metrics: { rugas: { score: 72 } }, photo_ids: ['p1'] }] };
+        }
+        return { rows: [] };
+      }
+      return { rows: [] };
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/aesthetic/analyses/a-yes' });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).metrics.rugas.score).toBe(72);
+  });
+
+  test('404 se não é do tenant', async () => {
+    const app = await buildApp();
+    app.pg.query.mockImplementation(async () => ({ rows: [] }));
+    const res = await app.inject({ method: 'GET', url: '/api/aesthetic/analyses/a-no' });
+    expect(res.statusCode).toBe(404);
+  });
+});
+
+describe('DELETE /aesthetic/analyses/:id', () => {
+  test('soft delete e 204', async () => {
+    const app = await buildApp();
+    app.pg.query.mockImplementation(async (sql) => {
+      if (/UPDATE aesthetic_analyses SET deleted_at/i.test(sql)) return { rowCount: 1 };
+      return { rows: [] };
+    });
+    const res = await app.inject({ method: 'DELETE', url: '/api/aesthetic/analyses/a1' });
+    expect(res.statusCode).toBe(204);
+  });
+});
+
+describe('POST /aesthetic/analyses/:id/compare', () => {
+  test('computa delta matemático entre baseline e atual', async () => {
+    const app = await buildApp();
+    app.pg.query.mockImplementation(async (sql, params) => {
+      if (/SELECT id, metrics FROM aesthetic_analyses/i.test(sql)) {
+        if (params[0] === 'baseline') return { rows: [{ id: 'baseline', metrics: { rugas: { score: 70 }, firmeza: { score: 60 } } }] };
+        if (params[0] === 'current') return { rows: [{ id: 'current', metrics: { rugas: { score: 50 }, firmeza: { score: 80 } } }] };
+        return { rows: [] };
+      }
+      return { rows: [] };
+    });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses/current/compare',
+      payload: { baseline_id: 'baseline' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.deltas.rugas).toBe(-20);
+    expect(body.deltas.firmeza).toBe(+20);
+    expect(body.overall_change).toBeDefined();
+  });
+});

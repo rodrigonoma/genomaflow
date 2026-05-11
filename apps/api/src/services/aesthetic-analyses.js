@@ -26,4 +26,76 @@ async function validatePhotosOwnership(pg, tenantId, photoIds) {
   return rows.length === photoIds.length;
 }
 
-module.exports = { createPending, validatePhotosOwnership };
+async function listForSubject(pg, { tenantId, subjectId, analysisType, limit = 20, offset = 0 }) {
+  const params = [tenantId, subjectId, limit, offset];
+  let typeFilter = '';
+  if (analysisType) {
+    params.splice(2, 0, analysisType);
+    typeFilter = `AND analysis_type = $3`;
+  }
+  const { rows } = await pg.query(
+    `SELECT id, analysis_type, status, created_at, completed_at,
+            error_code, baseline_analysis_id, credits_charged, credits_refunded
+     FROM aesthetic_analyses
+     WHERE tenant_id = $1 AND subject_id = $2 AND deleted_at IS NULL ${typeFilter}
+     ORDER BY created_at DESC
+     LIMIT $${typeFilter ? '4' : '3'} OFFSET $${typeFilter ? '5' : '4'}`,
+    params
+  );
+  return rows;
+}
+
+async function getDetail(pg, analysisId, tenantId) {
+  const { rows } = await pg.query(
+    `SELECT * FROM aesthetic_analyses
+     WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+    [analysisId, tenantId]
+  );
+  return rows[0] || null;
+}
+
+async function softDelete(pg, analysisId, tenantId, userId) {
+  return withTenant(pg, tenantId, async (client) => {
+    const { rowCount } = await client.query(
+      `UPDATE aesthetic_analyses SET deleted_at = NOW()
+       WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+      [analysisId, tenantId]
+    );
+    return rowCount > 0;
+  }, { userId, channel: 'ui' });
+}
+
+async function getMetricsOnly(pg, analysisId, tenantId) {
+  const { rows } = await pg.query(
+    `SELECT id, metrics FROM aesthetic_analyses
+     WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL AND status = 'done'`,
+    [analysisId, tenantId]
+  );
+  return rows[0] || null;
+}
+
+function computeDeltas(baselineMetrics, currentMetrics) {
+  const deltas = {};
+  const allKeys = new Set([
+    ...Object.keys(baselineMetrics || {}),
+    ...Object.keys(currentMetrics || {}),
+  ]);
+  let sum = 0, count = 0;
+  for (const k of allKeys) {
+    const a = baselineMetrics?.[k]?.score;
+    const b = currentMetrics?.[k]?.score;
+    if (typeof a === 'number' && typeof b === 'number') {
+      const delta = b - a;
+      deltas[k] = delta;
+      sum += delta;
+      count += 1;
+    }
+  }
+  return { deltas, overall_change: count > 0 ? Math.round(sum / count) : 0 };
+}
+
+module.exports = {
+  createPending, validatePhotosOwnership,
+  listForSubject, getDetail, softDelete,
+  getMetricsOnly, computeDeltas,
+};
