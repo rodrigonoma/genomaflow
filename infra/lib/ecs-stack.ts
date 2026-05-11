@@ -228,7 +228,24 @@ export class EcsStack extends cdk.Stack {
       // Mailer adiciona ConfigurationSetName em SendEmail pra eventos
       // (bounce/complaint) chegarem no SNS topic acima.
       SES_CONFIGURATION_SET:        'genomaflow-events',
+      // SMTP Zoho — quando SMTP_HOST está setado, mailer (apps/api/src/mailer
+      // /index.js) usa SMTP em vez de SES. Workaround enquanto AWS SES não sai
+      // de sandbox (pedido pendente desde 2026-04-24).
+      // SMTP_USER deve ser igual ao SMTP_FROM_EMAIL (exigência do Zoho).
+      SMTP_HOST:                    'smtp.zoho.com',
+      SMTP_PORT:                    '465',
+      SMTP_SECURE:                  'true',
+      SMTP_USER:                    'atendimento@genomaflow.com.br',
+      SMTP_FROM_EMAIL:              'atendimento@genomaflow.com.br',
     };
+
+    // Senha SMTP do Zoho (App Password gerado em 2026-05-11). Armazenado em
+    // Secrets Manager. Pra rotacionar: gerar nova app password no Zoho +
+    // aws secretsmanager update-secret --secret-id /genomaflow/prod/smtp-password
+    const smtpPasswordSecret = secretsmanager.Secret.fromSecretCompleteArn(
+      this, 'SmtpPasswordSecret',
+      'arn:aws:secretsmanager:us-east-1:981207388012:secret:/genomaflow/prod/smtp-password-bu9sC2'
+    );
 
     const backendSecrets = {
       JWT_SECRET:            ecs.Secret.fromSsmParameter(jwtSecret),
@@ -244,6 +261,7 @@ export class EcsStack extends cdk.Stack {
       DB_NAME:               ecs.Secret.fromSecretsManager(rdsSecret, 'dbname'),
       DB_USER:               ecs.Secret.fromSecretsManager(rdsSecret, 'username'),
       DB_PASSWORD:           ecs.Secret.fromSecretsManager(rdsSecret, 'password'),
+      SMTP_PASS:             ecs.Secret.fromSecretsManager(smtpPasswordSecret),
     };
 
     // Volume EFS para uploads
