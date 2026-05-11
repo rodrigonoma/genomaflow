@@ -10,16 +10,21 @@
  */
 import {
   Component,
+  computed,
   inject,
   input,
   signal,
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { forkJoin } from 'rxjs';
 import { AestheticFacialService } from '../services/aesthetic-facial.service';
+import { PhotoOverlayComponent } from './photo-overlay.component';
 import {
+  AestheticAnalysisDetail,
   AestheticAnalysisListItem,
   AnalysisType,
   CompareResult,
+  Metrics,
 } from '../models/analysis.model';
 
 // ---------------------------------------------------------------------------
@@ -46,7 +51,7 @@ const TYPE_LABELS: Record<AnalysisType, string> = {
 @Component({
   selector: 'app-comparison-view',
   standalone: true,
-  imports: [DatePipe],
+  imports: [DatePipe, PhotoOverlayComponent],
   styles: [`
     :host { display: block; }
 
@@ -209,6 +214,37 @@ const TYPE_LABELS: Record<AnalysisType, string> = {
       font-size: 13px;
       text-align: center;
     }
+
+    /* ---- Comparison photos ---- */
+    .comparison-photos {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    @media (max-width: 768px) {
+      .comparison-photos { grid-template-columns: 1fr; }
+    }
+    .photo-side h4 {
+      margin: 0 0 .5rem;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      opacity: .8;
+    }
+    .overlay-toggle {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      margin-top: .5rem;
+      font-size: 12px;
+      color: #9b9aad;
+      cursor: pointer;
+    }
+    .overlay-toggle input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: #c0c1ff;
+    }
   `],
   template: `
     <div class="comparison-wrap">
@@ -303,6 +339,32 @@ const TYPE_LABELS: Record<AnalysisType, string> = {
           </tbody>
         </table>
 
+        <!-- Comparison photos with overlay -->
+        @if (baselineAnalysis() && currentAnalysis()) {
+          <div class="comparison-photos">
+            <div class="photo-side">
+              <h4>Antes ({{ baselineAnalysis()?.created_at | date:'shortDate' }})</h4>
+              <app-photo-overlay
+                [photoUrl]="firstPhotoUrl(baselineAnalysis())"
+                [metrics]="baselineAnalysis()?.metrics ?? {}"
+                [activeLayers]="metricKeys(baselineAnalysis())"
+                [opacity]="0.4" />
+            </div>
+            <div class="photo-side">
+              <h4>Depois ({{ currentAnalysis()?.created_at | date:'shortDate' }})</h4>
+              <app-photo-overlay
+                [photoUrl]="firstPhotoUrl(currentAnalysis())"
+                [metrics]="overlayMetrics()"
+                [activeLayers]="metricKeys(currentAnalysis())"
+                [opacity]="0.4" />
+              <label class="overlay-toggle">
+                <input type="checkbox" [checked]="showBaselineOverlay()" (change)="toggleBaselineOverlay()" />
+                Mostrar contorno do antes sobreposto
+              </label>
+            </div>
+          </div>
+        }
+
       }
 
       <!-- ================================================================ -->
@@ -334,6 +396,12 @@ export class ComparisonViewComponent {
   readonly loading            = signal(false);
   readonly error              = signal<string | null>(null);
 
+  // Photo overlay signals
+  readonly baselineAnalysis   = signal<AestheticAnalysisDetail | null>(null);
+  readonly currentAnalysis    = signal<AestheticAnalysisDetail | null>(null);
+  readonly photoUrls          = signal<Record<string, string>>({});
+  readonly showBaselineOverlay = signal(true);
+
   // -------------------------------------------------------------------------
   // DI
   // -------------------------------------------------------------------------
@@ -351,6 +419,21 @@ export class ComparisonViewComponent {
     return Object.entries(cmp.deltas).sort(([a], [b]) => a.localeCompare(b));
   }
 
+  /**
+   * Combina métricas do current com métricas do baseline (prefixadas com _baseline)
+   * quando showBaselineOverlay está ativo.
+   */
+  readonly overlayMetrics = computed<Metrics>(() => {
+    const cur: Metrics = this.currentAnalysis()?.metrics ?? {};
+    if (!this.showBaselineOverlay()) return cur;
+    const base: Metrics = this.baselineAnalysis()?.metrics ?? {};
+    const merged: Metrics = { ...cur };
+    for (const [k, v] of Object.entries(base)) {
+      merged[`${k}_baseline`] = v;
+    }
+    return merged;
+  });
+
   // -------------------------------------------------------------------------
   // Public methods
   // -------------------------------------------------------------------------
@@ -359,6 +442,8 @@ export class ComparisonViewComponent {
     if (!baselineId) {
       this.selectedBaselineId.set(null);
       this.comparison.set(null);
+      this.baselineAnalysis.set(null);
+      this.currentAnalysis.set(null);
       return;
     }
 
@@ -369,17 +454,56 @@ export class ComparisonViewComponent {
     this.loading.set(true);
     this.error.set(null);
     this.comparison.set(null);
+    this.baselineAnalysis.set(null);
+    this.currentAnalysis.set(null);
 
-    this.svc.compareAnalyses(currentId, baselineId).subscribe({
-      next: (result) => {
-        this.comparison.set(result);
+    // Fetch compare result + both analysis details in parallel
+    forkJoin({
+      compare:  this.svc.compareAnalyses(currentId, baselineId),
+      baseline: this.svc.getAnalysis(baselineId),
+      current:  this.svc.getAnalysis(currentId),
+    }).subscribe({
+      next: ({ compare, baseline, current }) => {
+        this.comparison.set(compare);
+        this.baselineAnalysis.set(baseline);
+        this.currentAnalysis.set(current);
         this.loading.set(false);
+
+        // Fetch photo URLs for first photo of each analysis
+        this._fetchPhotoUrls(baseline, current);
       },
       error: (err: unknown) => {
         const msg = err instanceof Error ? err.message : 'Erro ao comparar análises.';
         this.error.set(msg);
         this.loading.set(false);
       },
+    });
+  }
+
+  /** Fetch presigned URLs for the first photo of each analysis. */
+  private _fetchPhotoUrls(
+    baseline: AestheticAnalysisDetail,
+    current: AestheticAnalysisDetail,
+  ): void {
+    const ids = new Set<string>();
+    if (baseline.photo_ids?.length) ids.add(baseline.photo_ids[0]);
+    if (current.photo_ids?.length) ids.add(current.photo_ids[0]);
+    if (!ids.size) return;
+
+    const requests: Record<string, ReturnType<typeof this.svc.getPhotoUrl>> = {};
+    for (const id of ids) {
+      requests[id] = this.svc.getPhotoUrl(id);
+    }
+
+    forkJoin(requests).subscribe({
+      next: (urlMap) => {
+        const resolved: Record<string, string> = {};
+        for (const [id, resp] of Object.entries(urlMap)) {
+          resolved[id] = resp.url;
+        }
+        this.photoUrls.set(resolved);
+      },
+      error: () => { /* photo URLs are best-effort; silently ignore */ },
     });
   }
 
@@ -398,5 +522,22 @@ export class ComparisonViewComponent {
 
   typeLabel(type: AnalysisType): string {
     return TYPE_LABELS[type] ?? type;
+  }
+
+  // -------------------------------------------------------------------------
+  // Photo overlay helpers
+  // -------------------------------------------------------------------------
+
+  firstPhotoUrl(a: AestheticAnalysisDetail | null): string {
+    if (!a || !a.photo_ids?.length) return '';
+    return this.photoUrls()[a.photo_ids[0]] ?? '';
+  }
+
+  metricKeys(a: AestheticAnalysisDetail | null): string[] {
+    return a?.metrics ? Object.keys(a.metrics) : [];
+  }
+
+  toggleBaselineOverlay(): void {
+    this.showBaselineOverlay.update(v => !v);
   }
 }

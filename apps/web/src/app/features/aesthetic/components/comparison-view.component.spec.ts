@@ -14,7 +14,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import { ComparisonViewComponent } from './comparison-view.component';
 import { AestheticFacialService } from '../services/aesthetic-facial.service';
-import { AestheticAnalysisListItem, CompareResult } from '../models/analysis.model';
+import { AestheticAnalysisDetail, AestheticAnalysisListItem, CompareResult } from '../models/analysis.model';
 
 // ---------------------------------------------------------------------------
 // Mock data helpers
@@ -44,6 +44,15 @@ function makeBaseline(id: string): AestheticAnalysisListItem {
   };
 }
 
+function makeDetail(id: string): AestheticAnalysisDetail {
+  return {
+    ...makeBaseline(id),
+    metrics: null,
+    observations: null,
+    recommendations: null,
+  };
+}
+
 const mockCompareResult: CompareResult = {
   baseline_id: 'baseline-001',
   current_id: 'current-001',
@@ -61,6 +70,8 @@ const mockCompareResult: CompareResult = {
 
 const mockService = {
   compareAnalyses: jest.fn(),
+  getAnalysis: jest.fn(),
+  getPhotoUrl: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -85,6 +96,8 @@ describe('ComparisonViewComponent', () => {
   // -------------------------------------------------------------------------
   it('ao selecionar baseline, chama compareAnalyses com os ids corretos', async () => {
     mockService.compareAnalyses.mockReturnValue(of(mockCompareResult));
+    mockService.getAnalysis.mockReturnValue(of(makeDetail('any')));
+    mockService.getPhotoUrl.mockReturnValue(of({ url: '', expires_at: '' }));
 
     const baselines = [makeBaseline('baseline-001'), makeBaseline('baseline-002')];
 
@@ -107,6 +120,8 @@ describe('ComparisonViewComponent', () => {
   // -------------------------------------------------------------------------
   it('tabela exibe as linhas de delta após comparação', async () => {
     mockService.compareAnalyses.mockReturnValue(of(mockCompareResult));
+    mockService.getAnalysis.mockReturnValue(of(makeDetail('any')));
+    mockService.getPhotoUrl.mockReturnValue(of({ url: '', expires_at: '' }));
 
     const baselines = [makeBaseline('baseline-001')];
 
@@ -132,6 +147,8 @@ describe('ComparisonViewComponent', () => {
   // -------------------------------------------------------------------------
   it('delta positivo recebe classe delta-positive (verde), negativo recebe delta-negative (vermelho)', async () => {
     mockService.compareAnalyses.mockReturnValue(of(mockCompareResult));
+    mockService.getAnalysis.mockReturnValue(of(makeDetail('any')));
+    mockService.getPhotoUrl.mockReturnValue(of({ url: '', expires_at: '' }));
 
     const baselines = [makeBaseline('baseline-001')];
 
@@ -153,5 +170,18 @@ describe('ComparisonViewComponent', () => {
     // rugas (+15) e simetria (+8) = 2 positivos, manchas (-5) = 1 negativo
     expect(positiveCells.length).toBeGreaterThanOrEqual(2);
     expect(negativeCells.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 4: toggleBaselineOverlay alterna o signal showBaselineOverlay
+  // -------------------------------------------------------------------------
+  it('toggleBaselineOverlay alterna showBaselineOverlay signal', () => {
+    const fixture: ComponentFixture<ComparisonViewComponent> = TestBed.createComponent(ComparisonViewComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    expect(component.showBaselineOverlay()).toBe(true);
+    component.toggleBaselineOverlay();
+    expect(component.showBaselineOverlay()).toBe(false);
   });
 });
