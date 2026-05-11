@@ -1,6 +1,6 @@
 import '@angular/compiler';
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { of } from 'rxjs';
 import { PhotoUploaderComponent } from './photo-uploader.component';
 import { PhotoValidatorService, ValidationResult } from '../services/photo-validator.service';
 import { AestheticFacialService } from '../services/aesthetic-facial.service';

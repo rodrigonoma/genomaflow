@@ -119,7 +119,7 @@ export interface FileEntry {
 
       @if (entries().length > 0) {
         <ul class="file-list">
-          @for (entry of entries(); track entry.file.name) {
+          @for (entry of entries(); track $index) {
             <li>
               <span class="status-icon">{{ statusIcon(entry.status) }}</span>
               <span class="file-name">{{ entry.file.name }}</span>
@@ -137,7 +137,7 @@ export interface FileEntry {
 
       @if (messages().length > 0) {
         <ul class="messages">
-          @for (msg of messages(); track msg.text) {
+          @for (msg of messages(); track $index) {
             <li [class.is-error]="msg.type === 'error'" [class.is-warning]="msg.type === 'warning'">
               {{ msg.text }}
             </li>
@@ -169,6 +169,14 @@ export class PhotoUploaderComponent {
 
   @Input() subjectId!: string;
   @Input() photoType!: string;
+  /**
+   * Writable signal holding the files to upload.
+   * NOTE for Task 24 (orchestrator): bind via `comp.files.set(selectedFiles)`
+   * instead of template `[files]="..."` — Angular @Input + signal() does NOT
+   * use the Angular 18 `input()` reactive-input API and won't react to template
+   * binding. Call `.set()` directly after receiving `photosSelected` from
+   * PhotoQualityGuideComponent.
+   */
   @Input() files = signal<File[]>([]);
 
   // ---------------------------------------------------------------------------
@@ -275,6 +283,9 @@ export class PhotoUploaderComponent {
     this.uploading.set(false);
 
     if (!this._cancelled) {
+      if (photoIds.length > 0) {
+        this._addMessage(MSG.done, 'info');
+      }
       this.uploadComplete.emit(photoIds);
     }
   }
@@ -289,7 +300,7 @@ export class PhotoUploaderComponent {
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  statusIcon(status: FileStatus): string {
+  protected statusIcon(status: FileStatus): string {
     switch (status) {
       case 'done':      return '✅';
       case 'error':     return '❌';
