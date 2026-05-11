@@ -37,6 +37,7 @@ import { ClinicalDocumentsService, ClinicalDocument, DOC_TYPE_LABELS, DOC_TYPE_I
 import { AiSuggestionsCardComponent } from '../../ai-suggestions/ai-suggestions-card.component';
 import { PatientTimelineComponent, TimelineEvent } from './patient-timeline.component';
 import { TimelinePanelComponent } from './timeline-panel.component';
+import { FacialAnalysisTabComponent } from '../../aesthetic/components/facial-analysis-tab.component';
 import { shortId, examTypeLabel } from '../../../shared/utils/id-format';
 import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
 import { Subscription } from 'rxjs';
@@ -69,6 +70,7 @@ interface ComparisonBlock {
     AiSuggestionsCardComponent,
     PatientTimelineComponent,
     TimelinePanelComponent,
+    FacialAnalysisTabComponent,
   ],
   styles: [`
     :host { display: block; background: #0b1326; min-height: 100vh; }
@@ -1774,6 +1776,17 @@ interface ComparisonBlock {
             }
           </div>
         </mat-tab>
+
+        <!-- ── ANÁLISE FACIAL IA (módulo estetica) ── -->
+        @if (auth.currentProfile?.module === 'estetica') {
+          <mat-tab label="Análise Facial IA" data-tab="aesthetic-facial">
+            @if (subject()) {
+              <app-facial-analysis-tab
+                [subject]="{ id: subject()!.id, name: subject()!.name }">
+              </app-facial-analysis-tab>
+            }
+          </mat-tab>
+        }
 
       </mat-tab-group>
     </div>

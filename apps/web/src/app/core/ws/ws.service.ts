@@ -1,6 +1,7 @@
-import { Injectable, NgZone } from '@angular/core';
+import { Injectable, NgZone, Optional } from '@angular/core';
 import { Subject } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { AestheticWsService } from '../../features/aesthetic/services/aesthetic-ws.service';
 
 @Injectable({ providedIn: 'root' })
 export class WsService {
@@ -9,7 +10,10 @@ export class WsService {
   private destroyed = false;
   private token: string | null = null;
 
-  constructor(private zone: NgZone) {}
+  constructor(
+    private zone: NgZone,
+    @Optional() private aestheticWs: AestheticWsService,
+  ) {}
 
   examUpdates$      = new Subject<{ exam_id: string }>();
   examError$        = new Subject<{ exam_id: string; error_message: string }>();
@@ -91,6 +95,9 @@ export class WsService {
             this.subjectUpserted$.next(msg as any);
           } else if (kind === 'video:file_shared') {
             this.videoFileShared$.next(msg as any);
+          } else if (kind === 'analysis_done' || kind === 'analysis_failed') {
+            // Aesthetic analysis events — forwarded to AestheticWsService
+            this.aestheticWs?.emit(msg as any);
           } else {
             this.examUpdates$.next(msg as { exam_id: string });
           }
