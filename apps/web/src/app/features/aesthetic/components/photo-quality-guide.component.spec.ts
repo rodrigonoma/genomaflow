@@ -74,4 +74,28 @@ describe('PhotoQualityGuideComponent', () => {
     expect(emitted[0][0].name).toBe('photo1.jpg');
     expect(emitted[0][1].name).toBe('photo2.jpg');
   });
+
+  // -------------------------------------------------------------------------
+  // Test 3: Renders region-specific orientations for legs
+  // -------------------------------------------------------------------------
+  it('renderiza orientações específicas pra region=legs', () => {
+    const fixture = TestBed.createComponent(PhotoQualityGuideComponent);
+    fixture.componentRef.setInput('region', 'legs');
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent || '';
+    expect(text).toContain('Coxas');
+    expect(text).toContain('Roupa íntima');
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 4: Renders ⚠️ warning for sensitive region (breast)
+  // -------------------------------------------------------------------------
+  it('renderiza ⚠️ pra região sensível (breast)', () => {
+    const fixture = TestBed.createComponent(PhotoQualityGuideComponent);
+    fixture.componentRef.setInput('region', 'breast');
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent || '';
+    expect(text).toContain('⚠️');
+    expect(text).toContain('consentimento');
+  });
 });
