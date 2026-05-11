@@ -22,11 +22,13 @@ import {
   OnInit,
   Output,
   computed,
+  output,
   signal,
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { PhotoOverlayComponent } from './photo-overlay.component';
 import { LayerToolbarComponent, MetricSummary } from './layer-toolbar.component';
+import { TreatmentProtocolCardsComponent } from './treatment-protocol-cards.component';
 import {
   AestheticAnalysisDetail,
   AnalysisType,
@@ -39,6 +41,7 @@ import { PhotoOverlayService } from '../services/photo-overlay.service';
 // ---------------------------------------------------------------------------
 
 export interface TreatmentProtocolItem {
+  treatment_id?: string | null;
   treatment_name: string;
   indication_text: string;
   sessions_recommended: number;
@@ -46,6 +49,9 @@ export interface TreatmentProtocolItem {
   urgency: string;
   expected_outcome: string;
   in_catalog?: boolean;
+  requires_medico?: boolean;
+  cost_estimate_brl_min?: number | null;
+  cost_estimate_brl_max?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +83,7 @@ export interface LifestyleRecommendations {
 @Component({
   selector: 'app-analysis-result',
   standalone: true,
-  imports: [DatePipe, PhotoOverlayComponent, LayerToolbarComponent],
+  imports: [DatePipe, PhotoOverlayComponent, LayerToolbarComponent, TreatmentProtocolCardsComponent],
   styles: [`
     :host { display: block; }
 
@@ -477,20 +483,9 @@ export interface LifestyleRecommendations {
       @if (treatmentProtocol().length > 0) {
         <section class="treatments">
           <h4>Protocolo sugerido</h4>
-          @for (t of treatmentProtocol(); track $index) {
-            <div class="treatment-card">
-              <h5>
-                {{ t.treatment_name }}
-                @if (t.in_catalog === false) {
-                  <span class="badge badge-new">Em breve catálogo</span>
-                }
-                <span class="badge urgency-{{ t.urgency }}">{{ t.urgency }}</span>
-              </h5>
-              <p>{{ t.indication_text }}</p>
-              <p>Sessões: {{ t.sessions_recommended }} · Intervalo: {{ t.interval_days }} dias</p>
-              <p class="outcome">{{ t.expected_outcome }}</p>
-            </div>
-          }
+          <app-treatment-protocol-cards
+            [items]="treatmentProtocol()"
+            (schedule)="onScheduleTreatment($event)" />
         </section>
       }
 
@@ -597,6 +592,10 @@ export class AnalysisResultComponent implements OnInit {
 
   @Output() compareRequested = new EventEmitter<string>();
 
+  /** Emitido quando o usuário clica em "Agendar agora" em um tratamento.
+   *  F6 (agenda) irá consumir este evento para abrir o fluxo de agendamento. */
+  readonly scheduleTreatment = output<TreatmentProtocolItem>();
+
   // -------------------------------------------------------------------------
   // State (signals)
   // -------------------------------------------------------------------------
@@ -682,6 +681,11 @@ export class AnalysisResultComponent implements OnInit {
   // -------------------------------------------------------------------------
   // Helpers
   // -------------------------------------------------------------------------
+
+  /** Bubbles up o evento de agendamento do sub-componente para o pai (F6). */
+  onScheduleTreatment(item: TreatmentProtocolItem): void {
+    this.scheduleTreatment.emit(item);
+  }
 
   /** Verifica se alguma métrica tem confidence === 'low'. */
   hasLowConfidence(): boolean {
