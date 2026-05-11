@@ -319,7 +319,7 @@ export class AnalysisListComponent implements OnInit {
 
     this.svc.listAnalyses(subjectId, type).subscribe({
       next: (resp) => {
-        this.analyses.set(resp.results);
+        this.analyses.set(resp.items);
         this.loading.set(false);
       },
       error: (err: unknown) => {

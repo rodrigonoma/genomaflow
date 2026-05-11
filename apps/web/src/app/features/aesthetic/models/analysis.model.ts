@@ -173,10 +173,7 @@ export interface ListAnalysesParams {
 }
 
 export interface ListAnalysesResponse {
-  results: AestheticAnalysisListItem[];
-  total: number;
-  limit: number;
-  offset: number;
+  items: AestheticAnalysisListItem[];
 }
 
 // ---------------------------------------------------------------------------

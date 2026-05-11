@@ -78,7 +78,7 @@ describe('AnalysisListComponent', () => {
       makeItem({ id: 'a-001', analysis_type: 'facial', status: 'done', credits_charged: 5 }),
       makeItem({ id: 'a-002', analysis_type: 'eyelids', status: 'pending', credits_charged: 3 }),
     ];
-    mockService.listAnalyses.mockReturnValue(of({ results: items, total: 2, limit: 20, offset: 0 }));
+    mockService.listAnalyses.mockReturnValue(of({ items }));
 
     const fixture: ComponentFixture<AnalysisListComponent> = TestBed.createComponent(AnalysisListComponent);
     fixture.componentRef.setInput('subjectId', 'subject-001');
@@ -99,7 +99,7 @@ describe('AnalysisListComponent', () => {
       makeItem({ id: 'a-001' }),
       makeItem({ id: 'a-002' }),
     ];
-    mockService.listAnalyses.mockReturnValue(of({ results: items, total: 2, limit: 20, offset: 0 }));
+    mockService.listAnalyses.mockReturnValue(of({ items }));
 
     const fixture: ComponentFixture<AnalysisListComponent> = TestBed.createComponent(AnalysisListComponent);
     fixture.componentRef.setInput('subjectId', 'subject-001');
@@ -123,7 +123,7 @@ describe('AnalysisListComponent', () => {
   // Test 3: Empty state quando array vazio
   // -------------------------------------------------------------------------
   it('exibe empty state quando a lista está vazia', async () => {
-    mockService.listAnalyses.mockReturnValue(of({ results: [], total: 0, limit: 20, offset: 0 }));
+    mockService.listAnalyses.mockReturnValue(of({ items: [] }));
 
     const fixture: ComponentFixture<AnalysisListComponent> = TestBed.createComponent(AnalysisListComponent);
     fixture.componentRef.setInput('subjectId', 'subject-001');
