@@ -6,7 +6,34 @@ type: project
 
 # AWS SES — decisão de descontinuar (2026-05-11)
 
-## Estado atual
+## 🟢 Estado pós-2026-05-11: Zoho SMTP ATIVO em produção
+
+**Não usa mais SES em prod.** Mailer (`apps/api/src/mailer/index.js`) detecta
+`SMTP_HOST` setado e usa nodemailer com Zoho.
+
+Config em produção (em `infra/lib/ecs-stack.ts` backendEnv):
+- `SMTP_HOST=smtp.zoho.com`
+- `SMTP_PORT=465`
+- `SMTP_SECURE=true`
+- `SMTP_USER=atendimento@genomaflow.com.br`
+- `SMTP_FROM_EMAIL=atendimento@genomaflow.com.br`
+
+Secret em AWS Secrets Manager:
+- ARN: `arn:aws:secretsmanager:us-east-1:981207388012:secret:/genomaflow/prod/smtp-password-bu9sC2`
+- Conteúdo: App Password gerada no Zoho (rotacionar via:
+  Zoho admin → Security → App Passwords → revoke + generate;
+  depois `aws secretsmanager update-secret --secret-id /genomaflow/prod/smtp-password --secret-string <nova>` +
+  force-new-deployment dos services api/worker pra puxar o novo valor)
+
+**Testado 2026-05-11**: password reset enviado pra `rodrigo.noma@genomaflow.com.br` chegou na inbox. SMTP funcionando.
+
+**Limites Zoho Mail** (plano atual a verificar):
+- Mail Free: ~25-50 emails/dia
+- Mail Lite: 150/dia
+- Mail Premium: 1000/dia
+Pra estágio atual cabe folgado. Quando estourar, migrar pra ZeptoMail (mesma Zoho, alto volume).
+
+## Estado anterior (motivo da troca)
 
 - **AWS SES sandbox** desde 2026-04-24 (pedido de production access enviado
   na mesma data, **nunca aprovado**)
