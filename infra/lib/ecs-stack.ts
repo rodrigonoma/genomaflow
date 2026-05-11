@@ -200,6 +200,16 @@ export class EcsStack extends cdk.Stack {
       resources: ['arn:aws:s3:::genomaflow-uploads-prod/video-consultations/*'],
     }));
 
+    // S3 — fotos estéticas (F1 aesthetic platform). API faz upload (multipart →
+    // S3 PutObject) e gera signed URL pra download; worker faz GetObject pra
+    // alimentar Sonnet Vision agent. Sem este prefix, criar análise estética
+    // resulta em 500 silencioso (AccessDenied no PutObject) — incidente
+    // padrão documentado em feedback_iam_s3_prefixes.md.
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['s3:PutObject', 's3:GetObject', 's3:DeleteObject'],
+      resources: ['arn:aws:s3:::genomaflow-uploads-prod/aesthetic-photos/*'],
+    }));
+
     // ── ECS Cluster ──
     const cluster = new ecs.Cluster(this, 'Cluster', {
       vpc,
