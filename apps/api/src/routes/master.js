@@ -1040,6 +1040,179 @@ module.exports = async function masterRoutes(fastify) {
     return { results: rows };
   });
 
+  // ── Aesthetic Treatments — catálogo global (master CRUD) ─────────────────
+  //
+  // Rows globais têm tenant_id = NULL (catálogo GenomaFlow curado pelo master).
+  // Rows proprietárias (tenant_id != NULL) são geridas pelo admin do próprio tenant.
+  // Master pode listar tudo (global + tenant), mas só edita/deleta rows globais.
+  //
+  // Audit trail: usa withTenant(MASTER_TENANT_ID) pra audit_trigger_fn não violar
+  // NOT NULL de audit_log.tenant_id. A migration 094 também adiciona fallback
+  // NULL→MASTER_TENANT_ID direto na função de trigger como defesa em profundidade.
+
+  const aestheticTreatmentsService = require('../services/aesthetic-treatments');
+
+  // GET /master/aesthetic-treatments?category=&active=
+  // Lista todos (global + tenant). Default = só ativos. active=false ou active=all = inclui inativos.
+  fastify.get('/aesthetic-treatments', auth(), async (request, reply) => {
+    const { category, active } = request.query;
+    const params = [];
+    const conditions = [];
+
+    if (category) {
+      params.push(category);
+      conditions.push(`category = $${params.length}`);
+    }
+
+    // active=all ou active=false → inclui inativos; default (undefined/true) → só ativos
+    if (active !== 'all' && active !== 'false') {
+      conditions.push('is_active = true');
+    }
+
+    const where = conditions.length > 0 ? conditions.join(' AND ') : '1=1';
+
+    const { rows } = await fastify.pg.query(
+      `SELECT id, tenant_id, name, category, indications, contraindications,
+              typical_sessions, interval_days, cost_estimate_brl_min, cost_estimate_brl_max,
+              evidence_level, description, protocol_notes, requires_medico, is_active,
+              usage_count_30d, created_at, updated_at
+       FROM aesthetic_treatments
+       WHERE ${where}
+       ORDER BY tenant_id NULLS FIRST, name ASC
+       LIMIT 500`,
+      params
+    );
+    return reply.send({ items: rows });
+  });
+
+  // POST /master/aesthetic-treatments
+  // Cria row global (tenant_id = NULL hardcoded).
+  fastify.post('/aesthetic-treatments', auth(), async (request, reply) => {
+    const err = aestheticTreatmentsService.validate(request.body);
+    if (err) return reply.status(400).send({ error: err });
+
+    const body = request.body;
+
+    const row = await withTenant(
+      fastify.pg,
+      MASTER_TENANT_ID,
+      async (client) => {
+        const { rows } = await client.query(
+          `INSERT INTO aesthetic_treatments
+             (tenant_id, name, category, indications, contraindications,
+              typical_sessions, interval_days, cost_estimate_brl_min, cost_estimate_brl_max,
+              evidence_level, description, protocol_notes, requires_medico)
+           VALUES (NULL, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           RETURNING *`,
+          [
+            body.name.slice(0, 200),
+            body.category,
+            body.indications || [],
+            body.contraindications || [],
+            body.typical_sessions || null,
+            body.interval_days || null,
+            body.cost_estimate_brl_min || null,
+            body.cost_estimate_brl_max || null,
+            body.evidence_level || null,
+            body.description ? body.description.slice(0, 2000) : null,
+            body.protocol_notes ? body.protocol_notes.slice(0, 2000) : null,
+            !!body.requires_medico,
+          ]
+        );
+        return rows[0];
+      },
+      { userId: request.user.user_id, channel: 'ui' }
+    );
+
+    return reply.status(201).send(row);
+  });
+
+  // PUT /master/aesthetic-treatments/:id
+  // Atualiza row global (tenant_id IS NULL). 404 se row é proprietária de tenant.
+  fastify.put('/aesthetic-treatments/:id', auth(), async (request, reply) => {
+    const { id } = request.params;
+    const body = request.body || {};
+
+    // Validação parcial — só valida campos enviados
+    if (body.category !== undefined &&
+        !aestheticTreatmentsService.VALID_CATEGORIES.has(body.category)) {
+      return reply.status(400).send({ error: 'category inválido' });
+    }
+    if (body.evidence_level !== undefined && body.evidence_level !== null &&
+        !aestheticTreatmentsService.VALID_EVIDENCE.has(body.evidence_level)) {
+      return reply.status(400).send({ error: 'evidence_level inválido (A|B|C|D)' });
+    }
+
+    const row = await withTenant(
+      fastify.pg,
+      MASTER_TENANT_ID,
+      async (client) => {
+        const { rows } = await client.query(
+          `UPDATE aesthetic_treatments SET
+             name               = COALESCE($2, name),
+             category           = COALESCE($3, category),
+             indications        = COALESCE($4, indications),
+             contraindications  = COALESCE($5, contraindications),
+             typical_sessions   = COALESCE($6, typical_sessions),
+             interval_days      = COALESCE($7, interval_days),
+             cost_estimate_brl_min = COALESCE($8, cost_estimate_brl_min),
+             cost_estimate_brl_max = COALESCE($9, cost_estimate_brl_max),
+             evidence_level     = COALESCE($10, evidence_level),
+             description        = COALESCE($11, description),
+             protocol_notes     = COALESCE($12, protocol_notes),
+             requires_medico    = COALESCE($13, requires_medico),
+             updated_at         = NOW()
+           WHERE id = $1 AND tenant_id IS NULL
+           RETURNING *`,
+          [
+            id,
+            body.name ? body.name.slice(0, 200) : null,
+            body.category || null,
+            Array.isArray(body.indications) ? body.indications : null,
+            Array.isArray(body.contraindications) ? body.contraindications : null,
+            body.typical_sessions ?? null,
+            body.interval_days ?? null,
+            body.cost_estimate_brl_min ?? null,
+            body.cost_estimate_brl_max ?? null,
+            body.evidence_level ?? null,
+            body.description ? body.description.slice(0, 2000) : null,
+            body.protocol_notes ? body.protocol_notes.slice(0, 2000) : null,
+            typeof body.requires_medico === 'boolean' ? body.requires_medico : null,
+          ]
+        );
+        return rows[0] || null;
+      },
+      { userId: request.user.user_id, channel: 'ui' }
+    );
+
+    if (!row) return reply.status(404).send({ error: 'Tratamento global não encontrado' });
+    return reply.send(row);
+  });
+
+  // DELETE /master/aesthetic-treatments/:id
+  // Soft delete (is_active = false). Só rows globais (tenant_id IS NULL).
+  fastify.delete('/aesthetic-treatments/:id', auth(), async (request, reply) => {
+    const { id } = request.params;
+
+    const deleted = await withTenant(
+      fastify.pg,
+      MASTER_TENANT_ID,
+      async (client) => {
+        const { rowCount } = await client.query(
+          `UPDATE aesthetic_treatments
+             SET is_active = false, updated_at = NOW()
+           WHERE id = $1 AND tenant_id IS NULL AND is_active = true`,
+          [id]
+        );
+        return rowCount > 0;
+      },
+      { userId: request.user.user_id, channel: 'ui' }
+    );
+
+    if (!deleted) return reply.status(404).send({ error: 'Tratamento global não encontrado ou já inativo' });
+    return reply.status(204).send();
+  });
+
   // POST /master/conversations/:id/reply — master responde diretamente em uma
   // conversation existente (sem criar broadcast canonical row). Útil pra
   // responder solicitações de melhoria de tenants individuais.
