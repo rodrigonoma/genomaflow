@@ -31,9 +31,11 @@ import { AestheticWsService, AestheticEvent } from '../services/aesthetic-ws.ser
 import {
   AestheticAnalysisDetail,
   AestheticAnalysisListItem,
+  AnalysisType,
 } from '../models/analysis.model';
 
 import { ConsentModalComponent, ConsentModalData } from './consent-modal.component';
+import { RegionPickerComponent } from './region-picker.component';
 import { PhotoQualityGuideComponent } from './photo-quality-guide.component';
 import { PhotoUploaderComponent } from './photo-uploader.component';
 import { AnalysisResultComponent } from './analysis-result.component';
@@ -46,6 +48,7 @@ import { ComparisonViewComponent } from './comparison-view.component';
 
 export type Step =
   | 'idle'
+  | 'region_pick'
   | 'consent_check'
   | 'consent_ask'
   | 'guide'
@@ -65,6 +68,7 @@ export type Step =
   imports: [
     MatDialogModule,
     MatButtonModule,
+    RegionPickerComponent,
     PhotoQualityGuideComponent,
     PhotoUploaderComponent,
     AnalysisResultComponent,
@@ -171,6 +175,16 @@ export type Step =
       }
 
       <!-- ================================================================ -->
+      <!-- REGION_PICK                                                        -->
+      <!-- ================================================================ -->
+      @if (step() === 'region_pick') {
+        <app-region-picker
+          data-testid="region-picker"
+          (regionSelected)="onRegionSelected($event)">
+        </app-region-picker>
+      }
+
+      <!-- ================================================================ -->
       <!-- CONSENT_CHECK — spinner while checking                            -->
       <!-- ================================================================ -->
       @if (step() === 'consent_check') {
@@ -191,6 +205,7 @@ export type Step =
       @if (step() === 'guide') {
         <app-photo-quality-guide
           data-testid="photo-quality-guide"
+          [region]="selectedRegion()"
           (photosSelected)="onPhotosSelected($event)">
         </app-photo-quality-guide>
       }
@@ -312,6 +327,9 @@ export class FacialAnalysisTabComponent implements OnInit {
   /** Current step in the state machine. */
   readonly step = signal<Step>('idle');
 
+  /** Selected anatomical region — defaults to facial for backward compat. */
+  readonly selectedRegion = signal<AnalysisType>('facial');
+
   readonly currentAnalysisId  = signal<string | null>(null);
   readonly currentAnalysis    = signal<AestheticAnalysisDetail | null>(null);
 
@@ -368,9 +386,20 @@ export class FacialAnalysisTabComponent implements OnInit {
   // Flow handlers
   // -------------------------------------------------------------------------
 
-  /** Step 1: User clicks "Nova análise" → check consent. */
+  /** Step 1: User clicks "Nova análise" → pick region first. */
   startNewAnalysis(): void {
+    this.step.set('region_pick');
+  }
+
+  /** Step 2: Region selected → check consent for the chosen region. */
+  onRegionSelected(region: AnalysisType): void {
+    this.selectedRegion.set(region);
     this.step.set('consent_check');
+    this.checkConsent();
+  }
+
+  /** Check consent and advance to guide or open consent modal. */
+  checkConsent(): void {
     this.svc.getConsent(this.subject().id).subscribe({
       next: (consent) => {
         // Consent exists and is not revoked → go to guide
@@ -417,7 +446,7 @@ export class FacialAnalysisTabComponent implements OnInit {
     this.uploadedPhotoIds.set(photoIds);
 
     this.svc.createAnalysis({
-      analysis_type: 'facial',
+      analysis_type: this.selectedRegion(),
       subject_id: this.subject().id,
       photo_ids: photoIds,
     }).subscribe({

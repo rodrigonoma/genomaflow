@@ -130,8 +130,12 @@ describe('FacialAnalysisTabComponent', () => {
     const fixture = createFixture();
     const comp = fixture.componentInstance;
 
-    // Call startNewAnalysis() — getConsent is synchronous via of()
+    // startNewAnalysis() now goes to region_pick; then onRegionSelected() triggers consent check
     comp.startNewAnalysis();
+    fixture.detectChanges();
+    expect(comp.step()).toBe('region_pick');
+
+    comp.onRegionSelected('facial');
     fixture.detectChanges();
 
     expect(comp.step()).toBe('guide');
@@ -146,7 +150,9 @@ describe('FacialAnalysisTabComponent', () => {
     const fixture = createFixture();
     const comp = fixture.componentInstance;
 
+    // Must go through region_pick then onRegionSelected to trigger consent check
     comp.startNewAnalysis();
+    comp.onRegionSelected('facial');
     fixture.detectChanges();
 
     expect(comp.step()).toBe('idle');
@@ -313,5 +319,33 @@ describe('FacialAnalysisTabComponent', () => {
 
     expect(comp.selectedFiles()).toEqual([fakeFile]);
     expect(comp.step()).toBe('upload');
+  });
+
+  // -------------------------------------------------------------------------
+  // F2 Task 5: region_pick tests
+  // -------------------------------------------------------------------------
+  it('Nova análise abre region_pick antes do consent_check', () => {
+    const fixture = createFixture();
+    const comp = fixture.componentInstance;
+
+    comp.startNewAnalysis();
+    expect(comp.step()).toBe('region_pick');
+  });
+
+  it('region selection avança pra consent_check com analysis_type correto', () => {
+    // Use a Subject that never emits so the step stays at consent_check
+    // (which is the in-flight state while getConsent is pending)
+    const { Subject } = require('rxjs');
+    const pending$ = new Subject();
+    mockFacialService.getConsent!.mockReturnValue(pending$.asObservable());
+
+    const fixture = createFixture();
+    const comp = fixture.componentInstance;
+
+    comp.startNewAnalysis();
+    comp.onRegionSelected('legs');
+
+    expect(comp.selectedRegion()).toBe('legs');
+    expect(comp.step()).toBe('consent_check');
   });
 });
