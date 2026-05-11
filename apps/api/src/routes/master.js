@@ -1277,4 +1277,174 @@ module.exports = async function masterRoutes(fastify) {
 
     return { message_id: result.id, created_at: result.created_at };
   });
+
+  // ── Aesthetic Treatment Suggestions (Master Review Queue) ────────────────
+
+  fastify.get('/treatment-suggestions', auth(), async (request, reply) => {
+    const status = request.query.status || 'pending_review';
+    const validStatus = new Set(['pending_review', 'approved', 'rejected', 'superseded', 'all']);
+    if (!validStatus.has(status)) {
+      return reply.status(400).send({ error: 'status inválido' });
+    }
+    const limit = Math.min(200, parseInt(request.query.limit) || 50);
+    const offset = Math.max(0, parseInt(request.query.offset) || 0);
+
+    const params = [];
+    let where = '1=1';
+    if (status !== 'all') {
+      params.push(status);
+      where = `s.status = $${params.length}`;
+    }
+    params.push(limit, offset);
+    const { rows } = await fastify.pg.query(
+      `SELECT s.id, s.name, s.category, s.indications, s.contraindications,
+              s.typical_sessions, s.interval_days, s.cost_estimate_brl_min, s.cost_estimate_brl_max,
+              s.evidence_level, s.description, s.protocol_notes, s.sources, s.status,
+              s.rejected_reason, s.reviewed_by, s.reviewed_at, s.promoted_treatment_id,
+              s.source_run_id, s.generation_model, s.generated_at,
+              u.email AS reviewed_by_email
+       FROM aesthetic_treatment_suggestions s
+       LEFT JOIN users u ON u.id = s.reviewed_by
+       WHERE ${where}
+       ORDER BY s.generated_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    );
+    return reply.send({ items: rows });
+  });
+
+  fastify.get('/treatment-suggestions/runs', auth(), async (request, reply) => {
+    const { rows } = await fastify.pg.query(
+      `SELECT source_run_id,
+              MIN(generated_at) AS started_at,
+              generation_model,
+              COUNT(*) AS total,
+              COUNT(*) FILTER (WHERE status = 'pending_review') AS pending,
+              COUNT(*) FILTER (WHERE status = 'approved') AS approved,
+              COUNT(*) FILTER (WHERE status = 'rejected') AS rejected,
+              COUNT(*) FILTER (WHERE status = 'superseded') AS superseded
+       FROM aesthetic_treatment_suggestions
+       GROUP BY source_run_id, generation_model
+       ORDER BY MIN(generated_at) DESC
+       LIMIT 50`
+    );
+    return reply.send({ items: rows });
+  });
+
+  fastify.post('/treatment-suggestions/:id/approve', auth(), async (request, reply) => {
+    const { id } = request.params;
+    const overrides = request.body && typeof request.body === 'object' ? request.body : {};
+    if (overrides.category && !aestheticTreatmentsService.VALID_CATEGORIES.has(overrides.category)) {
+      return reply.status(400).send({ error: 'category inválido' });
+    }
+    if (overrides.evidence_level && !aestheticTreatmentsService.VALID_EVIDENCE.has(overrides.evidence_level)) {
+      return reply.status(400).send({ error: 'evidence_level inválido' });
+    }
+
+    const client = await fastify.pg.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET LOCAL app.tenant_id = $1', [MASTER_TENANT_ID]);
+      await client.query('SET LOCAL app.user_id = $1', [request.user.user_id]);
+      await client.query("SET LOCAL app.actor_channel = 'ui'");
+
+      const sRes = await client.query(
+        `SELECT * FROM aesthetic_treatment_suggestions WHERE id = $1 FOR UPDATE`,
+        [id]
+      );
+      const s = sRes.rows[0];
+      if (!s) {
+        await client.query('ROLLBACK');
+        return reply.status(404).send({ error: 'Sugestão não encontrada' });
+      }
+      if (s.status !== 'pending_review') {
+        await client.query('ROLLBACK');
+        return reply.status(409).send({ error: `Sugestão já está em status '${s.status}'` });
+      }
+
+      const merged = {
+        name: (overrides.name || s.name).slice(0, 200),
+        category: overrides.category || s.category,
+        indications: Array.isArray(overrides.indications) ? overrides.indications : s.indications,
+        contraindications: Array.isArray(overrides.contraindications) ? overrides.contraindications : s.contraindications,
+        typical_sessions: overrides.typical_sessions ?? s.typical_sessions,
+        interval_days: overrides.interval_days ?? s.interval_days,
+        cost_estimate_brl_min: overrides.cost_estimate_brl_min ?? s.cost_estimate_brl_min,
+        cost_estimate_brl_max: overrides.cost_estimate_brl_max ?? s.cost_estimate_brl_max,
+        evidence_level: overrides.evidence_level || s.evidence_level,
+        description: (overrides.description ?? s.description) ?? null,
+        protocol_notes: (overrides.protocol_notes ?? s.protocol_notes) ?? null,
+        requires_medico: typeof overrides.requires_medico === 'boolean' ? overrides.requires_medico : false,
+      };
+
+      const insRes = await client.query(
+        `INSERT INTO aesthetic_treatments
+           (tenant_id, name, category, indications, contraindications,
+            typical_sessions, interval_days, cost_estimate_brl_min, cost_estimate_brl_max,
+            evidence_level, description, protocol_notes, requires_medico)
+         VALUES (NULL, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         RETURNING *`,
+        [
+          merged.name, merged.category, merged.indications, merged.contraindications,
+          merged.typical_sessions, merged.interval_days, merged.cost_estimate_brl_min, merged.cost_estimate_brl_max,
+          merged.evidence_level, merged.description, merged.protocol_notes, merged.requires_medico,
+        ]
+      );
+
+      await client.query(
+        `UPDATE aesthetic_treatment_suggestions
+         SET status = 'approved', reviewed_by = $1, reviewed_at = NOW(), promoted_treatment_id = $2
+         WHERE id = $3`,
+        [request.user.user_id, insRes.rows[0].id, id]
+      );
+
+      await client.query('COMMIT');
+      return reply.status(201).send({ treatment: insRes.rows[0], suggestion_id: id });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      request.log.error({ err: e }, 'approve suggestion failed');
+      return reply.status(500).send({ error: 'Falha ao aprovar', detail: e.message });
+    } finally {
+      client.release();
+    }
+  });
+
+  fastify.post('/treatment-suggestions/:id/reject', auth(), async (request, reply) => {
+    const { id } = request.params;
+    const reason = request.body && typeof request.body.reason === 'string'
+      ? request.body.reason.slice(0, 500)
+      : null;
+    if (!reason) return reply.status(400).send({ error: 'reason obrigatório' });
+    const { rows } = await fastify.pg.query(
+      `UPDATE aesthetic_treatment_suggestions
+       SET status = 'rejected', rejected_reason = $1, reviewed_by = $2, reviewed_at = NOW()
+       WHERE id = $3 AND status = 'pending_review'
+       RETURNING id, status, rejected_reason`,
+      [reason, request.user.user_id, id]
+    );
+    if (!rows[0]) return reply.status(404).send({ error: 'Sugestão não encontrada ou já revisada' });
+    return reply.send(rows[0]);
+  });
+
+  fastify.post('/treatment-suggestions/:id/supersede', auth(), async (request, reply) => {
+    const { id } = request.params;
+    const existing = request.body && request.body.existing_treatment_id;
+    if (!existing) return reply.status(400).send({ error: 'existing_treatment_id obrigatório' });
+
+    const check = await fastify.pg.query(
+      `SELECT id FROM aesthetic_treatments WHERE id = $1 AND tenant_id IS NULL AND is_active = true`,
+      [existing]
+    );
+    if (!check.rows[0]) return reply.status(400).send({ error: 'Tratamento existente inválido ou não global' });
+
+    const { rows } = await fastify.pg.query(
+      `UPDATE aesthetic_treatment_suggestions
+       SET status = 'superseded', promoted_treatment_id = $1, reviewed_by = $2, reviewed_at = NOW()
+       WHERE id = $3 AND status = 'pending_review'
+       RETURNING id, status, promoted_treatment_id`,
+      [existing, request.user.user_id, id]
+    );
+    if (!rows[0]) return reply.status(404).send({ error: 'Sugestão não encontrada ou já revisada' });
+    return reply.send(rows[0]);
+  });
 };
