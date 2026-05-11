@@ -60,9 +60,21 @@ entrega de 9 PRs, o usuário decidiu **encerrar** os seguintes itens.
 
 ## Ainda pendentes (válidos pra propor)
 
-- **PR13 — SNS signature em `/webhooks/ses`**. Endpoint público hoje
-  permite atacante anônimo suprimir emails de qualquer cliente. Fix
-  isolado, rollback claro via flag.
+_(Vazio — após decisão de 2026-05-11 de descontinuar SES, nenhum item
+crítico da auditoria está pendente.)_
+
+## Cancelados após decisão de descontinuar AWS SES
+
+### PR13 — SNS signature em `/webhooks/ses`
+- **Quando:** Cancelado 2026-05-11
+- **Why:** usuário decidiu **descontinuar AWS SES** completamente.
+  Production access nunca foi aprovado pela AWS desde o pedido em
+  2026-04-24 — clientes ficam limitados a emails pré-verificados em
+  sandbox. Sem sentido hardenar webhook de serviço sendo phased out.
+- **How to apply:** quando SES for substituído, o webhook
+  `/webhooks/ses` deve ser **removido** (não hardenado). Bounce/
+  complaint handling vira responsabilidade do novo provider (Resend/
+  Postmark/etc.).
 
 ## Lembrete
 

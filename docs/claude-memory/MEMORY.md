@@ -43,3 +43,4 @@
 - [Session 2026-05-10 — Auditoria 360° + PR1](session_2026_05_10_audit_pr1.md) — Auditoria por 6 agentes paralelos + PR1 entregue (RDS Multi-AZ + backup 30d + ECS desiredCount=2 + IAM Chime/video drift catch-up + .gitignore secrets). Próximas PRs 2-7 planejadas.
 - [Auditoria 2026-05-10 — decisões deferidas/canceladas](project_audit_2026_05_10_decisions.md) — Itens NÃO fazer (PR14 OIDC, PR15 CA bundle RDS, PR16 Redis TLS) + falsos positivos (PR11 ACL). Não propor de novo sem incidente real.
 - [Disciplina de revisão de auditoria](feedback_audit_review_discipline.md) — Auditor (humano ou agente) erra. Ler o código real antes de virar PR. Falsos positivos conhecidos do codebase + protocolo de verificação.
+- [AWS SES sendo descontinuado](project_ses_deprecation.md) — Decisão 2026-05-11: SES nunca saiu do sandbox, será substituído. Caminhos: Resend/Postmark/Mailgun/Brevo (A) ou Z-API WhatsApp (B) ou híbrido (C). Decisão deferida pra próxima sessão.
