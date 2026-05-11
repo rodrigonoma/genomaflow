@@ -4,7 +4,17 @@ const { Pool } = require('pg');
 const Redis = require('ioredis');
 const { downloadFile } = require('../storage/s3');
 const { analyzeFacial } = require('../agents/aesthetic-facial');
+const { analyzeBody } = require('../agents/aesthetic-body');
 const { recommendProtocol } = require('../agents/aesthetic-recommender');
+
+const FACIAL_REGIONS = new Set(['facial', 'eyelids', 'neck']);
+const BODY_REGIONS_PROC = new Set(['legs', 'glutes', 'abdomen', 'arms', 'breast', 'full_body']);
+
+function pickAgent(analysisType) {
+  if (FACIAL_REGIONS.has(analysisType)) return 'facial';
+  if (BODY_REGIONS_PROC.has(analysisType)) return 'body';
+  throw Object.assign(new Error(`Unsupported analysis_type: ${analysisType}`), { code: 'UNSUPPORTED_REGION' });
+}
 
 const _pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -19,7 +29,7 @@ function publisher() {
   return _publisher;
 }
 
-const TERMINAL_REFUND_CODES = new Set(['NO_FACE_DETECTED', 'IMAGE_TOO_BLURRY', 'BAD_LLM_OUTPUT']);
+const TERMINAL_REFUND_CODES = new Set(['NO_FACE_DETECTED', 'NO_BODY_DETECTED', 'IMAGE_TOO_BLURRY', 'BAD_LLM_OUTPUT', 'UNSUPPORTED_REGION']);
 
 async function processAestheticAnalysis({ pool, data } = {}) {
   pool = pool || _pool;
@@ -61,13 +71,12 @@ async function processAestheticAnalysis({ pool, data } = {}) {
     );
     const subject = subjects[0];
 
-    // Call #1: análise facial (Vision)
-    stage = 'call_1_facial';
-    const visionResult = await analyzeFacial({
-      photoBuffers,
-      subject,
-      analysisType: analysis_type,
-    });
+    // Call #1: análise Vision (facial ou corporal — roteado por analysis_type)
+    stage = 'call_1_vision';
+    const agentKind = pickAgent(analysis_type);
+    const visionResult = agentKind === 'body'
+      ? await analyzeBody({ photoBuffers, subject, analysisType: analysis_type })
+      : await analyzeFacial({ photoBuffers, subject, analysisType: analysis_type });
 
     // Call #2: recomendação de protocolo (best-effort — falha aqui preserva métricas)
     stage = 'call_2_recommender';

@@ -5,6 +5,9 @@ const { describe, test, expect, beforeEach } = require('@jest/globals');
 jest.mock('../../src/agents/aesthetic-facial', () => ({
   analyzeFacial: jest.fn(),
 }));
+jest.mock('../../src/agents/aesthetic-body', () => ({
+  analyzeBody: jest.fn(),
+}));
 jest.mock('../../src/agents/aesthetic-recommender', () => ({
   recommendProtocol: jest.fn(),
 }));
@@ -83,5 +86,51 @@ describe('processAestheticAnalysis', () => {
 
     const errorUpdates = queries.filter(q => /status = 'error'/i.test(q.sql));
     expect(errorUpdates.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('processAestheticAnalysis — body region routing', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test('analysis_type=legs roteia pra analyzeBody (não analyzeFacial)', async () => {
+    const { analyzeFacial } = require('../../src/agents/aesthetic-facial');
+    const { analyzeBody } = require('../../src/agents/aesthetic-body');
+    const { recommendProtocol } = require('../../src/agents/aesthetic-recommender');
+
+    analyzeBody.mockResolvedValue({
+      metrics: { culote_esquerdo: { score: 65, regions: [] } },
+      observations: { qualitative: 'ok' },
+      tokens_input: 1000, tokens_output: 500,
+    });
+    recommendProtocol.mockResolvedValue({
+      recommendations: {},
+      tokens_input: 500, tokens_output: 300,
+    });
+
+    const queries = [];
+    const pool = {
+      connect: jest.fn(async () => ({
+        query: jest.fn(async (sql, params) => {
+          queries.push({ sql, params });
+          if (/SELECT .* FROM aesthetic_photos/i.test(sql)) {
+            return { rows: params[0].map((id) => ({ id, s3_key: `path/${id}.jpg` })) };
+          }
+          if (/SELECT .* FROM subjects/i.test(sql)) {
+            return { rows: [{ id: 'sub1', sex: 'F', birth_date: '1990-01-01' }] };
+          }
+          return { rows: [] };
+        }),
+        release: jest.fn(),
+      })),
+    };
+
+    await processAestheticAnalysis({
+      pool,
+      data: { analysis_id: 'a1', tenant_id: 't1', subject_id: 'sub1', user_id: 'u1',
+              analysis_type: 'legs', photo_ids: ['p1'], professional_type: 'medico' },
+    });
+
+    expect(analyzeBody).toHaveBeenCalled();
+    expect(analyzeFacial).not.toHaveBeenCalled();
   });
 });
