@@ -78,6 +78,26 @@ async function processAestheticAnalysis({ pool, data } = {}) {
       ? await analyzeBody({ photoBuffers, subject, analysisType: analysis_type })
       : await analyzeFacial({ photoBuffers, subject, analysisType: analysis_type });
 
+    // Buscar catálogo de tratamentos (global + tenant, ativos, top 50 por uso recente)
+    stage = 'fetch_catalog';
+    let availableTreatments = [];
+    try {
+      const { rows: catalogRows } = await client.query(
+        `SELECT id, name, category, indications, contraindications,
+                typical_sessions, interval_days, cost_estimate_brl_min, cost_estimate_brl_max,
+                evidence_level, requires_medico
+         FROM aesthetic_treatments
+         WHERE (tenant_id IS NULL OR tenant_id = $1) AND is_active = true
+         ORDER BY tenant_id NULLS FIRST, usage_count_30d DESC
+         LIMIT 50`,
+        [tenant_id]
+      );
+      availableTreatments = catalogRows;
+    } catch (catalogErr) {
+      // Catálogo é best-effort: se a tabela não existir ainda (legacy/dev), continua sem ela
+      console.warn(`[aesthetic][${analysis_id}] catalog fetch falhou (continuando sem catálogo):`, catalogErr.message);
+    }
+
     // Call #2: recomendação de protocolo (best-effort — falha aqui preserva métricas)
     stage = 'call_2_recommender';
     let recResult = { recommendations: null, tokens_input: 0, tokens_output: 0, model: null, error: null };
@@ -86,6 +106,7 @@ async function processAestheticAnalysis({ pool, data } = {}) {
         metrics: visionResult.metrics,
         subject,
         professionalType: professional_type,
+        availableTreatments,
       });
     } catch (err) {
       console.warn(`[aesthetic][${analysis_id}] recommender falhou:`, err.message);

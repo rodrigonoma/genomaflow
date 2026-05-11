@@ -96,4 +96,109 @@ describe('recommendProtocol', () => {
       professionalType: 'medico',
     })).rejects.toMatchObject({ code: 'BAD_LLM_OUTPUT' });
   });
+
+  test('catalog matching: nome exato (case-insensitive) enriquece com treatment_id e in_catalog=true', async () => {
+    mockCreate.mockResolvedValueOnce({
+      content: [{ text: JSON.stringify({
+        treatment_protocol: [{
+          treatment_name: 'Microagulhamento',
+          target_metric: 'rugas',
+          indication_text: 'Estímulo de colágeno',
+          sessions_recommended: 3,
+          interval_days: 30,
+          urgency: 'medium',
+          expected_outcome: 'Melhora em 3 sessões',
+          requires_medico: false,
+        }],
+        lifestyle_recommendations: {},
+        summary_for_patient: 'Plano teste',
+      })}],
+      usage: { input_tokens: 800, output_tokens: 400 },
+    });
+
+    const availableTreatments = [
+      { id: 'cat-uuid-001', name: 'Microagulhamento', category: 'skin', requires_medico: false },
+      { id: 'cat-uuid-002', name: 'Botox', category: 'injectable', requires_medico: true },
+    ];
+
+    const result = await recommendProtocol({
+      metrics: { rugas: { score: 70 } },
+      subject: { age_years: 40, sex: 'F', fitzpatrick_type: 3, aesthetic_profile: {} },
+      professionalType: 'medico',
+      availableTreatments,
+    });
+
+    const tx = result.recommendations.treatment_protocol[0];
+    expect(tx.treatment_id).toBe('cat-uuid-001');
+    expect(tx.in_catalog).toBe(true);
+    // requires_medico deve vir do catálogo, não do LLM
+    expect(tx.requires_medico).toBe(false);
+  });
+
+  test('catalog matching: nome fora do catálogo → in_catalog=false, sem treatment_id', async () => {
+    mockCreate.mockResolvedValueOnce({
+      content: [{ text: JSON.stringify({
+        treatment_protocol: [{
+          treatment_name: 'Tratamento Novo XYZ',
+          target_metric: 'rugas',
+          indication_text: 'Tratamento experimental',
+          sessions_recommended: 2,
+          interval_days: 45,
+          urgency: 'low',
+          expected_outcome: 'Resultado hipotético',
+          requires_medico: false,
+        }],
+        lifestyle_recommendations: {},
+        summary_for_patient: 'Plano teste',
+      })}],
+      usage: { input_tokens: 800, output_tokens: 400 },
+    });
+
+    const availableTreatments = [
+      { id: 'cat-uuid-001', name: 'Microagulhamento', category: 'skin', requires_medico: false },
+    ];
+
+    const result = await recommendProtocol({
+      metrics: { rugas: { score: 70 } },
+      subject: { age_years: 40, sex: 'F', fitzpatrick_type: 3, aesthetic_profile: {} },
+      professionalType: 'medico',
+      availableTreatments,
+    });
+
+    const tx = result.recommendations.treatment_protocol[0];
+    expect(tx.in_catalog).toBe(false);
+    expect(tx.treatment_id).toBeUndefined();
+  });
+
+  test('sem availableTreatments → comportamento legacy (in_catalog=false no sanitize, sem treatment_id)', async () => {
+    mockCreate.mockResolvedValueOnce({
+      content: [{ text: JSON.stringify({
+        treatment_protocol: [{
+          treatment_name: 'Microagulhamento',
+          target_metric: 'rugas',
+          indication_text: 'Estímulo de colágeno',
+          sessions_recommended: 3,
+          interval_days: 30,
+          urgency: 'medium',
+          expected_outcome: 'Melhora em 3 sessões',
+          requires_medico: false,
+        }],
+        lifestyle_recommendations: {},
+        summary_for_patient: 'Plano teste',
+      })}],
+      usage: { input_tokens: 800, output_tokens: 400 },
+    });
+
+    const result = await recommendProtocol({
+      metrics: { rugas: { score: 70 } },
+      subject: { age_years: 40, sex: 'F', fitzpatrick_type: 3, aesthetic_profile: {} },
+      professionalType: 'medico',
+      // availableTreatments omitido — comportamento F1/F2 legacy
+    });
+
+    const tx = result.recommendations.treatment_protocol[0];
+    expect(tx.treatment_id).toBeUndefined();
+    // in_catalog=false vem do sanitizeTreatment (valor padrão para o campo)
+    expect(tx.in_catalog).toBe(false);
+  });
 });

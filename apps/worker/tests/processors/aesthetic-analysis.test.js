@@ -89,6 +89,66 @@ describe('processAestheticAnalysis', () => {
   });
 });
 
+describe('processAestheticAnalysis — catalog fetch', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test('processor busca catálogo do DB e passa availableTreatments para o recommender', async () => {
+    const { analyzeFacial } = require('../../src/agents/aesthetic-facial');
+    const { recommendProtocol } = require('../../src/agents/aesthetic-recommender');
+
+    analyzeFacial.mockResolvedValue({
+      metrics: { rugas: { score: 72, regions: [] } },
+      observations: {},
+      tokens_input: 1000, tokens_output: 500,
+    });
+    recommendProtocol.mockResolvedValue({
+      recommendations: { treatment_protocol: [], lifestyle_recommendations: {} },
+      tokens_input: 500, tokens_output: 300,
+    });
+
+    // Catalog rows que o DB retornará ao query de aesthetic_treatments
+    const fakeCatalog = [
+      { id: 'cat-001', name: 'Microagulhamento', category: 'skin', requires_medico: false },
+      { id: 'cat-002', name: 'Botox', category: 'injectable', requires_medico: true },
+    ];
+
+    const pool = {
+      connect: jest.fn(async () => ({
+        query: jest.fn(async (sql, params) => {
+          if (/SELECT .* FROM aesthetic_photos/i.test(sql)) {
+            return { rows: params[0].map((id) => ({ id, s3_key: `aesthetic-photos/t/s/${id}.jpg` })) };
+          }
+          if (/SELECT .* FROM subjects/i.test(sql)) {
+            return { rows: [{ id: 'sub1', fitzpatrick_type: 3, sex: 'F', birth_date: '1990-01-01' }] };
+          }
+          if (/FROM aesthetic_treatments/i.test(sql)) {
+            return { rows: fakeCatalog };
+          }
+          return { rows: [] };
+        }),
+        release: jest.fn(),
+      })),
+    };
+
+    await processAestheticAnalysis({
+      pool,
+      data: { analysis_id: 'a1', tenant_id: 't1', subject_id: 'sub1', user_id: 'u1',
+              analysis_type: 'facial', photo_ids: ['p1'], professional_type: 'medico' },
+    });
+
+    // Recommender deve ter recebido availableTreatments com as 2 linhas do catálogo
+    expect(recommendProtocol).toHaveBeenCalledWith(
+      expect.objectContaining({
+        availableTreatments: expect.arrayContaining([
+          expect.objectContaining({ id: 'cat-001', name: 'Microagulhamento' }),
+          expect.objectContaining({ id: 'cat-002', name: 'Botox' }),
+        ]),
+      })
+    );
+    expect(recommendProtocol.mock.calls[0][0].availableTreatments).toHaveLength(2);
+  });
+});
+
 describe('processAestheticAnalysis — body region routing', () => {
   beforeEach(() => jest.clearAllMocks());
 

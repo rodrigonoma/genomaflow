@@ -88,7 +88,23 @@ function sanitizeRecommendations(raw, profType) {
   };
 }
 
-function buildPrompt({ metrics, subject, professionalType }) {
+function buildCatalogBlock(availableTreatments) {
+  if (!Array.isArray(availableTreatments) || availableTreatments.length === 0) return '';
+  const entries = availableTreatments.slice(0, 50);
+  const lines = entries.map(t => {
+    if (!t || !t.name) return null;
+    const indications = Array.isArray(t.indications) ? t.indications.join(', ') : (t.indications || '');
+    const contraindications = Array.isArray(t.contraindications) ? t.contraindications.join(', ') : (t.contraindications || '');
+    const custo = (t.cost_estimate_brl_min != null && t.cost_estimate_brl_max != null)
+      ? `R$ ${t.cost_estimate_brl_min}-${t.cost_estimate_brl_max}`
+      : 'não informado';
+    return `- "${t.name}" (categoria: ${t.category || '?'}; indicações: ${indications || '?'}; contraindicações: ${contraindications || '?'}; sessões: ${t.typical_sessions != null ? t.typical_sessions : '?'}; intervalo: ${t.interval_days != null ? t.interval_days : '?'} dias; evidência: ${t.evidence_level || '?'}; requires_medico: ${!!t.requires_medico}; custo: ${custo})`;
+  }).filter(Boolean);
+  if (lines.length === 0) return '';
+  return `\nTRATAMENTOS DISPONÍVEIS NO CATÁLOGO (use APENAS esses; se nada bater, marque o tratamento sugerido como NOVO):\n${lines.join('\n')}\n`;
+}
+
+function buildPrompt({ metrics, subject, professionalType, availableTreatments }) {
   const profile = subject && subject.aesthetic_profile ? subject.aesthetic_profile : {};
   const profStr = professionalType || 'esteticista';
   const restricaoStr = profStr === 'esteticista'
@@ -109,16 +125,42 @@ function buildPrompt({ metrics, subject, professionalType }) {
     .map(([k, v]) => `- ${k}: ${v.score}/100 (${v.confidence || 'medium'})`)
     .join('\n');
 
-  return `Você é um assistente de protocolo estético. Com base nas métricas analisadas e\nno perfil do paciente, recomende protocolo de tratamento.\n\nPROFISSIONAL: ${profStr}\n${restricaoStr}\n\nPACIENTE:\n- ${ageText} anos, ${sexText}\n- fototipo: ${fitzText}\n- altura: ${alturaText} cm, peso: ${pesoText} kg\n- objetivo: ${goalsText}\n- comorbidades: ${comorbidText}\n- medicações: ${medText}\n\nMÉTRICAS DA ANÁLISE:\n${metricsLines}\n\nCADA tratamento sugerido DEVE conter:\n- treatment_name (nome canônico do procedimento, ex: "Microagulhamento", "Botox")\n- target_metric (qual métrica visa melhorar)\n- indication_text (2-3 linhas justificando)\n- sessions_recommended (1-20)\n- interval_days (7-365)\n- estimated_total_cost_brl_range [min, max]\n- urgency: "low" | "medium" | "high"\n- expected_outcome (1-2 linhas)\n- contraindications_flagged (lista de flags se houver)\n- requires_medico (true|false)\n\nPara NUTRIÇÃO/ESTILO DE VIDA (orientação geral, NÃO plano terapêutico):\n- estimated_daily_calories_kcal\n- macro_distribution_g: { protein, carbs, fat }\n- hydration_ml_per_day\n- meal_timing_suggestion (1 linha)\n- exercise_recommendation: { aerobic, strength }\n- foods_to_emphasize / foods_to_minimize (listas)\n- supplementation_consideration (lista)\n\nNÃO inclua disclaimer no JSON — eu adiciono automaticamente.\n\nOutput JSON estrito:\n{\n  "treatment_protocol": [...],\n  "lifestyle_recommendations": {...},\n  "summary_for_patient": "<plano resumido em 3-5 linhas>",\n  "follow_up_protocol": { "next_analysis_recommended_in_days": ..., "checkpoint_metrics": [...] }\n}`;
+  const catalogBlock = buildCatalogBlock(availableTreatments);
+
+  return `Você é um assistente de protocolo estético. Com base nas métricas analisadas e\nno perfil do paciente, recomende protocolo de tratamento.\n\nPROFISSIONAL: ${profStr}\n${restricaoStr}\n\nPACIENTE:\n- ${ageText} anos, ${sexText}\n- fototipo: ${fitzText}\n- altura: ${alturaText} cm, peso: ${pesoText} kg\n- objetivo: ${goalsText}\n- comorbidades: ${comorbidText}\n- medicações: ${medText}\n\nMÉTRICAS DA ANÁLISE:\n${metricsLines}\n${catalogBlock}\nCADA tratamento sugerido DEVE conter:\n- treatment_name (nome canônico do procedimento, ex: "Microagulhamento", "Botox")\n- target_metric (qual métrica visa melhorar)\n- indication_text (2-3 linhas justificando)\n- sessions_recommended (1-20)\n- interval_days (7-365)\n- estimated_total_cost_brl_range [min, max]\n- urgency: "low" | "medium" | "high"\n- expected_outcome (1-2 linhas)\n- contraindications_flagged (lista de flags se houver)\n- requires_medico (true|false)\n\nPara NUTRIÇÃO/ESTILO DE VIDA (orientação geral, NÃO plano terapêutico):\n- estimated_daily_calories_kcal\n- macro_distribution_g: { protein, carbs, fat }\n- hydration_ml_per_day\n- meal_timing_suggestion (1 linha)\n- exercise_recommendation: { aerobic, strength }\n- foods_to_emphasize / foods_to_minimize (listas)\n- supplementation_consideration (lista)\n\nNÃO inclua disclaimer no JSON — eu adiciono automaticamente.\n\nOutput JSON estrito:\n{\n  "treatment_protocol": [...],\n  "lifestyle_recommendations": {...},\n  "summary_for_patient": "<plano resumido em 3-5 linhas>",\n  "follow_up_protocol": { "next_analysis_recommended_in_days": ..., "checkpoint_metrics": [...] }\n}`;
 }
 
-async function recommendProtocol({ metrics, subject, professionalType }) {
+function applyCatalogMatching(recommendations, availableTreatments) {
+  if (!Array.isArray(availableTreatments) || availableTreatments.length === 0) return;
+  // Build lookup map: lowercased name → catalog row (defensive: skip rows missing id or name)
+  const byLower = new Map();
+  for (const t of availableTreatments.slice(0, 50)) {
+    if (t && t.name && t.id) {
+      byLower.set(t.name.toLowerCase().trim(), t);
+    }
+  }
+  for (const tx of (recommendations.treatment_protocol || [])) {
+    if (!tx) continue;
+    const key = (tx.treatment_name || '').toLowerCase().trim();
+    const match = byLower.get(key);
+    if (match) {
+      tx.treatment_id = match.id;
+      tx.in_catalog = true;
+      // Catalog is source of truth for requires_medico — overrides LLM
+      tx.requires_medico = !!match.requires_medico;
+    } else {
+      tx.in_catalog = false;
+    }
+  }
+}
+
+async function recommendProtocol({ metrics, subject, professionalType, availableTreatments }) {
   let response;
   try {
     response = await client.messages.create({
       model: MODELS.CLINICAL_PREMIUM,
       max_tokens: 2500,
-      messages: [{ role: 'user', content: buildPrompt({ metrics, subject, professionalType }) }],
+      messages: [{ role: 'user', content: buildPrompt({ metrics, subject, professionalType, availableTreatments }) }],
     });
   } catch (err) {
     throw Object.assign(new Error(`Anthropic call failed: ${err.message}`), { code: 'ANTHROPIC_FAIL', cause: err });
@@ -133,8 +175,13 @@ async function recommendProtocol({ metrics, subject, professionalType }) {
     throw Object.assign(new Error('BAD_LLM_OUTPUT'), { code: 'BAD_LLM_OUTPUT', raw: rawText.slice(0, 500) });
   }
 
+  const recommendations = sanitizeRecommendations(parsed, professionalType);
+
+  // Post-process: match treatment names → catalog IDs (F3 — exact match, case-insensitive + trim)
+  applyCatalogMatching(recommendations, availableTreatments);
+
   return {
-    recommendations: sanitizeRecommendations(parsed, professionalType),
+    recommendations,
     model: MODELS.CLINICAL_PREMIUM,
     tokens_input:  (response.usage && response.usage.input_tokens)  || 0,
     tokens_output: (response.usage && response.usage.output_tokens) || 0,
