@@ -19,6 +19,7 @@
 
 const { Pool } = require('pg');
 const path = require('path');
+const { runDiscovery, shouldTickRun } = require('../jobs/aesthetic-treatment-discovery');
 
 // Carrega .env do worker (pra credenciais Z-API/SES)
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
@@ -549,6 +550,16 @@ async function tick() {
     await generateVaccineDoseReminders();
     await sendPendingNotifications();
     await cleanupOldErrorLogs();
+    if (shouldTickRun(new Date())) {
+      try {
+        const result = await runDiscovery({ pool: getPool() });
+        if (!result.skipped) {
+          console.log(`[notif] aesthetic-discovery inserted ${result.inserted}`);
+        }
+      } catch (e) {
+        console.error('[notif] aesthetic-discovery failed:', e.message);
+      }
+    }
     console.log(`[notif] tick done in ${Date.now() - startTs}ms`);
   } catch (err) {
     console.error('[notif] tick error:', err.message, err.stack?.split('\n').slice(0, 3).join(' | '));
