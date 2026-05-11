@@ -20,7 +20,8 @@ async function executeTool(name, input, context) {
   return { error: `Tool desconhecida: ${name}`, latency_ms: 0 };
 }
 
-const MODEL = process.env.PRODUCT_HELP_MODEL || 'claude-haiku-4-5-20251001';
+const MODELS = require('../config/models');
+const MODEL = process.env.PRODUCT_HELP_MODEL || MODELS.UTILITY;
 const MAX_TOKENS = 800;
 const MAX_TOOL_ITERATIONS = 5;
 const MAX_HISTORY_MESSAGES = 10;

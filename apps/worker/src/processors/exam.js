@@ -1,6 +1,7 @@
 const { Pool } = require('pg');
 const { downloadFile, uploadFile, deleteFile, keyFromPath, BUCKET } = require('../storage/s3');
 const Redis = require('ioredis');
+const MODELS = require('../config/models');
 const { dicomToImage } = require('../converters/dicom');
 const { classifyModality, detectImageMime } = require('../classifiers/imaging');
 const { runImagingRxAgent } = require('../agents/imaging-rx');
@@ -72,7 +73,7 @@ async function persistResult(client, examId, tenantId, agentType, result, usage)
       JSON.stringify(result.alerts || []),
       JSON.stringify(result.recommendations || []),
       result.disclaimer,
-      'claude-opus-4-6',
+      MODELS.CLINICAL_AGENT,
       usage?.input_tokens || 0,
       usage?.output_tokens || 0
     ]
@@ -119,7 +120,7 @@ async function persistImagingResult(client, examId, tenantId, agentType, result,
       JSON.stringify(result.alerts || []),
       JSON.stringify([]),
       result.disclaimer,
-      'claude-sonnet-4-6',
+      MODELS.VISION,
       usage?.input_tokens || 0,
       usage?.output_tokens || 0,
       JSON.stringify({

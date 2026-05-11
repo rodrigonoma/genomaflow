@@ -1,4 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk').default;
+const MODELS = require('../config/models');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000 });
 
@@ -66,7 +67,7 @@ Analyze this ECG tracing and provide structured clinical interpretation with num
   });
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: MODELS.VISION,
     max_tokens: 4096,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content }]

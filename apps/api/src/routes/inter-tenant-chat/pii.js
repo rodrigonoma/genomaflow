@@ -1,4 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk');
+const MODELS = require('../../config/models');
 
 // Regex PII patterns — determinísticos, alta confiança
 const PATTERNS = {
@@ -59,7 +60,7 @@ ${text.slice(0, 5000)}
 
   try {
     const res = await client.messages.create({
-      model: 'claude-haiku-4-5',
+      model: MODELS.UTILITY,
       max_tokens: 200,
       messages: [{ role: 'user', content: prompt }],
     });

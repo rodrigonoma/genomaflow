@@ -142,7 +142,8 @@ async function transcribeAudio(audioBuffer, filename) {
 
 async function extractClinicalData(transcript, context) {
   const Anthropic = require('@anthropic-ai/sdk');
-  const claude = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const MODELS = require('../config/models');
+  const claude = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000 });
 
   const moduleLabel = context.module === 'veterinary'
     ? `paciente animal (${context.species || 'espécie não informada'})`
@@ -174,7 +175,7 @@ Extraia e retorne um JSON com exatamente estas chaves:
 }`;
 
   const response = await claude.messages.create({
-    model: 'claude-opus-4-7',
+    model: MODELS.CLINICAL_PREMIUM,
     max_tokens: 2048,
     system: systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],

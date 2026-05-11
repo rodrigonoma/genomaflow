@@ -1,4 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk').default;
+const MODELS = require('../config/models');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000 });
 
@@ -56,7 +57,7 @@ async function runTherapeuticAgent(ctx) {
     .join('\n\n');
 
   const response = await client.messages.create({
-    model: 'claude-opus-4-6',
+    model: MODELS.CLINICAL_AGENT,
     max_tokens: 4096,
     system: systemPrompt,
     messages: [{

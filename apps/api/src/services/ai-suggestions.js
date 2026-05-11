@@ -20,8 +20,9 @@
 
 const { randomUUID } = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk').default;
+const MODELS = require('../config/models');
 
-const MODEL = 'claude-opus-4-7';
+const MODEL = MODELS.CLINICAL_PREMIUM;
 const CACHE_TTL_HOURS = 24;
 const MAX_EXAMS = 10;
 const MAX_PRESCRIPTIONS = 5;

@@ -12,9 +12,10 @@
  */
 
 const Anthropic = require('@anthropic-ai/sdk').default;
+const MODELS = require('../config/models');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000 });
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = MODELS.VISION;
 
 /**
  * Classifica o conteúdo da imagem.

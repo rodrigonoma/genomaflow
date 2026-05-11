@@ -1,4 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk').default;
+const MODELS = require('../config/models');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000 });
 
@@ -58,7 +59,7 @@ async function classifyModality(imageBase64, imageMeta, rawBuffer = null) {
   const mediaType = rawBuffer ? detectImageMime(rawBuffer) : 'image/png';
   try {
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: MODELS.VISION,
       max_tokens: 20,
       messages: [{
         role: 'user',

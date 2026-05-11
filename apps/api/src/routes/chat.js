@@ -3,6 +3,7 @@ const crypto      = require('crypto');
 const OpenAI      = require('openai');
 const Anthropic   = require('@anthropic-ai/sdk').default;
 const { withTenant } = require('../db/tenant');
+const MODELS = require('../config/models');
 
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -137,7 +138,7 @@ module.exports = async function (fastify) {
     let top5 = top40.slice(0, 5); // fallback se o judge falhar
     try {
       const judgeMsg = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+        model: MODELS.UTILITY,
         max_tokens: 256,
         messages: [{
           role: 'user',
@@ -170,7 +171,7 @@ module.exports = async function (fastify) {
       .join('\n\n');
 
     const genMsg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: MODELS.VISION,
       max_tokens: 768,
       system:
         'Você é um assistente clínico do GenomaFlow. Seja direto e conciso.\n' +

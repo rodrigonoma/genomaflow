@@ -19,6 +19,7 @@
 
 const sharp = require('sharp');
 const Anthropic = require('@anthropic-ai/sdk');
+const MODELS = require('../config/models');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -157,7 +158,7 @@ ${candidates.map(c => `${c.idx}: ${c.text}`).join('\n')}`;
 
   try {
     const res = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: MODELS.UTILITY,
       max_tokens: 500,
       messages: [{ role: 'user', content: prompt }],
     });

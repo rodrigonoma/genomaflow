@@ -1,5 +1,6 @@
 const pdfParse = require('pdf-parse');
 const Anthropic = require('@anthropic-ai/sdk');
+const MODELS = require('../config/models');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000 });
 
@@ -8,7 +9,7 @@ const MIN_TEXT_LENGTH = 100;
 
 async function extractTextViaOcr(buffer) {
   const response = await anthropic.messages.create({
-    model: process.env.OCR_MODEL || 'claude-haiku-4-5-20251001',
+    model: process.env.OCR_MODEL || MODELS.UTILITY,
     max_tokens: 4096,
     messages: [{
       role: 'user',

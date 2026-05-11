@@ -19,8 +19,9 @@
  */
 
 const Anthropic = require('@anthropic-ai/sdk').default;
+const MODELS = require('../config/models');
 
-const MODEL = 'claude-opus-4-7';
+const MODEL = MODELS.CLINICAL_PREMIUM;
 const MIN_INPUT_CHARS = 30; // mínimo de texto pra gerar sugestões
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
