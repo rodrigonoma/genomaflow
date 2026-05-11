@@ -44,7 +44,7 @@ git checkout -b feat/aesthetic-f1-task-01-migration-photos
 -- Spec: docs/superpowers/specs/2026-05-11-aesthetic-platform-design.md §4.1
 
 CREATE TABLE IF NOT EXISTS aesthetic_photos (
-  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id    UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   subject_id   UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
   user_id      UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
@@ -141,7 +141,7 @@ git checkout -b feat/aesthetic-f1-task-02-migration-analyses
 -- Spec §4.2
 
 CREATE TABLE IF NOT EXISTS aesthetic_analyses (
-  id                       UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id                UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   subject_id               UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
   user_id                  UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
@@ -235,7 +235,7 @@ git checkout -b feat/aesthetic-f1-task-03-migration-consent
 -- Spec §4.3
 
 CREATE TABLE IF NOT EXISTS aesthetic_consent (
-  id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id           UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   subject_id          UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
   user_id             UUID NOT NULL REFERENCES users(id),

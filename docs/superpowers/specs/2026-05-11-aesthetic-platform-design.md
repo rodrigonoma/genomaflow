@@ -130,7 +130,7 @@ VALUES ($1, +5, 'aesthetic_refund', 'Refund: análise falhou (NO_FACE_DETECTED)'
 
 ```sql
 CREATE TABLE aesthetic_photos (
-  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id    UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   subject_id   UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
   user_id      UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
@@ -176,7 +176,7 @@ S3 path: `aesthetic-photos/{tenant_id}/{subject_id}/{photo_id}.jpg` (JPEG q=0.85
 
 ```sql
 CREATE TABLE aesthetic_analyses (
-  id                       UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id                UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   subject_id               UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
   user_id                  UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
@@ -277,7 +277,7 @@ Estrutura interna do `metrics` JSONB:
 
 ```sql
 CREATE TABLE aesthetic_consent (
-  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id    UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   subject_id   UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
   user_id      UUID NOT NULL REFERENCES users(id),
@@ -305,7 +305,7 @@ CREATE TRIGGER aesthetic_consent_audit AFTER INSERT OR UPDATE OR DELETE ON aesth
 
 ```sql
 CREATE TABLE aesthetic_treatments (
-  id                     UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id              UUID NULL REFERENCES tenants(id) ON DELETE CASCADE,
   name                   TEXT NOT NULL,
   category               TEXT NOT NULL CHECK (category IN
@@ -352,7 +352,7 @@ Seed inicial: ~50 tratamentos (categorizado em corpo, facial, cabelo, wellness).
 
 ```sql
 CREATE TABLE aesthetic_treatment_suggestions (
-  id                     UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name                   TEXT NOT NULL,
   category               TEXT NOT NULL,
   indications            TEXT[],
