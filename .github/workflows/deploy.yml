@@ -44,6 +44,13 @@ jobs:
           npm ci --no-audit --no-fund
           npm test
 
+      # Production build check — pega erros de strictTemplates do Angular
+      # (NG2/NG5/NG7) que jest+jsdom não exerce. Bug 2026-05-12: 4 erros TS
+      # passaram pelos 192 testes verdes mas quebraram o build no deploy.
+      - name: Web — production build check (strictTemplates)
+        working-directory: apps/web
+        run: npx ng build --configuration=production --output-path=/tmp/web-build-check
+
   deploy:
     needs: test
     runs-on: ubuntu-latest
