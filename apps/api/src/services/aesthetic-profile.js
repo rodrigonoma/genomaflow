@@ -110,10 +110,41 @@ function validate(body) {
 
 async function get(pg, tenantId, subjectId) {
   const { rows } = await pg.query(
-    `SELECT aesthetic_profile FROM subjects WHERE id = $1 AND tenant_id = $2`,
+    `SELECT aesthetic_profile, sex, birth_date, weight, height
+     FROM subjects WHERE id = $1 AND tenant_id = $2`,
     [subjectId, tenantId]
   );
-  return rows[0] ? rows[0].aesthetic_profile : null;
+  if (!rows[0]) return null;
+  return rows[0];
+}
+
+/**
+ * Hidrata defaults do subject quando aesthetic_profile não tem o campo.
+ * Não sobrescreve valores salvos no JSONB.
+ * Calcula age a partir de birth_date.
+ */
+function hydrateFromSubject(profile, subject) {
+  const out = { ...(profile || {}) };
+  if (out.height_cm == null && subject.height != null) {
+    out.height_cm = Number(subject.height);
+  }
+  if (out.weight_kg == null && subject.weight != null) {
+    out.weight_kg = Number(subject.weight);
+  }
+  if (out.sex == null && subject.sex && (subject.sex === 'F' || subject.sex === 'M')) {
+    out.sex = subject.sex;
+  }
+  if (out.age == null && subject.birth_date) {
+    const bd = new Date(subject.birth_date);
+    if (!isNaN(bd.getTime())) {
+      const now = new Date();
+      let age = now.getFullYear() - bd.getFullYear();
+      const m = now.getMonth() - bd.getMonth();
+      if (m < 0 || (m === 0 && now.getDate() < bd.getDate())) age -= 1;
+      if (age >= 0 && age <= 150) out.age = age;
+    }
+  }
+  return out;
 }
 
 async function update(pg, tenantId, userId, subjectId, profile) {
@@ -131,4 +162,4 @@ async function update(pg, tenantId, userId, subjectId, profile) {
   }, { userId, channel: 'ui' });
 }
 
-module.exports = { validate, get, update, VALID_DIETARY };
+module.exports = { validate, get, update, hydrateFromSubject, VALID_DIETARY };

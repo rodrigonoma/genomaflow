@@ -9,10 +9,13 @@ module.exports = async function (fastify) {
     preHandler: [fastify.authenticate, requireEsteticaModule],
     config: { rateLimit: { max: 120, timeWindow: '1 hour' } },
   }, async (request, reply) => {
-    const profile = await profileService.get(fastify.pg, request.user.tenant_id, request.params.subject_id);
-    if (profile === null) return reply.status(404).send({ error: 'Paciente não encontrado' });
+    const subject = await profileService.get(fastify.pg, request.user.tenant_id, request.params.subject_id);
+    if (subject === null) return reply.status(404).send({ error: 'Paciente não encontrado' });
+    // Hidrata defaults do cadastro do paciente quando aesthetic_profile não tem o campo.
+    // Frontend recebe form pré-preenchido com altura/peso/idade/sexo já coletados no cadastro.
+    const profile = profileService.hydrateFromSubject(subject.aesthetic_profile, subject);
     const computed = profile && Object.keys(profile).length ? computeAll(profile) : null;
-    return reply.send({ profile: profile || {}, computed });
+    return reply.send({ profile, computed });
   });
 
   fastify.put('/profile/:subject_id', {

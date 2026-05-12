@@ -51,10 +51,16 @@ async function buildApp({
   app.decorate('pg', {
     connect: jest.fn(async function () { return app.pg; }),
     query: jest.fn(async (sql, params) => {
-      if (/SELECT aesthetic_profile FROM subjects/i.test(sql)) {
+      if (/SELECT aesthetic_profile/i.test(sql) && /FROM subjects/i.test(sql)) {
         if (mockRows !== null) return { rows: mockRows };
-        // default: subject found with full profile
-        return { rows: [{ aesthetic_profile: FULL_PROFILE }] };
+        // default: subject found with full profile + sex/birth_date/weight/height
+        return { rows: [{
+          aesthetic_profile: FULL_PROFILE,
+          sex: 'F',
+          birth_date: '1996-01-01',
+          weight: null,
+          height: null,
+        }] };
       }
       if (/UPDATE subjects SET aesthetic_profile/i.test(sql)) {
         if (mockUpdateRows !== null) return { rows: mockUpdateRows };
@@ -96,12 +102,46 @@ describe('GET /aesthetic/profile/:subject_id', () => {
   });
 
   test('200 com profile vazio → computed null', async () => {
-    const app = await buildApp({ mockRows: [{ aesthetic_profile: {} }] });
+    const app = await buildApp({ mockRows: [{ aesthetic_profile: {}, sex: null, birth_date: null, weight: null, height: null }] });
     const res = await app.inject({ method: 'GET', url: '/api/aesthetic/profile/sub1' });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.profile).toEqual({});
     expect(body.computed).toBeNull();
+  });
+
+  test('200 profile vazio + subject com height/weight/sex/birth_date → hidrata defaults', async () => {
+    const app = await buildApp({ mockRows: [{
+      aesthetic_profile: {},
+      sex: 'F',
+      birth_date: '1990-05-15',
+      weight: '65.5',
+      height: '165',
+    }] });
+    const res = await app.inject({ method: 'GET', url: '/api/aesthetic/profile/sub1' });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.profile.height_cm).toBe(165);
+    expect(body.profile.weight_kg).toBe(65.5);
+    expect(body.profile.sex).toBe('F');
+    expect(body.profile.age).toBeGreaterThanOrEqual(35); // 1990 → 2026+
+  });
+
+  test('200 aesthetic_profile preenchido tem precedência sobre subject', async () => {
+    const app = await buildApp({ mockRows: [{
+      aesthetic_profile: { height_cm: 170, weight_kg: 70, age: 40, sex: 'M' },
+      sex: 'F',          // conflito intencional
+      birth_date: '1990-01-01',
+      weight: '60',
+      height: '160',
+    }] });
+    const res = await app.inject({ method: 'GET', url: '/api/aesthetic/profile/sub1' });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.profile.height_cm).toBe(170);
+    expect(body.profile.weight_kg).toBe(70);
+    expect(body.profile.age).toBe(40);
+    expect(body.profile.sex).toBe('M');
   });
 
   test('404 paciente não existe (no rows)', async () => {
