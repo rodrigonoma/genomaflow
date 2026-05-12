@@ -38,6 +38,7 @@ import { AiSuggestionsCardComponent } from '../../ai-suggestions/ai-suggestions-
 import { PatientTimelineComponent, TimelineEvent } from './patient-timeline.component';
 import { TimelinePanelComponent } from './timeline-panel.component';
 import { FacialAnalysisTabComponent } from '../../aesthetic/components/facial-analysis-tab.component';
+import { AestheticProfileFormComponent } from '../../aesthetic/components/aesthetic-profile-form.component';
 import { shortId, examTypeLabel } from '../../../shared/utils/id-format';
 import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
 import { Subscription } from 'rxjs';
@@ -71,6 +72,7 @@ interface ComparisonBlock {
     PatientTimelineComponent,
     TimelinePanelComponent,
     FacialAnalysisTabComponent,
+    AestheticProfileFormComponent,
   ],
   styles: [`
     :host { display: block; background: #0b1326; min-height: 100vh; }
@@ -1784,6 +1786,17 @@ interface ComparisonBlock {
               <app-facial-analysis-tab
                 [subject]="{ id: subject()!.id, name: subject()!.name }">
               </app-facial-analysis-tab>
+            }
+          </mat-tab>
+        }
+
+        <!-- ── PERFIL ESTÉTICO — nutrição + TMB/macros (módulo estetica) ── -->
+        @if (auth.currentProfile?.module === 'estetica') {
+          <mat-tab label="Perfil Estético" data-tab="aesthetic-profile">
+            @if (subject()) {
+              <app-aesthetic-profile-form
+                [subjectId]="subject()!.id">
+              </app-aesthetic-profile-form>
             }
           </mat-tab>
         }
