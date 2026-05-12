@@ -28,14 +28,15 @@ const {
   signJwt,
 } = require('./setup');
 
-// Importa app DEPOIS de setar env — server.js valida JWT_SECRET no boot
+// Setup env ANTES do build — auth plugin valida JWT_SECRET no register
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'integration-test-secret';
-const app = require('../../src/server');
 
-// Cold boot do Fastify no CI excede 60s (50+ rotas, pg pool, redis pubsub
-// subscribe, JWT plugin). Aumentado pra 180s — em prod o boot é instantâneo.
-jest.setTimeout(180_000);
+const { buildTestServer } = require('./test-server');
 
+// Boot do app minimal é <5s. 60s de timeout dá folga generosa pro CI.
+jest.setTimeout(60_000);
+
+let app;
 let ctx; // { tenantId, adminUserId, subjectId }
 let adminToken;
 
@@ -44,6 +45,7 @@ beforeAll(async () => {
   //     (workflow deploy.yml). runMigrations() aqui é no-op idempotente.
   // Local dev: aplica em ordem se ainda não tiver.
   await runMigrations();
+  app = await buildTestServer();
   await app.ready();
   ctx = await seedAestheticTenant();
   adminToken = signJwt({
@@ -52,7 +54,7 @@ beforeAll(async () => {
     role: 'admin',
     module: 'estetica',
   });
-}, 180_000);
+}, 60_000);
 
 afterAll(async () => {
   await teardownAestheticTenant();
