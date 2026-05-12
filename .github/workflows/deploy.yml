@@ -74,8 +74,20 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        # Necessário pro plugin Redis do server boot.
+        # Sem ele, ioredis retry indefinido + plugin timeout (Fastify 10s).
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       DATABASE_URL_TEST: postgres://postgres:postgres@localhost:5432/genomaflow
+      REDIS_URL: redis://localhost:6379
       JWT_SECRET: integration-test-secret
       NODE_ENV: test
     steps:
