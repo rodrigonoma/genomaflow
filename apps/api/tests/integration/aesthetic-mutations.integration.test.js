@@ -30,6 +30,9 @@ const {
 
 // Setup env ANTES do build — auth plugin valida JWT_SECRET no register
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'integration-test-secret';
+// Tests usam paths /api/aesthetic/...; test-server respeita API_PREFIX.
+// Em prod, API_PREFIX é gerenciado pelo nginx + ALB. No test forçamos /api.
+process.env.API_PREFIX = '/api';
 
 const { buildTestServer } = require('./test-server');
 
@@ -54,25 +57,6 @@ beforeAll(async () => {
     role: 'admin',
     module: 'estetica',
   });
-  // DEBUG: log dos IDs pra investigar 404 no PUT /profile
-  console.log('[integration setup] tenantId:', ctx.tenantId);
-  console.log('[integration setup] subjectId:', ctx.subjectId);
-  console.log('[integration setup] adminUserId:', ctx.adminUserId);
-  console.log('[integration setup] JWT_SECRET first 8:', String(process.env.JWT_SECRET).slice(0, 8));
-  // Sanity check: a connection do pool consegue ver o subject?
-  const { getPool } = require('./setup');
-  const direct = await getPool().query(
-    `SELECT id, tenant_id, subject_type FROM subjects WHERE id = $1`,
-    [ctx.subjectId]
-  );
-  console.log('[integration setup] subject visible via setup pool:', direct.rows[0]);
-  // E via app pool?
-  const appPg = app.pg;
-  const viaApp = await appPg.query(
-    `SELECT id, tenant_id, subject_type FROM subjects WHERE id = $1`,
-    [ctx.subjectId]
-  );
-  console.log('[integration setup] subject visible via app pg:', viaApp.rows[0]);
 }, 60_000);
 
 afterAll(async () => {
