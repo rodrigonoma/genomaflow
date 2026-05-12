@@ -336,6 +336,9 @@ Modelos vivos, mocks de SDKs, ESM/Jest, cobertura: `docs/claude-memory/feedback_
 - **Nunca afirmações categóricas sem verificar**
 - **Vibe coding proibido** — fluxo: ler todos os arquivos relevantes → causa raiz → propor → executar de uma vez
 - **Auditoria SQL obrigatória antes do primeiro commit** — para query nova com FK entre tabelas, abrir as migrations e listar colunas reais antes de escrever SQL
+- **SQL: nunca referenciar coluna sem confirmar migration** — `UPDATE subjects SET updated_at = NOW()` 500-eou em prod (subjects só tem created_at). Tests com pg.query mockado NÃO pegam. Verificar `apps/api/src/db/migrations/*<table>*.sql` antes de cada SELECT/UPDATE/INSERT em coluna específica. Detalhes: `docs/claude-memory/feedback_schema_sync_sql_columns.md`
+- **API response com shape condicional DEVE ter discriminator boolean** — backend retorna `{ confirmed: false }` OU `{ confirmed: true, ...data }`. Frontend SEMPRE checa `response.confirmed === true`, NUNCA truthy check de objeto (incidente 2026-05-12: state machine pulava registro de consent). Detalhes: `docs/claude-memory/feedback_api_response_shape_discriminator.md`
+- **Nova feature com notify WS exige 3 pontos** — worker publica + api psubscribe pattern + api handler branch. Esquecer um = bug silencioso. Checklist em `docs/claude-memory/feedback_ws_pubsub_contract.md`
 - **SDK de terceiros: verificar assinatura antes de usar**
 - **Angular `computed()` só reage a signals lidos** — propriedades comuns NÃO invalidam o cache
 - **Toda query tenant-scoped precisa de `AND tenant_id = $X` explícito**
