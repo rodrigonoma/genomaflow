@@ -51,8 +51,46 @@ jobs:
         working-directory: apps/web
         run: npx ng build --configuration=production --output-path=/tmp/web-build-check
 
+  # Integration tests rodam em paralelo ao job test. Sobem Postgres real,
+  # aplicam migrations, executam smoke tests contra schema.
+  # Pega bugs que tests com pg.query mockado não pegam: schema mismatches,
+  # RLS bugs, audit trigger failures, FK violations.
+  # Bug 2026-05-12 PUT /aesthetic/profile 500 (column updated_at) teria sido
+  # capturado aqui antes do deploy.
+  integration:
+    name: Integration tests (Postgres real)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: genomaflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL_TEST: postgres://postgres:postgres@localhost:5432/genomaflow_test
+      JWT_SECRET: integration-test-secret
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: API — install + integration tests (aesthetic mutations)
+        working-directory: apps/api
+        run: |
+          npm ci --no-audit --no-fund
+          npm run test:integration
+
   deploy:
-    needs: test
+    needs: [test, integration]
     runs-on: ubuntu-latest
     environment: production
 
