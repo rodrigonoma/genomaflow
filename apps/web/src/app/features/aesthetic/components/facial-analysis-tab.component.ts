@@ -459,13 +459,29 @@ export class FacialAnalysisTabComponent implements OnInit, OnChanges {
   onPhotosSelected(files: File[]): void {
     this.selectedFiles.set(files);
     this.step.set('upload');
-    // Trigger upload on next tick after uploader is rendered
-    setTimeout(() => {
-      if (this.uploaderRef) {
-        this.uploaderRef.files.set(files);
-        this.uploaderRef.startUpload();
-      }
-    });
+    // O <app-photo-uploader> só renderiza quando step==='upload', e o
+    // @ViewChild só é resolvido APÓS o ciclo de change detection completar.
+    // setTimeout(fn, 0) era racy em prod build — uploaderRef ficava undefined
+    // e startUpload nunca era chamado (bug forensicamente confirmado via
+    // CloudWatch 2026-05-12: zero POST /aesthetic/photos do tenant estetica).
+    // Retry curto até o ref resolver, com bail-out se falhar.
+    this._tryStartUpload(files, 0);
+  }
+
+  private _tryStartUpload(files: File[], attempt: number): void {
+    if (this.uploaderRef) {
+      this.uploaderRef.files.set(files);
+      this.uploaderRef.startUpload();
+      return;
+    }
+    if (attempt >= 20) {
+      // 20 × 25ms = 500ms — se ViewChild não resolveu até aqui, algo está
+      // fundamentalmente errado. Surfaceia erro pra UI em vez de spinner eterno.
+      this.error.set('Falha ao inicializar o uploader. Recarregue a página.');
+      this.step.set('idle');
+      return;
+    }
+    setTimeout(() => this._tryStartUpload(files, attempt + 1), 25);
   }
 
   /** Upload complete → create analysis → go to processing. */
