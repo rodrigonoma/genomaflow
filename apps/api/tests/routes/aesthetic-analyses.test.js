@@ -7,7 +7,7 @@ jest.mock('../../src/queues/aesthetic-analysis-queue', () => ({
   enqueue: jest.fn(async () => 'job-123'),
 }));
 
-async function buildApp({ balance = 100, hasConsent = true, photosOk = true, role = 'admin', module = 'estetica' } = {}) {
+async function buildApp({ balance = 100, hasConsent = true, photosOk = true, role = 'admin', module = 'estetica', consentRow = null } = {}) {
   const app = Fastify({ logger: false });
   app.decorate('authenticate', async (req) => {
     req.user = { user_id: 'u1', tenant_id: 't1', role, module, professional_type: 'medico' };
@@ -18,7 +18,12 @@ async function buildApp({ balance = 100, hasConsent = true, photosOk = true, rol
     query: jest.fn(async (sql, params) => {
       queries.push({ sql, params });
       if (/COALESCE\(SUM\(amount\)/i.test(sql)) return { rows: [{ balance: String(balance) }] };
-      if (/SELECT .* FROM aesthetic_consent/i.test(sql)) return { rows: hasConsent ? [{ id: 'c1' }] : [] };
+      if (/SELECT .* FROM aesthetic_consent/i.test(sql)) {
+        if (!hasConsent) return { rows: [] };
+        // If caller provided a custom consent row, use it; otherwise default (no reinforced_regions)
+        const row = consentRow !== null ? consentRow : { id: 'c1', created_at: '2026-05-11T00:00:00Z', reinforced_regions: [] };
+        return { rows: [row] };
+      }
       if (/SELECT id FROM aesthetic_photos/i.test(sql)) {
         if (!photosOk) return { rows: [] };
         return { rows: params[0].map((id) => ({ id })) };
@@ -103,6 +108,47 @@ describe('POST /aesthetic/analyses', () => {
       payload: { analysis_type: 'facial', subject_id: 'sub1', photo_ids: ['stranger-photo'] },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  // Pre-flight 2b: reinforced consent gate (F5.2)
+  test('403 CONSENT_REINFORCED_MISSING — breast sem reinforced_regions cobrindo breast', async () => {
+    // Consent exists but reinforced_regions is empty
+    const app = await buildApp({
+      consentRow: { id: 'c1', created_at: '2026-05-11T00:00:00Z', reinforced_regions: [] },
+    });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses',
+      payload: { analysis_type: 'breast', subject_id: 'sub1', photo_ids: ['p1'] },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe('CONSENT_REINFORCED_MISSING');
+    expect(body.analysis_type).toBe('breast');
+    expect(body.missing_reinforced_region).toBe('breast');
+  });
+
+  test('201 breast COM reinforced_regions incluindo breast', async () => {
+    const app = await buildApp({
+      consentRow: { id: 'c1', created_at: '2026-05-11T00:00:00Z', reinforced_regions: ['breast'] },
+    });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses',
+      payload: { analysis_type: 'breast', subject_id: 'sub1', photo_ids: ['p1'] },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(JSON.parse(res.body).status).toBe('pending');
+  });
+
+  test('201 facial (não sensível) sem reinforced_regions — gate não dispara', async () => {
+    // Consent exists with empty reinforced_regions; facial is not in SENSITIVE_REGIONS
+    const app = await buildApp({
+      consentRow: { id: 'c1', created_at: '2026-05-11T00:00:00Z', reinforced_regions: [] },
+    });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses',
+      payload: { analysis_type: 'facial', subject_id: 'sub1', photo_ids: ['p1'] },
+    });
+    expect(res.statusCode).toBe(201);
   });
 });
 

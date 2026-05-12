@@ -1,7 +1,7 @@
 'use strict';
 
 const { requireEsteticaModule } = require('../middleware/aesthetic-module-gate');
-const { VALID_ANALYSIS_TYPES } = require('../constants/aesthetic-metrics');
+const { VALID_ANALYSIS_TYPES, SENSITIVE_REGIONS } = require('../constants/aesthetic-metrics');
 const { getBalance, debit } = require('../services/aesthetic-credits');
 const { getConsent } = require('../services/aesthetic-consent');
 const { createPending, validatePhotosOwnership, listForSubject, getDetail, softDelete, getMetricsOnly, computeDeltas } = require('../services/aesthetic-analyses');
@@ -46,6 +46,19 @@ module.exports = async function (fastify) {
         error: 'CONSENT_MISSING',
         message: 'Confirme o consentimento operacional do paciente antes de criar análise.',
       });
+    }
+
+    // Pre-flight 2b: consentimento reforçado pra regiões sensíveis
+    if (SENSITIVE_REGIONS.includes(analysis_type)) {
+      const reinforced = Array.isArray(consent.reinforced_regions) ? consent.reinforced_regions : [];
+      if (!reinforced.includes(analysis_type)) {
+        return reply.status(403).send({
+          error: 'CONSENT_REINFORCED_MISSING',
+          message: `Análise da região "${analysis_type}" exige consentimento reforçado. Confirme com o paciente e re-registre o consentimento.`,
+          analysis_type,
+          missing_reinforced_region: analysis_type,
+        });
+      }
     }
 
     // Pre-flight 3: créditos suficientes?

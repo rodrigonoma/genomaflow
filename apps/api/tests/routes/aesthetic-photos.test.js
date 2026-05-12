@@ -22,6 +22,13 @@ jest.mock('../../src/services/aesthetic-auto-crop', () => ({
   autoCropSensitive: mockAutoCropSensitive,
 }));
 
+// Mock aesthetic-consent — controlável por teste
+const mockGetConsent = jest.fn();
+jest.mock('../../src/services/aesthetic-consent', () => ({
+  getConsent: mockGetConsent,
+  createConsent: jest.fn(),
+}));
+
 async function buildApp(role = 'admin', module = 'estetica') {
   const app = Fastify({ logger: false });
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
@@ -119,6 +126,8 @@ describe('DELETE /aesthetic/photos/:id', () => {
 describe('POST /aesthetic/photos — auto-crop (F5)', () => {
   beforeEach(() => {
     mockAutoCropSensitive.mockReset();
+    // Default: consent with a reinforced region so the consent gate (F5.2) doesn't block these tests
+    mockGetConsent.mockResolvedValue({ id: 'c1', created_at: '2026-05-11T00:00:00Z', reinforced_regions: ['breast'] });
   });
 
   test('is_sensitive=true + auto_crop omitido → autoCropSensitive é chamado, response inclui auto_crop_applied', async () => {
@@ -214,5 +223,62 @@ describe('POST /aesthetic/photos — auto-crop (F5)', () => {
     });
     expect([201, 200]).toContain(res.statusCode);
     expect(mockAutoCropSensitive).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /aesthetic/photos — reinforced consent gate (F5.2)', () => {
+  beforeEach(() => {
+    mockAutoCropSensitive.mockReset();
+    mockGetConsent.mockReset();
+    // Reset S3 mocks so call counts are clean per-test
+    const { uploadPhoto } = require('../../src/services/aesthetic-s3');
+    uploadPhoto.mockClear();
+  });
+
+  test('403 CONSENT_REINFORCED_MISSING — is_sensitive=true sem consent reforçado; autoCrop e S3 NÃO chamados', async () => {
+    // No consent on file
+    mockGetConsent.mockResolvedValue(null);
+
+    const app = await buildApp();
+    const boundary = 'consentGate1';
+    const payload = buildMultipart(boundary,
+      { subject_id: 'sub1', photo_type: 'breast_front', is_sensitive: 'true' },
+      { name: 'file', filename: 'photo.jpg', contentType: 'image/jpeg', content: 'fakejpgbytes' }
+    );
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe('CONSENT_REINFORCED_MISSING');
+    // Auto-crop must NOT have been called (fail fast before Vision)
+    expect(mockAutoCropSensitive).not.toHaveBeenCalled();
+    // S3 upload must NOT have been called
+    const { uploadPhoto } = require('../../src/services/aesthetic-s3');
+    expect(uploadPhoto).not.toHaveBeenCalled();
+  });
+
+  test('201 — is_sensitive=true COM consent reforçado existente; auto-crop dispara, upload prossegue', async () => {
+    // Consent with at least one reinforced region
+    mockGetConsent.mockResolvedValue({ id: 'c1', created_at: '2026-05-11T00:00:00Z', reinforced_regions: ['breast'] });
+    mockAutoCropSensitive.mockResolvedValue({ buffer: Buffer.from('croppedimg'), applied: 1, regions: [] });
+
+    const app = await buildApp();
+    const boundary = 'consentGate2';
+    const payload = buildMultipart(boundary,
+      { subject_id: 'sub1', photo_type: 'breast_front', is_sensitive: 'true' },
+      { name: 'file', filename: 'photo.jpg', contentType: 'image/jpeg', content: 'fakejpgbytes' }
+    );
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect([201, 200]).toContain(res.statusCode);
+    expect(mockAutoCropSensitive).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(res.body);
+    expect(body).toHaveProperty('auto_crop_applied', 1);
   });
 });

@@ -5,6 +5,7 @@ const { requireEsteticaModule } = require('../middleware/aesthetic-module-gate')
 const { buildKey, uploadPhoto, signedUrlFor } = require('../services/aesthetic-s3');
 const { createPhoto, getPhotoForTenant, softDeletePhoto } = require('../services/aesthetic-photos');
 const { autoCropSensitive } = require('../services/aesthetic-auto-crop');
+const { getConsent } = require('../services/aesthetic-consent');
 
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png']);
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -49,6 +50,18 @@ module.exports = async function (fastify) {
     const autoCropEnabled = isSensitiveField
       ? (fields.auto_crop !== 'false' && fields.auto_crop !== '0')
       : false;
+
+    // Pre-flight: foto sensível exige consentimento reforçado registrado
+    if (isSensitiveField) {
+      const consent = await getConsent(fastify.pg, request.user.tenant_id, subject_id);
+      const reinforced = consent && Array.isArray(consent.reinforced_regions) ? consent.reinforced_regions : [];
+      if (!consent || reinforced.length === 0) {
+        return reply.status(403).send({
+          error: 'CONSENT_REINFORCED_MISSING',
+          message: 'Upload de foto sensível exige consentimento reforçado do paciente registrado previamente.',
+        });
+      }
+    }
 
     let autoCropApplied = 0;
     if (isSensitiveField && autoCropEnabled) {
