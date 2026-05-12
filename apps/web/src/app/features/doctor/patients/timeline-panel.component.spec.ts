@@ -94,11 +94,36 @@ describe('TimelinePanelComponent — aesthetic_analysis_completed', () => {
     fixture.detectChanges();
 
     let closeCalled = false;
-    // Intercept the EventEmitter's emit directly
     const originalEmit = comp.close.emit.bind(comp.close);
     comp.close.emit = jest.fn(() => { closeCalled = true; originalEmit(); });
 
     comp.openAesthetic('analysis-001');
     expect(closeCalled).toBe(true);
+  });
+
+  it('openAesthetic emite aestheticAnalysisRequested com o analysisId correto', () => {
+    comp.event = makeAestheticEvent();
+    comp.visible = true;
+    fixture.detectChanges();
+
+    const emitted: string[] = [];
+    comp.aestheticAnalysisRequested.subscribe((id: string) => emitted.push(id));
+
+    comp.openAesthetic('analysis-42');
+    expect(emitted).toEqual(['analysis-42']);
+  });
+
+  it('openAesthetic emite aestheticAnalysisRequested ANTES de close', () => {
+    comp.event = makeAestheticEvent();
+    comp.visible = true;
+    fixture.detectChanges();
+
+    const order: string[] = [];
+    comp.aestheticAnalysisRequested.subscribe(() => order.push('aesthetic'));
+    const originalClose = comp.close.emit.bind(comp.close);
+    comp.close.emit = jest.fn(() => { order.push('close'); originalClose(); });
+
+    comp.openAesthetic('analysis-99');
+    expect(order).toEqual(['aesthetic', 'close']);
   });
 });

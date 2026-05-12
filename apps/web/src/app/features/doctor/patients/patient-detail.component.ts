@@ -1,11 +1,11 @@
-import { Component, computed, inject, OnInit, OnDestroy, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, OnDestroy, signal, ViewChild } from '@angular/core';
 import { Chart, registerables } from 'chart.js';
 Chart.register(...registerables);
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { DatePipe, NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { MatTabsModule } from '@angular/material/tabs';
+import { MatTabsModule, MatTabGroup } from '@angular/material/tabs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -1357,6 +1357,7 @@ interface ComparisonBlock {
             [event]="timelineSelectedEvent()"
             [visible]="timelinePanelOpen()"
             (close)="timelinePanelOpen.set(false)"
+            (aestheticAnalysisRequested)="onAestheticAnalysisRequested($event)"
           />
         </mat-tab>
 
@@ -1781,10 +1782,11 @@ interface ComparisonBlock {
 
         <!-- ── ANÁLISE IA — facial + corporal (módulo estetica) ── -->
         @if (auth.currentProfile?.module === 'estetica') {
-          <mat-tab label="Análise IA" data-tab="aesthetic">
+          <mat-tab label="Análise Estética IA" data-tab="aesthetic">
             @if (subject()) {
               <app-facial-analysis-tab
-                [subject]="{ id: subject()!.id, name: subject()!.name }">
+                [subject]="{ id: subject()!.id, name: subject()!.name }"
+                [initialAnalysisId]="targetAestheticAnalysisId()">
               </app-facial-analysis-tab>
             }
           </mat-tab>
@@ -1816,8 +1818,13 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   private wsSub?: Subscription;
   private pollInterval?: ReturnType<typeof setInterval>;
 
+  @ViewChild(MatTabGroup) tabGroup?: MatTabGroup;
+
   timelineSelectedEvent = signal<TimelineEvent | null>(null);
   timelinePanelOpen = signal(false);
+
+  /** Analysis ID requested from timeline deep-link. Passed to facial-analysis-tab. */
+  targetAestheticAnalysisId = signal<string | null>(null);
 
   subject   = signal<Subject | null>(null);
   exams     = signal<Exam[]>([]);
@@ -2151,6 +2158,27 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   openTimelinePanel(event: TimelineEvent) {
     this.timelineSelectedEvent.set(event);
     this.timelinePanelOpen.set(true);
+  }
+
+  /**
+   * Deep-link from timeline panel to a specific aesthetic analysis.
+   * Only meaningful when module === 'estetica'; no-op otherwise (multi-module safety).
+   */
+  onAestheticAnalysisRequested(id: string): void {
+    if (this.auth.currentProfile?.module !== 'estetica') return;
+    this.targetAestheticAnalysisId.set(id);
+    this.timelinePanelOpen.set(false);
+    const idx = this._getAestheticTabIndex();
+    if (idx >= 0) {
+      this.selectedTabIndex.set(idx);
+    }
+  }
+
+  /** Returns the index of the "Análise Estética IA" tab, or -1 if not found. */
+  private _getAestheticTabIndex(): number {
+    if (!this.tabGroup) return -1;
+    const tabs = this.tabGroup._tabs.toArray();
+    return tabs.findIndex(t => t.textLabel === 'Análise Estética IA');
   }
 
   openPortalTokenDialog(scope: 'subject' | 'owner' = 'subject'): void {

@@ -745,6 +745,7 @@ export class TimelinePanelComponent implements OnChanges, OnDestroy {
   @Input() event: TimelineEvent | null = null;
   @Input() visible = false;
   @Output() close = new EventEmitter<void>();
+  @Output() aestheticAnalysisRequested = new EventEmitter<string>();
 
   private router    = inject(Router);
   private http      = inject(HttpClient);
@@ -853,10 +854,7 @@ export class TimelinePanelComponent implements OnChanges, OnDestroy {
   }
 
   openAesthetic(analysisId: string) {
-    // TODO: deep-link to aesthetic analysis detail page once route is defined.
-    // For now, close the panel — the analysis list on the patient profile is the
-    // natural landing point.
-    console.log('[timeline-panel] openAesthetic stub', analysisId);
+    this.aestheticAnalysisRequested.emit(analysisId);
     this.close.emit();
   }
 

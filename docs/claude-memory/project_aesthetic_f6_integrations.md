@@ -101,10 +101,29 @@ Todos os caracteres PT-BR acentuados rendem corretamente no PDF:
 
 ## TODOs / Futuro
 
-- **Timeline deep-link**: `openAesthetic(id)` em timeline-panel é stub (console.log). Router navigate + lazy load do componente analysis-result quando deep-link existir.
+- ~~**Timeline deep-link**: `openAesthetic(id)` em timeline-panel é stub (console.log). Router navigate + lazy load do componente analysis-result quando deep-link existir.~~ **CONCLUÍDO (TODO#2, 2026-05-11)**
 - **PDF preview no frontend**: hoje download direto. Poderia abrir em modal iframe.
 - **Encounter sugestão automática**: ao criar encounter sem related_id mas com aesthetic_analyses recente, sugerir vínculo (UX).
 - **Treatment "Agendar X sessões"**: hoje agenda 1 procedimento — poderia gerar series de N appointments espaçados pelo interval_days do catálogo.
+
+## TODO#2 — Timeline deep-link (entregue 2026-05-11)
+
+Branch: `feat/aesthetic-todo-02-timeline-deeplink`
+
+**Arquitetura:** `timeline-panel` emite `@Output() aestheticAnalysisRequested = new EventEmitter<string>()`. `openAesthetic(id)` substituiu o stub (console.log + close.emit) por `this.aestheticAnalysisRequested.emit(id); this.close.emit()`.
+
+`patient-detail` escuta `(aestheticAnalysisRequested)="onAestheticAnalysisRequested($event)"`. O handler:
+1. Guarda o ID no signal `targetAestheticAnalysisId = signal<string | null>(null)`.
+2. Fecha o panel (`timelinePanelOpen.set(false)`).
+3. Navega para a tab via `_getAestheticTabIndex()` que usa `@ViewChild(MatTabGroup)._tabs.toArray()` e busca por label `'Análise Estética IA'`.
+
+**Tab renomeada:** label da tab estetica mudou de `"Análise IA"` → `"Análise Estética IA"` para ser unívoca (o legacy `Análise IA` ainda existe para todos os módulos).
+
+`facial-analysis-tab` recebe `@Input() initialAnalysisId?: string | null`. Em `ngOnInit` e `ngOnChanges` (re-carrega se ID mudar), chama `_loadExistingAnalysis(id)` que invoca `svc.getAnalysis(id)` e salta o state machine para `step='result'` diretamente — bypassa o fluxo de upload.
+
+**Multi-módulo safe:** `onAestheticAnalysisRequested` retorna early se `module !== 'estetica'`. Timeline de human/vet não tem eventos `aesthetic_analysis_completed`, então o emit jamais ocorre.
+
+**Tests:** +3 em timeline-panel.spec (emite aestheticAnalysisRequested, emite com ID correto, ordem aesthetic→close). +3 em facial-analysis-tab.spec (deep-link carrega e step=result, falha→error+idle, ngOnChanges re-carrega). Total 28 testes no suite targeted, 162 verdes no full suite.
 
 ## Custos
 

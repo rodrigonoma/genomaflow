@@ -14,7 +14,10 @@
 import {
   Component,
   DestroyRef,
+  Input,
+  OnChanges,
   OnInit,
+  SimpleChanges,
   ViewChild,
   inject,
   input,
@@ -304,7 +307,7 @@ export type Step =
     </div>
   `,
 })
-export class FacialAnalysisTabComponent implements OnInit {
+export class FacialAnalysisTabComponent implements OnInit, OnChanges {
   // -------------------------------------------------------------------------
   // Injections
   // -------------------------------------------------------------------------
@@ -320,6 +323,14 @@ export class FacialAnalysisTabComponent implements OnInit {
 
   /** Subject (paciente / animal) para o qual a análise será criada. */
   readonly subject = input.required<{ id: string; name: string }>();
+
+  /**
+   * Deep-link: quando fornecido, carrega a análise pelo ID e avança para o
+   * estado `result` diretamente, sem passar pelo fluxo de upload.
+   * Passado por patient-detail quando o usuário clica em "Ver análise completa"
+   * no timeline-panel.
+   */
+  @Input() initialAnalysisId?: string | null;
 
   // -------------------------------------------------------------------------
   // State signals
@@ -362,7 +373,18 @@ export class FacialAnalysisTabComponent implements OnInit {
   // Lifecycle
   // -------------------------------------------------------------------------
 
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['initialAnalysisId'] && this.initialAnalysisId) {
+      this._loadExistingAnalysis(this.initialAnalysisId);
+    }
+  }
+
   ngOnInit(): void {
+    // If initialAnalysisId was set before the component initialized, load it now.
+    if (this.initialAnalysisId) {
+      this._loadExistingAnalysis(this.initialAnalysisId);
+    }
+
     // Subscribe to WS events for analysis completion
     this.aestheticWs.events$
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -537,6 +559,26 @@ export class FacialAnalysisTabComponent implements OnInit {
   private _hasReinforcedFor(consent: AestheticConsent | null, region: string): boolean {
     if (!consent || !consent.reinforced_regions) return false;
     return consent.reinforced_regions.includes(region);
+  }
+
+  /**
+   * Deep-link loader: fetches an existing analysis by ID and jumps the state
+   * machine directly to `result`. Called from ngOnInit/ngOnChanges when
+   * `initialAnalysisId` is provided.
+   */
+  private _loadExistingAnalysis(id: string): void {
+    this.svc.getAnalysis(id).subscribe({
+      next: async (detail) => {
+        this.currentAnalysis.set(detail);
+        this.currentAnalysisId.set(detail.id);
+        await this._loadPhotoUrls(detail.photo_ids);
+        this.step.set('result');
+      },
+      error: (e: unknown) => {
+        const msg = e instanceof Error ? e.message : 'Não foi possível carregar a análise solicitada.';
+        this.error.set(msg);
+      },
+    });
   }
 
   private _fetchAnalysisAndAdvance(analysisId: string): void {

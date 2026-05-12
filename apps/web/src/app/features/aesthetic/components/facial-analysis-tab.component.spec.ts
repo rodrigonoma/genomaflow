@@ -324,6 +324,76 @@ describe('FacialAnalysisTabComponent', () => {
   });
 
   // -------------------------------------------------------------------------
+  // TODO#2: initialAnalysisId deep-link
+  // -------------------------------------------------------------------------
+
+  it('initialAnalysisId definido → getAnalysis chamado e step=result (deep-link)', (done) => {
+    const detail = makeDetail({ id: 'analysis-deep-001' });
+    mockFacialService.getAnalysis!.mockReturnValue(of(detail));
+
+    const fixture = TestBed.createComponent(FacialAnalysisTabComponent);
+    fixture.componentRef.setInput('subject', { id: 'subject-001', name: 'Maria Silva' });
+    // Set initialAnalysisId before detectChanges so ngOnInit fires with it
+    fixture.componentInstance.initialAnalysisId = 'analysis-deep-001';
+    fixture.detectChanges();
+
+    setTimeout(() => {
+      fixture.detectChanges();
+      expect(mockFacialService.getAnalysis).toHaveBeenCalledWith('analysis-deep-001');
+      expect(fixture.componentInstance.step()).toBe('result');
+      expect(fixture.componentInstance.currentAnalysis()?.id).toBe('analysis-deep-001');
+      done();
+    }, 50);
+  });
+
+  it('initialAnalysisId: getAnalysis falha → error setado, step permanece idle', (done) => {
+    mockFacialService.getAnalysis!.mockReturnValue(
+      throwError(() => new Error('Not found')),
+    );
+
+    const fixture = TestBed.createComponent(FacialAnalysisTabComponent);
+    fixture.componentRef.setInput('subject', { id: 'subject-001', name: 'Maria Silva' });
+    fixture.componentInstance.initialAnalysisId = 'analysis-bad';
+    fixture.detectChanges();
+
+    setTimeout(() => {
+      fixture.detectChanges();
+      expect(fixture.componentInstance.step()).toBe('idle');
+      expect(fixture.componentInstance.error()).toContain('Not found');
+      done();
+    }, 50);
+  });
+
+  it('ngOnChanges com novo initialAnalysisId → recarrega análise', (done) => {
+    const detail1 = makeDetail({ id: 'analysis-001' });
+    const detail2 = makeDetail({ id: 'analysis-002' });
+    mockFacialService.getAnalysis!
+      .mockReturnValueOnce(of(detail1))
+      .mockReturnValueOnce(of(detail2));
+
+    const fixture = createFixture();
+    const comp = fixture.componentInstance;
+
+    // Simulate ngOnChanges with new value
+    comp.initialAnalysisId = 'analysis-002';
+    comp.ngOnChanges({
+      initialAnalysisId: {
+        currentValue: 'analysis-002',
+        previousValue: null,
+        firstChange: false,
+        isFirstChange: () => false,
+      },
+    });
+
+    setTimeout(() => {
+      fixture.detectChanges();
+      expect(mockFacialService.getAnalysis).toHaveBeenLastCalledWith('analysis-002');
+      expect(comp.step()).toBe('result');
+      done();
+    }, 50);
+  });
+
+  // -------------------------------------------------------------------------
   // F2 Task 5: region_pick tests
   // -------------------------------------------------------------------------
   it('Nova análise abre region_pick antes do consent_check', () => {
