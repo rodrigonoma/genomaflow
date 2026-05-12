@@ -219,19 +219,117 @@ function buildPrompt({ metrics, subject, professionalType, availableTreatments, 
   return `Você é um assistente de protocolo estético. Com base nas métricas analisadas e\nno perfil do paciente, recomende protocolo de tratamento.\n\nPROFISSIONAL: ${profStr}\n${restricaoStr}\n\nPACIENTE:\n- ${ageText} anos, ${sexText}\n- fototipo: ${fitzText}\n- altura: ${alturaText} cm, peso: ${pesoText} kg\n- objetivo: ${goalsText}\n- comorbidades: ${comorbidText}\n- medicações: ${medText}\n${nutritionBlock}\nMÉTRICAS DA ANÁLISE:\n${metricsLines}\n${catalogBlock}\nCADA tratamento sugerido DEVE conter:\n- treatment_name (nome canônico do procedimento, ex: "Microagulhamento", "Botox")\n- target_metric (qual métrica visa melhorar)\n- indication_text (2-3 linhas justificando)\n- sessions_recommended (1-20)\n- interval_days (7-365)\n- estimated_total_cost_brl_range [min, max]\n- urgency: "low" | "medium" | "high"\n- expected_outcome (1-2 linhas)\n- contraindications_flagged (lista de flags se houver)\n- requires_medico (true|false)\n\nPara NUTRIÇÃO/ESTILO DE VIDA (orientação geral, NÃO plano terapêutico):\n- estimated_daily_calories_kcal\n- macro_distribution_g: { protein, carbs, fat }\n- hydration_ml_per_day\n- meal_timing_suggestion (1 linha)\n- exercise_recommendation: { aerobic, strength }\n- foods_to_emphasize / foods_to_minimize (listas)\n- supplementation_consideration (lista)\n\nNÃO inclua disclaimer no JSON — eu adiciono automaticamente.\n\nOutput JSON estrito:\n{\n  "treatment_protocol": [...],\n  "lifestyle_recommendations": {...},\n  "summary_for_patient": "<plano resumido em 3-5 linhas>",\n  "follow_up_protocol": { "next_analysis_recommended_in_days": ..., "checkpoint_metrics": [...] }\n}`;
 }
 
+// ---------------------------------------------------------------------------
+// F3.5+ Treatment matching helpers — diacritic-insensitive + brand synonyms
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize a treatment name for matching:
+ *   - NFD decomposition (splits accented chars into base + combining mark)
+ *   - Strip combining diacritical marks (U+0300–U+036F)
+ *   - Lowercase, trim, collapse internal whitespace
+ * Examples:
+ *   normalize('Toxina Botulínica') → 'toxina botulinica'
+ *   normalize('  Botox   Cosmético  ') → 'botox cosmetico'
+ */
+function normalize(s) {
+  if (!s || typeof s !== 'string') return '';
+  return s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Synonyms: BR aesthetic market brand↔generic mappings.
+ * Key (normalized) → canonical catalog name (also normalized after normalize()).
+ * All values must match a real aesthetic_treatments.name after normalize().
+ *
+ * Future: migrate to DB table so tenants can create their own aliases.
+ */
+const TREATMENT_SYNONYMS = new Map([
+  // Toxina Botulínica → normalized: 'toxina botulinica'
+  ['botox',                          'toxina botulinica'],
+  ['dysport',                        'toxina botulinica'],
+  ['xeomin',                         'toxina botulinica'],
+  ['toxina botulinica tipo a',       'toxina botulinica'],
+  // Ácido Hialurônico Facial → normalized: 'acido hialuronico facial'
+  ['preenchimento facial',           'acido hialuronico facial'],
+  ['preenchimento de acido hialuronico', 'acido hialuronico facial'],
+  ['acido hialuronico',              'acido hialuronico facial'],
+  ['ah facial',                      'acido hialuronico facial'],
+  // Bioestimulador de Colágeno → normalized: 'bioestimulador de colageno'
+  ['sculptra',                       'bioestimulador de colageno'],
+  ['radiesse',                       'bioestimulador de colageno'],
+  ['plla',                           'bioestimulador de colageno'],
+  ['hidroxiapatita de calcio',       'bioestimulador de colageno'],
+  // Radiofrequência Microagulhada → normalized: 'radiofrequencia microagulhada'
+  ['morpheus8',                      'radiofrequencia microagulhada'],
+  ['morpheus 8',                     'radiofrequencia microagulhada'],
+  ['vivace',                         'radiofrequencia microagulhada'],
+  ['rf microagulhamento',            'radiofrequencia microagulhada'],
+  // HIFU Facial → normalized: 'hifu facial'
+  ['hifu',                           'hifu facial'],
+  ['ultraformer',                    'hifu facial'],
+  ['ulthera',                        'hifu facial'],
+  ['ultherapy',                      'hifu facial'],
+  // Microagulhamento → normalized: 'microagulhamento'
+  ['dermaroller',                    'microagulhamento'],
+  ['microneedling',                  'microagulhamento'],
+  // Lipocavitação → normalized: 'lipocavitacao'
+  ['cavitacao',                      'lipocavitacao'],
+  ['ultrassom cavitacional',         'lipocavitacao'],
+  // Criolipólise → normalized: 'criolipolise'
+  ['coolsculpting',                  'criolipolise'],
+  // Peeling Salicílico → normalized: 'peeling salicilico'
+  ['acido salicilico',               'peeling salicilico'],
+  // Peeling Químico Glicólico → normalized: 'peeling quimico glicolico'
+  ['acido glicolico',                'peeling quimico glicolico'],
+  // PRP Capilar → normalized: 'prp capilar'
+  ['plasma rico em plaquetas capilar', 'prp capilar'],
+  // Luz Pulsada (IPL) → normalized: 'luz pulsada (ipl)'
+  ['ipl',                            'luz pulsada (ipl)'],
+  ['fotorrejuvenescimento',          'luz pulsada (ipl)'],
+  ['luz pulsada ipl',                'luz pulsada (ipl)'],
+]);
+
+/**
+ * Given a normalized name, return its canonical normalized form (via synonym
+ * lookup), or the input unchanged if no synonym matches.
+ */
+function resolveCanonical(normalizedName) {
+  if (TREATMENT_SYNONYMS.has(normalizedName)) return TREATMENT_SYNONYMS.get(normalizedName);
+  return normalizedName;
+}
+
 function applyCatalogMatching(recommendations, availableTreatments) {
   if (!Array.isArray(availableTreatments) || availableTreatments.length === 0) return;
-  // Build lookup map: lowercased name → catalog row (defensive: skip rows missing id or name)
-  const byLower = new Map();
+
+  // Build lookup map: normalized name → catalog row (defensive: skip rows missing id or name)
+  const byNormalizedName = new Map();
   for (const t of availableTreatments.slice(0, 50)) {
     if (t && t.name && t.id) {
-      byLower.set(t.name.toLowerCase().trim(), t);
+      byNormalizedName.set(normalize(t.name), t);
     }
   }
+
   for (const tx of (recommendations.treatment_protocol || [])) {
     if (!tx) continue;
-    const key = (tx.treatment_name || '').toLowerCase().trim();
-    const match = byLower.get(key);
+    const llmName = tx.treatment_name || '';
+    const norm = normalize(llmName);
+    if (!norm) {
+      tx.in_catalog = false;
+      continue;
+    }
+    // 1. Direct normalized match (handles diacritic variants without synonyms)
+    let match = byNormalizedName.get(norm);
+    // 2. Synonym lookup → canonical normalized name → match
+    if (!match) {
+      const canonical = resolveCanonical(norm);
+      if (canonical !== norm) match = byNormalizedName.get(canonical);
+    }
     if (match) {
       tx.treatment_id = match.id;
       tx.in_catalog = true;
@@ -267,7 +365,7 @@ async function recommendProtocol({ metrics, subject, professionalType, available
   // sanitizeRecommendations recebe computedNutrition pra usar como fallback no lifestyle
   const recommendations = sanitizeRecommendations(parsed, professionalType, computedNutrition);
 
-  // Post-process: match treatment names → catalog IDs (F3 — exact match, case-insensitive + trim)
+  // Post-process: match treatment names → catalog IDs (F3.5 — normalize NFD + diacritic-strip + synonyms)
   applyCatalogMatching(recommendations, availableTreatments);
 
   return {
@@ -278,4 +376,4 @@ async function recommendProtocol({ metrics, subject, professionalType, available
   };
 }
 
-module.exports = { recommendProtocol, sanitizeRecommendations };
+module.exports = { recommendProtocol, sanitizeRecommendations, normalize, resolveCanonical, applyCatalogMatching, TREATMENT_SYNONYMS };

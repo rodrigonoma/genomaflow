@@ -7,7 +7,7 @@ jest.mock('@anthropic-ai/sdk', () => ({
   default: class Anthropic { constructor() {} messages = { create: mockCreate }; },
 }));
 
-const { recommendProtocol, sanitizeRecommendations } = require('../../src/agents/aesthetic-recommender');
+const { recommendProtocol, sanitizeRecommendations, normalize, resolveCanonical, TREATMENT_SYNONYMS } = require('../../src/agents/aesthetic-recommender');
 
 describe('recommendProtocol', () => {
   test('retorna recommendations + tokens', async () => {
@@ -351,5 +351,230 @@ describe('recommendProtocol — F4 aestheticProfile + nutrition', () => {
     const clean = sanitizeRecommendations(raw, 'medico', null);
     expect(clean.lifestyle_recommendations.foods_to_emphasize.length).toBeLessThanOrEqual(15);
     expect(clean.lifestyle_recommendations.foods_to_minimize[0].length).toBeLessThanOrEqual(80);
+  });
+});
+
+// ===========================================================================
+// TODO#3: normalize() + synonym matching (diacritic-insensitive + brand names)
+// ===========================================================================
+
+describe('normalize()', () => {
+  test('strip acentos: Análise → analise', () => {
+    expect(normalize('Análise')).toBe('analise');
+  });
+
+  test('collapse espaços + trim + lowercase', () => {
+    expect(normalize('  Botox   Cosmético  ')).toBe('botox cosmetico');
+  });
+
+  test('string vazia retorna string vazia', () => {
+    expect(normalize('')).toBe('');
+  });
+
+  test('non-string retorna string vazia', () => {
+    expect(normalize(null)).toBe('');
+    expect(normalize(undefined)).toBe('');
+    expect(normalize(42)).toBe('');
+  });
+
+  test('Toxina Botulínica normaliza igual a Toxina Botulinica', () => {
+    expect(normalize('Toxina Botulínica')).toBe(normalize('Toxina Botulinica'));
+  });
+});
+
+describe('TREATMENT_SYNONYMS + resolveCanonical()', () => {
+  test('botox resolve para toxina botulinica', () => {
+    expect(resolveCanonical('botox')).toBe('toxina botulinica');
+  });
+
+  test('nome sem synonym retorna o mesmo nome', () => {
+    expect(resolveCanonical('microagulhamento')).toBe('microagulhamento');
+  });
+
+  test('TREATMENT_SYNONYMS tem entradas para marcas principais BR', () => {
+    // Toxina Botulínica brands
+    expect(TREATMENT_SYNONYMS.get('botox')).toBe('toxina botulinica');
+    expect(TREATMENT_SYNONYMS.get('dysport')).toBe('toxina botulinica');
+    expect(TREATMENT_SYNONYMS.get('xeomin')).toBe('toxina botulinica');
+    // RF Microagulhada brands
+    expect(TREATMENT_SYNONYMS.get('morpheus8')).toBe('radiofrequencia microagulhada');
+    expect(TREATMENT_SYNONYMS.get('vivace')).toBe('radiofrequencia microagulhada');
+    // HIFU brands
+    expect(TREATMENT_SYNONYMS.get('ultraformer')).toBe('hifu facial');
+    expect(TREATMENT_SYNONYMS.get('ultherapy')).toBe('hifu facial');
+    // Bioestimulador brands
+    expect(TREATMENT_SYNONYMS.get('sculptra')).toBe('bioestimulador de colageno');
+    expect(TREATMENT_SYNONYMS.get('radiesse')).toBe('bioestimulador de colageno');
+  });
+});
+
+describe('applyCatalogMatching — diacritic-insensitive + synonyms', () => {
+  // Catalog rows mimic what the DB returns (names with proper diacritics as seeded)
+  const catalog = [
+    { id: 'uuid-toxina',     name: 'Toxina Botulínica',          requires_medico: true  },
+    { id: 'uuid-rf',         name: 'Radiofrequência Microagulhada', requires_medico: true },
+    { id: 'uuid-micro',      name: 'Microagulhamento',           requires_medico: false },
+    { id: 'uuid-bio',        name: 'Bioestimulador de Colágeno', requires_medico: true  },
+    { id: 'uuid-ah',         name: 'Ácido Hialurônico Facial',   requires_medico: true  },
+    { id: 'uuid-criolipolise', name: 'Criolipólise',             requires_medico: false },
+  ];
+
+  test('match diacritic-insensitive: LLM "Toxina Botulinica" (sem acento) bate com catálogo "Toxina Botulínica"', async () => {
+    mockCreate.mockResolvedValueOnce({
+      content: [{ text: JSON.stringify({
+        treatment_protocol: [{
+          treatment_name: 'Toxina Botulinica',   // LLM sem acento
+          target_metric: 'rugas',
+          indication_text: 'Rugas dinâmicas',
+          sessions_recommended: 1,
+          interval_days: 120,
+          urgency: 'medium',
+          expected_outcome: 'Relaxamento muscular',
+          requires_medico: false,   // LLM errou — catálogo deve sobrescrever
+        }],
+        lifestyle_recommendations: {},
+        summary_for_patient: 'Teste diacritic',
+      })}],
+      usage: { input_tokens: 800, output_tokens: 400 },
+    });
+
+    const result = await recommendProtocol({
+      metrics: { rugas: { score: 75 } },
+      subject: { age_years: 45, sex: 'F', fitzpatrick_type: 2, aesthetic_profile: {} },
+      professionalType: 'medico',
+      availableTreatments: catalog,
+    });
+
+    const tx = result.recommendations.treatment_protocol[0];
+    expect(tx.in_catalog).toBe(true);
+    expect(tx.treatment_id).toBe('uuid-toxina');
+    expect(tx.requires_medico).toBe(true);  // catálogo sobrescreve LLM
+  });
+
+  test('match via synonym: LLM "Botox" → catálogo "Toxina Botulínica"', async () => {
+    mockCreate.mockResolvedValueOnce({
+      content: [{ text: JSON.stringify({
+        treatment_protocol: [{
+          treatment_name: 'Botox',
+          target_metric: 'rugas',
+          indication_text: 'Rugas da glabela',
+          sessions_recommended: 1,
+          interval_days: 120,
+          urgency: 'medium',
+          expected_outcome: 'Suavização das rugas',
+          requires_medico: false,
+        }],
+        lifestyle_recommendations: {},
+        summary_for_patient: 'Teste synonym botox',
+      })}],
+      usage: { input_tokens: 800, output_tokens: 400 },
+    });
+
+    const result = await recommendProtocol({
+      metrics: { rugas: { score: 80 } },
+      subject: { age_years: 42, sex: 'F', fitzpatrick_type: 3, aesthetic_profile: {} },
+      professionalType: 'medico',
+      availableTreatments: catalog,
+    });
+
+    const tx = result.recommendations.treatment_protocol[0];
+    expect(tx.in_catalog).toBe(true);
+    expect(tx.treatment_id).toBe('uuid-toxina');
+    expect(tx.requires_medico).toBe(true);
+  });
+
+  test('match via synonym brand: LLM "Morpheus8" → catálogo "Radiofrequência Microagulhada"', async () => {
+    mockCreate.mockResolvedValueOnce({
+      content: [{ text: JSON.stringify({
+        treatment_protocol: [{
+          treatment_name: 'Morpheus8',
+          target_metric: 'firmeza',
+          indication_text: 'Flacidez e rugas',
+          sessions_recommended: 3,
+          interval_days: 45,
+          urgency: 'medium',
+          expected_outcome: 'Remodelação profunda',
+          requires_medico: false,
+        }],
+        lifestyle_recommendations: {},
+        summary_for_patient: 'Teste Morpheus8',
+      })}],
+      usage: { input_tokens: 800, output_tokens: 400 },
+    });
+
+    const result = await recommendProtocol({
+      metrics: { firmeza: { score: 65 } },
+      subject: { age_years: 48, sex: 'F', fitzpatrick_type: 2, aesthetic_profile: {} },
+      professionalType: 'medico',
+      availableTreatments: catalog,
+    });
+
+    const tx = result.recommendations.treatment_protocol[0];
+    expect(tx.in_catalog).toBe(true);
+    expect(tx.treatment_id).toBe('uuid-rf');
+    expect(tx.requires_medico).toBe(true);
+  });
+
+  test('off-catalog: LLM "Procedimento Aleatório Y" → in_catalog=false, sem treatment_id', async () => {
+    mockCreate.mockResolvedValueOnce({
+      content: [{ text: JSON.stringify({
+        treatment_protocol: [{
+          treatment_name: 'Procedimento Aleatório Y',
+          target_metric: 'rugas',
+          indication_text: 'Experimental',
+          sessions_recommended: 2,
+          interval_days: 30,
+          urgency: 'low',
+          expected_outcome: 'Hipotético',
+          requires_medico: false,
+        }],
+        lifestyle_recommendations: {},
+        summary_for_patient: 'Teste off-catalog',
+      })}],
+      usage: { input_tokens: 800, output_tokens: 400 },
+    });
+
+    const result = await recommendProtocol({
+      metrics: { rugas: { score: 60 } },
+      subject: { age_years: 35, sex: 'F', fitzpatrick_type: 3, aesthetic_profile: {} },
+      professionalType: 'medico',
+      availableTreatments: catalog,
+    });
+
+    const tx = result.recommendations.treatment_protocol[0];
+    expect(tx.in_catalog).toBe(false);
+    expect(tx.treatment_id).toBeUndefined();
+  });
+
+  test('backward compat: catálogo exato com acentos ainda funciona', async () => {
+    mockCreate.mockResolvedValueOnce({
+      content: [{ text: JSON.stringify({
+        treatment_protocol: [{
+          treatment_name: 'Microagulhamento',   // exact match no synonym needed
+          target_metric: 'textura',
+          indication_text: 'Textura e poros',
+          sessions_recommended: 4,
+          interval_days: 30,
+          urgency: 'medium',
+          expected_outcome: 'Melhora de textura',
+          requires_medico: false,
+        }],
+        lifestyle_recommendations: {},
+        summary_for_patient: 'Teste exato',
+      })}],
+      usage: { input_tokens: 800, output_tokens: 400 },
+    });
+
+    const result = await recommendProtocol({
+      metrics: { textura: { score: 70 } },
+      subject: { age_years: 35, sex: 'F', fitzpatrick_type: 2, aesthetic_profile: {} },
+      professionalType: 'medico',
+      availableTreatments: catalog,
+    });
+
+    const tx = result.recommendations.treatment_protocol[0];
+    expect(tx.in_catalog).toBe(true);
+    expect(tx.treatment_id).toBe('uuid-micro');
+    expect(tx.requires_medico).toBe(false);
   });
 });

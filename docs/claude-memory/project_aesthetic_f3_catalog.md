@@ -72,7 +72,12 @@ Seed cobre 8 categorias com 22 tratamentos (Criolipólise, HIFU, Microagulhament
 
 ## Defensive sanitization (recommender + discovery)
 
-- Match case-insensitive + trim (não normaliza acentos — exato match por enquanto)
+- **Treatment matching via normalize NFD + synonyms map BR (TODO#3, entregue 2026-05-11)**:
+  - `normalize(s)`: NFD decompose → strip combining marks U+0300–U+036F → lowercase → trim → collapse spaces
+  - `TREATMENT_SYNONYMS`: ~30 mapeamentos brand→generic (Botox/Dysport/Xeomin→Toxina Botulínica, Sculptra/Radiesse→Bioestimulador de Colágeno, Morpheus8/Vivace→RF Microagulhada, IPL/fotorrejuvenescimento→Luz Pulsada (IPL), Ultraformer/Ulthera→HIFU Facial, CoolSculpting→Criolipólise, etc.)
+  - Pipeline: `normalize(llmName)` → direct match in catalog → synonym lookup → canonical → match in catalog → `in_catalog: false`
+  - Exportados: `normalize`, `resolveCanonical`, `applyCatalogMatching`, `TREATMENT_SYNONYMS`
+  - Future: migrar para tabela DB de synonyms para que tenants criem seus próprios alias
 - `requires_medico` do catálogo sobrescreve LLM (source of truth)
 - `availableTreatments` opcional → comportamento legacy (in_catalog não setado)
 - Discovery job whitelist enums, slice strings (name 120 / desc 500 / sources 200), clamp ints/numbers (sessions 1-20, days 1-365, cost 0-100k), cap 30 suggestions, `BAD_LLM_OUTPUT` 502
@@ -89,7 +94,7 @@ Seed cobre 8 categorias com 22 tratamentos (Criolipólise, HIFU, Microagulhament
 ## Tests
 
 - API: +24 (master-treatment-suggestions) +18 (master-aesthetic-treatments) +9 (tenant routes) = 51 novos. Total 675+ green, 0 regressão.
-- Worker: +35 (discovery) +4 (recommender catalog) +1 (processor) = 40 novos. Total 98 green.
+- Worker: +35 (discovery) +4 (recommender catalog) +1 (processor) = 40 novos. Total 98 green (F3). **TODO#3 (2026-05-11): +13 (normalize/synonyms/matching) = 160 green total, 1 skipped pre-existing.**
 - Web: +6 (cards) +6 (master catalog) +6 (master suggestions) = 18 novos. Total 125 green, 3 skipped pre-existing.
 
 ## Multi-módulo zero quebra
@@ -101,7 +106,7 @@ Seed cobre 8 categorias com 22 tratamentos (Criolipólise, HIFU, Microagulhament
 
 ## Limitações honestas
 
-- **Treatment matching exato** (LOWER + trim) — sem synonyms/normalização de acentos. Casos como "Botox" vs "Toxina Botulínica" não dão match (sair como `in_catalog: false`). F4+ pode adicionar synonyms table ou usar embeddings.
+- **Treatment matching** — normalize NFD + synonyms map BR (TODO#3 entregue 2026-05-11). Cobre ~30 marcas/genéricos principais. Casos não cobertos ainda saem como `in_catalog: false`. Future: tabela DB de synonyms para tenants criarem seus próprios alias.
 - **Discovery roda dia 1 UTC** — não respeita timezone BRT especificamente; tick acontece em qualquer hora do dia 1 UTC (~21:00 do dia anterior BRT em Maio). Aceitável.
 - **Cost range** mostrado é do catálogo (estimativa pesquisa de mercado 2026), não preço real da clínica. F4+ pode permitir override por tenant.
 - **Botão "Agendar agora"** apenas emite event — F6 vai wirar na agenda existente.
