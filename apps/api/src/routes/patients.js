@@ -175,7 +175,7 @@ module.exports = async function (fastify) {
     const consentAt = consent_given ? new Date() : null;
     const consentBy = consent_given ? user_id : null;
 
-    if (module === 'human') {
+    if (module === 'human' || module === 'estetica') {
       if (!name || !birth_date || !sex)
         return reply.status(400).send({ error: 'name, birth_date and sex are required' });
 

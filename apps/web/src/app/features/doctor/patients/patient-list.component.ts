@@ -304,7 +304,7 @@ import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
               {{ user.module === 'veterinary' ? 'Cadastrar animal' : 'Cadastrar paciente' }}
             </div>
 
-            @if (user.module === 'human') {
+            @if (user.module === 'human' || user.module === 'estetica') {
               <div class="field-pair">
                 <mat-form-field appearance="outline">
                   <mat-label>Nome completo *</mat-label>
