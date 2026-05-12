@@ -557,6 +557,30 @@ module.exports = async function (fastify) {
                )
         FROM scheduled_notifications sn
         WHERE sn.tenant_id = $1 AND sn.subject_id = $2 AND sn.sent_at IS NOT NULL
+
+        UNION ALL
+
+        -- Análises estéticas concluídas (F6.2 — só mostra status='done')
+        SELECT 'aesthetic_analysis_completed'::text, aa.id, COALESCE(aa.completed_at, aa.created_at),
+               jsonb_build_object(
+                 'id', aa.id,
+                 'analysis_type', aa.analysis_type,
+                 'status', aa.status,
+                 'completed_at', aa.completed_at,
+                 'photo_count', COALESCE(array_length(aa.photo_ids, 1), 0),
+                 'top_metrics', (
+                   SELECT jsonb_agg(metric_obj ORDER BY (metric_obj->>'score')::numeric DESC)
+                   FROM (
+                     SELECT jsonb_build_object('name', key, 'score', (value->>'score')::numeric)::jsonb AS metric_obj
+                     FROM jsonb_each(COALESCE(aa.metrics, '{}'::jsonb))
+                     WHERE value ? 'score'
+                     ORDER BY (value->>'score')::numeric DESC
+                     LIMIT 3
+                   ) top
+                 )
+               )
+        FROM aesthetic_analyses aa
+        WHERE aa.tenant_id = $1 AND aa.subject_id = $2 AND aa.status = 'done' AND aa.deleted_at IS NULL
       )
       SELECT * FROM events
       WHERE 1=1 ${cursorClause}
