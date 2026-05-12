@@ -425,8 +425,10 @@ export class FacialAnalysisTabComponent implements OnInit, OnChanges {
   checkConsent(): void {
     this.svc.getConsent(this.subject().id).subscribe({
       next: (consent) => {
-        // Consent exists and is not revoked
-        if (consent && !consent.revoked_at) {
+        // Backend retorna { confirmed: false } quando não existe — objeto truthy
+        // mas SEM id/created_at. checar `confirmed` é o discriminador correto.
+        const hasValidConsent = !!consent && consent.confirmed === true && !consent.revoked_at;
+        if (hasValidConsent) {
           // For sensitive region: also verify reinforced consent covers this region
           if (this._pickedRegionIsSensitive() && !this._hasReinforcedFor(consent, this.selectedRegion())) {
             // Existing consent doesn't cover this sensitive region → open modal in reinforced mode

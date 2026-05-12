@@ -85,16 +85,26 @@ export type Metrics = Record<string, MetricData>;
 // Consent
 // ---------------------------------------------------------------------------
 
+/**
+ * Backend `GET /aesthetic/consent/:subject_id` retorna SEMPRE 200 com:
+ *   - `{ confirmed: false }` quando NÃO há consent (todos demais campos undefined).
+ *   - `{ confirmed: true, id, created_at, reinforced_regions }` quando há.
+ *
+ * Frontend DEVE checar `confirmed` antes de tratar como válido — checar
+ * truthy do objeto NÃO basta (regressão 2026-05-12 fez upload de fotos
+ * sem consent porque `{confirmed:false}` é truthy).
+ */
 export interface AestheticConsent {
-  id: string;
-  tenant_id: string;
-  subject_id: string;
-  user_id: string;
-  consented_at: string;
-  notes: string | null;
-  reinforced_regions: string[] | null;
-  revoked_at: string | null;
-  created_at: string;
+  confirmed: boolean;
+  id?: string;
+  tenant_id?: string;
+  subject_id?: string;
+  user_id?: string;
+  consented_at?: string;
+  notes?: string | null;
+  reinforced_regions?: string[] | null;
+  revoked_at?: string | null;
+  created_at?: string;
 }
 
 export interface CreateConsentPayload {
