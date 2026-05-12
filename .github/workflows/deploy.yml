@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
 
+# Garantia: somente um deploy ativo por vez. Pushes consecutivos cancelam
+# runs antigas (em fila ou em curso) e mantêm apenas a mais recente.
+# Previne saturação de runners + race condition no update-service ECS.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Unit tests (gate)
