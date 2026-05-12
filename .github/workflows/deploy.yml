@@ -86,6 +86,9 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      # Server.js plugin pg usa DATABASE_URL; nosso setup.js usa DATABASE_URL_TEST.
+      # Os dois precisam apontar pro service container.
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/genomaflow
       DATABASE_URL_TEST: postgres://postgres:postgres@localhost:5432/genomaflow
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: integration-test-secret
