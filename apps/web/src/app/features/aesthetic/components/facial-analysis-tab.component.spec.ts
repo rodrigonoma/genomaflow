@@ -124,6 +124,7 @@ describe('FacialAnalysisTabComponent', () => {
   // -------------------------------------------------------------------------
   it('getConsent retorna consent válido → step=guide (sem dialog)', () => {
     mockFacialService.getConsent!.mockReturnValue(of({
+      confirmed: true,
       id: 'c-001',
       subject_id: 'subject-001',
       revoked_at: null,
@@ -424,6 +425,7 @@ describe('FacialAnalysisTabComponent', () => {
   it('região sensível + consent válido COM reinforced para região → avança direto para guide', () => {
     // Consent exists AND reinforced_regions already covers 'abdomen'
     mockFacialService.getConsent!.mockReturnValue(of({
+      confirmed: true,
       id: 'c-002',
       subject_id: 'subject-001',
       revoked_at: null,
@@ -490,6 +492,7 @@ describe('FacialAnalysisTabComponent — F5 reinforced consent gate', () => {
   it('região sensível + consent válido sem reinforced_regions → step=consent_ask (modal reforçado)', () => {
     // Consent exists but reinforced_regions is null (not covering 'breast')
     mockFacialService.getConsent!.mockReturnValue(of({
+      confirmed: true,
       id: 'c-001',
       subject_id: 'subject-001',
       revoked_at: null,
