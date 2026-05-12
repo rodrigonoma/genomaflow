@@ -28,4 +28,25 @@ describe('credit_ledger.ref_id — regression guard (2026-05-12)', () => {
     );
     expect(src).toMatch(/INSERT INTO credit_ledger[\s\S]*?ref_id/);
   });
+
+  test('migration 098 inclui todos os aesthetic kinds no CHECK', () => {
+    const m = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'src', 'db', 'migrations', '098_credit_ledger_aesthetic_kinds.sql'),
+      'utf8'
+    );
+    // 9 regiões + refund
+    const kinds = [
+      'aesthetic_facial_analysis',
+      'aesthetic_eyelids_analysis',
+      'aesthetic_neck_analysis',
+      'aesthetic_breast_analysis',
+      'aesthetic_arms_analysis',
+      'aesthetic_abdomen_analysis',
+      'aesthetic_legs_analysis',
+      'aesthetic_glutes_analysis',
+      'aesthetic_full_body_analysis',
+      'aesthetic_refund',
+    ];
+    for (const k of kinds) expect(m).toContain(`'${k}'`);
+  });
 });
