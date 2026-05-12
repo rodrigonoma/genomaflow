@@ -16,6 +16,12 @@ jest.mock('../../src/db/tenant', () => ({
   withTenant: (pg, tid, fn, opts) => fn(pg),
 }));
 
+// Mock aesthetic-auto-crop — padrão spy controlável por teste
+const mockAutoCropSensitive = jest.fn();
+jest.mock('../../src/services/aesthetic-auto-crop', () => ({
+  autoCropSensitive: mockAutoCropSensitive,
+}));
+
 async function buildApp(role = 'admin', module = 'estetica') {
   const app = Fastify({ logger: false });
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
@@ -107,5 +113,106 @@ describe('DELETE /aesthetic/photos/:id', () => {
       method: 'DELETE', url: '/api/aesthetic/photos/photo-yes',
     });
     expect(res.statusCode).toBe(204);
+  });
+});
+
+describe('POST /aesthetic/photos — auto-crop (F5)', () => {
+  beforeEach(() => {
+    mockAutoCropSensitive.mockReset();
+  });
+
+  test('is_sensitive=true + auto_crop omitido → autoCropSensitive é chamado, response inclui auto_crop_applied', async () => {
+    // Retorna buffer idêntico (simula detecção sem regiões), applied=0
+    mockAutoCropSensitive.mockResolvedValue({ buffer: Buffer.from('fakeimg'), applied: 1, regions: [{ type: 'nipple', x: 0.3, y: 0.3, w: 0.1, h: 0.1 }] });
+
+    const app = await buildApp();
+    const boundary = 'boundary456';
+    const payload = buildMultipart(boundary,
+      { subject_id: 'sub1', photo_type: 'breast_front', is_sensitive: 'true' },
+      { name: 'file', filename: 'photo.jpg', contentType: 'image/jpeg', content: 'fakejpgbytes' }
+    );
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect([201, 200]).toContain(res.statusCode);
+    expect(mockAutoCropSensitive).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(res.body);
+    expect(body).toHaveProperty('auto_crop_applied', 1);
+  });
+
+  test('is_sensitive=false → autoCropSensitive NÃO é chamado, comportamento legado inalterado', async () => {
+    mockAutoCropSensitive.mockResolvedValue({ buffer: Buffer.from('ignored'), applied: 0, regions: [] });
+
+    const app = await buildApp();
+    const boundary = 'boundary789';
+    const payload = buildMultipart(boundary,
+      { subject_id: 'sub1', photo_type: 'facial_front', is_sensitive: 'false' },
+      { name: 'file', filename: 'photo.jpg', contentType: 'image/jpeg', content: 'fakejpgbytes' }
+    );
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect([201, 200]).toContain(res.statusCode);
+    expect(mockAutoCropSensitive).not.toHaveBeenCalled();
+    const body = JSON.parse(res.body);
+    expect(body).toHaveProperty('auto_crop_applied', 0);
+  });
+
+  test('is_sensitive=true + auto_crop=false → autoCropSensitive NÃO é chamado', async () => {
+    const app = await buildApp();
+    const boundary = 'boundary000';
+    const payload = buildMultipart(boundary,
+      { subject_id: 'sub1', photo_type: 'breast_front', is_sensitive: 'true', auto_crop: 'false' },
+      { name: 'file', filename: 'photo.jpg', contentType: 'image/jpeg', content: 'fakejpgbytes' }
+    );
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect([201, 200]).toContain(res.statusCode);
+    expect(mockAutoCropSensitive).not.toHaveBeenCalled();
+    const body = JSON.parse(res.body);
+    expect(body).toHaveProperty('auto_crop_applied', 0);
+  });
+
+  test('autoCropSensitive falha → upload continua, auto_crop_applied=0', async () => {
+    mockAutoCropSensitive.mockRejectedValue(new Error('unexpected failure'));
+
+    const app = await buildApp();
+    const boundary = 'boundaryErrr';
+    const payload = buildMultipart(boundary,
+      { subject_id: 'sub1', photo_type: 'breast_front', is_sensitive: 'true' },
+      { name: 'file', filename: 'photo.jpg', contentType: 'image/jpeg', content: 'fakejpgbytes' }
+    );
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    // Upload must succeed despite auto-crop failure
+    expect([201, 200]).toContain(res.statusCode);
+    const body = JSON.parse(res.body);
+    expect(body).toHaveProperty('auto_crop_applied', 0);
+  });
+
+  test('is_sensitive omitido (default) → autoCropSensitive NÃO é chamado', async () => {
+    const app = await buildApp();
+    const boundary = 'boundaryDef';
+    const payload = buildMultipart(boundary,
+      { subject_id: 'sub1', photo_type: 'facial_front' },
+      { name: 'file', filename: 'photo.jpg', contentType: 'image/jpeg', content: 'fakejpgbytes' }
+    );
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect([201, 200]).toContain(res.statusCode);
+    expect(mockAutoCropSensitive).not.toHaveBeenCalled();
   });
 });

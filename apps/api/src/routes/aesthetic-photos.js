@@ -4,6 +4,7 @@ const { randomUUID } = require('crypto');
 const { requireEsteticaModule } = require('../middleware/aesthetic-module-gate');
 const { buildKey, uploadPhoto, signedUrlFor } = require('../services/aesthetic-s3');
 const { createPhoto, getPhotoForTenant, softDeletePhoto } = require('../services/aesthetic-photos');
+const { autoCropSensitive } = require('../services/aesthetic-auto-crop');
 
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png']);
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -40,6 +41,30 @@ module.exports = async function (fastify) {
     if (!fileBuf) {
       return reply.status(400).send({ error: 'Arquivo obrigatório no campo "file"' });
     }
+
+    // Parse is_sensitive + auto_crop from multipart fields
+    const isSensitiveField = fields.is_sensitive === 'true' || fields.is_sensitive === '1';
+    // auto_crop defaults to true when is_sensitive=true; false otherwise.
+    // Client can explicitly pass auto_crop=false to opt out even when sensitive.
+    const autoCropEnabled = isSensitiveField
+      ? (fields.auto_crop !== 'false' && fields.auto_crop !== '0')
+      : false;
+
+    let autoCropApplied = 0;
+    if (isSensitiveField && autoCropEnabled) {
+      try {
+        const result = await autoCropSensitive({ buffer: fileBuf, mime: fileMime });
+        fileBuf = result.buffer;
+        autoCropApplied = result.applied || 0;
+        if (result.error) {
+          request.log.warn({ err: result.error }, 'aesthetic auto-crop detection failed — uploading original buffer');
+        }
+      } catch (err) {
+        // Non-fatal: log warning and continue upload with original buffer
+        request.log.warn({ err: err.message }, 'aesthetic auto-crop threw unexpectedly — uploading original buffer');
+      }
+    }
+
     const photoId = randomUUID();
     const ext = fileMime === 'image/png' ? 'png' : 'jpg';
     const key = buildKey({ tenantId: request.user.tenant_id, subjectId: subject_id, photoId, ext });
@@ -51,10 +76,12 @@ module.exports = async function (fastify) {
       photoType: photo_type,
       s3Key: key,
       notes: notes ? String(notes).slice(0, 1000) : null,
+      isSensitive: isSensitiveField,
     });
     return reply.status(201).send({
       id: photo.id, s3_key: photo.s3_key, photo_type: photo.photo_type,
       is_sensitive: photo.is_sensitive, taken_at: photo.taken_at,
+      auto_crop_applied: autoCropApplied,
     });
   });
 

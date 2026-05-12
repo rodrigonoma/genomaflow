@@ -12,11 +12,16 @@ function isSensitive(photoType) {
   return SENSITIVE_PHOTO_TYPES.has(photoType);
 }
 
-async function createPhoto(pg, { tenantId, subjectId, userId, photoType, s3Key, notes }) {
+async function createPhoto(pg, { tenantId, subjectId, userId, photoType, s3Key, notes, isSensitive: isSensitiveOverride }) {
+  // Caller may pass an explicit isSensitive value (e.g. from multipart field).
+  // Falls back to the photo-type heuristic when not provided.
+  const sensitiveFlag = typeof isSensitiveOverride === 'boolean'
+    ? isSensitiveOverride
+    : isSensitive(photoType);
   return withTenant(pg, tenantId, async (client) => {
     const { rows } = await client.query(
       `INSERT INTO aesthetic_photos (tenant_id, subject_id, user_id, photo_type, s3_key, is_sensitive, notes) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, s3_key, photo_type, is_sensitive, taken_at`,
-      [tenantId, subjectId, userId, photoType, s3Key, isSensitive(photoType), notes]
+      [tenantId, subjectId, userId, photoType, s3Key, sensitiveFlag, notes]
     );
     return rows[0];
   }, { userId, channel: 'ui' });
