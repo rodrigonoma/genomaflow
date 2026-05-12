@@ -20,6 +20,7 @@
 const { Pool } = require('pg');
 const path = require('path');
 const { runDiscovery, shouldTickRun } = require('../jobs/aesthetic-treatment-discovery');
+const { runPurge: runPurgeSensitive, shouldTickRun: shouldPurgeRun } = require('../jobs/aesthetic-purge-sensitive');
 
 // Carrega .env do worker (pra credenciais Z-API/SES)
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
@@ -558,6 +559,16 @@ async function tick() {
         }
       } catch (e) {
         console.error('[notif] aesthetic-discovery failed:', e.message);
+      }
+    }
+    if (shouldPurgeRun(new Date())) {
+      try {
+        const result = await runPurgeSensitive({ pool: getPool() });
+        if (!result.skipped) {
+          console.log(`[notif] aesthetic-purge-sensitive purged ${result.purged}/${result.eligible}`);
+        }
+      } catch (e) {
+        console.error('[notif] aesthetic-purge-sensitive failed:', e.message);
       }
     }
     console.log(`[notif] tick done in ${Date.now() - startTs}ms`);
