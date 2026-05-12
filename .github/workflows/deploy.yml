@@ -66,7 +66,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: genomaflow_test
+          POSTGRES_DB: genomaflow
         ports:
           - 5432:5432
         options: >-
@@ -75,7 +75,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL_TEST: postgres://postgres:postgres@localhost:5432/genomaflow_test
+      DATABASE_URL_TEST: postgres://postgres:postgres@localhost:5432/genomaflow
       JWT_SECRET: integration-test-secret
       NODE_ENV: test
     steps:
