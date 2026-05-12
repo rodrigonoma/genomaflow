@@ -323,6 +323,100 @@ module.exports = async function (fastify) {
     }
   });
 
+  // POST /appointments/series — cria N agendamentos espaçados transacionalmente
+  fastify.post('/appointments/series', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { tenant_id, user_id } = request.user;
+    const body = request.body || {};
+    const { start_at, duration_minutes, count, interval_days, subject_id, appointment_type, reason, notes } = body;
+
+    // Validação dos campos base (reutiliza validateAppointmentBody sem status — série é sempre 'scheduled')
+    if (!start_at || typeof start_at !== 'string') {
+      return reply.status(400).send({ error: 'start_at obrigatório (ISO string)' });
+    }
+    if (Number.isNaN(Date.parse(start_at))) {
+      return reply.status(400).send({ error: 'start_at inválido' });
+    }
+    if (!Number.isInteger(duration_minutes) || duration_minutes < 5 || duration_minutes > 480) {
+      return reply.status(400).send({ error: 'duration_minutes deve ser inteiro entre 5 e 480' });
+    }
+    if (!subject_id || typeof subject_id !== 'string') {
+      return reply.status(400).send({ error: 'subject_id obrigatório para série' });
+    }
+    if (appointment_type !== undefined && !VALID_APPOINTMENT_TYPES.includes(appointment_type)) {
+      return reply.status(400).send({ error: `appointment_type inválido (use: ${VALID_APPOINTMENT_TYPES.join(', ')})` });
+    }
+
+    const n = parseInt(count, 10);
+    const d = parseInt(interval_days, 10);
+    if (!Number.isFinite(n) || n < 2 || n > 20) {
+      return reply.status(400).send({ error: 'count deve ser entre 2 e 20' });
+    }
+    if (!Number.isFinite(d) || d < 1 || d > 365) {
+      return reply.status(400).send({ error: 'interval_days deve ser entre 1 e 365' });
+    }
+
+    const baseDate = new Date(start_at);
+    const aptType = appointment_type || 'procedimento';
+
+    const client = await fastify.pg.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET LOCAL app.tenant_id = $1', [tenant_id]);
+      await client.query('SET LOCAL app.user_id = $1', [user_id]);
+      await client.query("SET LOCAL app.actor_channel = 'ui'");
+
+      // Valida subject_id dentro da transação
+      const { rows: subRows } = await client.query(
+        `SELECT id FROM subjects WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+        [subject_id, tenant_id]
+      );
+      if (subRows.length === 0) {
+        await client.query('ROLLBACK');
+        return reply.status(400).send({ error: 'subject_id inválido (paciente não encontrado).' });
+      }
+
+      const created = [];
+      for (let i = 0; i < n; i++) {
+        const at = new Date(baseDate.getTime() + i * d * 24 * 60 * 60 * 1000);
+        const { rows } = await client.query(
+          `INSERT INTO appointments
+             (tenant_id, user_id, subject_id, start_at, duration_minutes, status, appointment_type, reason, notes, created_by)
+           VALUES ($1, $2, $3, $4, $5, 'scheduled', $6, $7, $8, $9)
+           RETURNING id, tenant_id, user_id, subject_id, series_id, start_at, duration_minutes,
+                     status, appointment_type, reason, notes, created_by, created_at, updated_at, cancelled_at`,
+          [tenant_id, user_id, subject_id, at.toISOString(), duration_minutes, aptType,
+           reason || null, notes || null, user_id]
+        );
+        created.push(rows[0]);
+      }
+      await client.query('COMMIT');
+
+      // Notifica via Redis pub/sub (best-effort)
+      try {
+        if (fastify.redis) {
+          await fastify.redis.publish(
+            `appointment:event:${tenant_id}`,
+            JSON.stringify({ event: 'appointment:series_created', count: created.length })
+          );
+        }
+      } catch (_) {}
+
+      return reply.status(201).send({ count: created.length, appointments: created });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      request.log.error({ err: e }, 'series creation failed');
+      if (e.code === '23P01') {
+        return reply.status(409).send({
+          error: 'Um ou mais horários da série já estão ocupados.',
+          code: 'OVERLAP',
+        });
+      }
+      return reply.status(500).send({ error: 'SERIES_CREATION_FAILED', message: e.message });
+    } finally {
+      client.release();
+    }
+  });
+
   // PATCH /appointments/:id
   fastify.patch('/appointments/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { tenant_id, user_id } = request.user;

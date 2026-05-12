@@ -761,6 +761,9 @@ export class AnalysisResultComponent implements OnInit {
       preset_appointment_type: 'procedimento_estetico',
       preset_subject_id: this.analysis?.subject_id ?? undefined,
       preset_notes: notesText,
+      preset_series: (item.sessions_recommended != null && item.sessions_recommended > 1 && item.interval_days != null && item.interval_days >= 1)
+        ? { count: item.sessions_recommended, interval_days: item.interval_days }
+        : undefined,
     };
 
     this.dialog.open<QuickCreateDialogComponent, QuickCreateDialogData, QuickCreateDialogResult>(

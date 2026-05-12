@@ -18,6 +18,22 @@ export interface CreateAppointmentBody {
   notes?: string | null;
 }
 
+export interface CreateSeriesBody {
+  start_at: string;
+  duration_minutes: number;
+  count: number;
+  interval_days: number;
+  subject_id: string;
+  appointment_type?: string;
+  reason?: string | null;
+  notes?: string | null;
+}
+
+export interface SeriesCreatedResult {
+  count: number;
+  appointments: Appointment[];
+}
+
 export interface UpdateAppointmentBody {
   start_at?: string;
   duration_minutes?: number;
@@ -58,6 +74,10 @@ export class AgendaService {
 
   create(body: CreateAppointmentBody): Observable<Appointment> {
     return this.http.post<Appointment>(`${this.base}/appointments`, body);
+  }
+
+  createSeries(body: CreateSeriesBody): Observable<SeriesCreatedResult> {
+    return this.http.post<SeriesCreatedResult>(`${this.base}/appointments/series`, body);
   }
 
   update(id: string, body: UpdateAppointmentBody): Observable<Appointment> {

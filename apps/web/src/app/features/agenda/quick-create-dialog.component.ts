@@ -12,7 +12,7 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatRadioModule } from '@angular/material/radio';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/auth/auth.service';
-import { AgendaService } from './agenda.service';
+import { AgendaService, CreateSeriesBody } from './agenda.service';
 import {
   VALID_SLOT_MINUTES,
   AppointmentStatus,
@@ -37,6 +37,8 @@ export interface QuickCreateDialogData {
   preset_appointment_type?: string;
   preset_subject_id?: string;
   preset_notes?: string;
+  /** When present, enables "Repetir série" panel pre-toggled ON */
+  preset_series?: { count: number; interval_days: number };
 }
 
 export type QuickCreateDialogResult = { created: true; subject_name?: string } | null;
@@ -77,6 +79,15 @@ export type QuickCreateDialogResult = { created: true; subject_name?: string } |
     .error { color:#ef4444; font-size:0.75rem; font-family:'JetBrains Mono',monospace; padding:0.5rem 0; }
     .autocomplete-result { display:flex; align-items:center; gap:0.5rem; }
     .autocomplete-result mat-icon { font-size:18px; width:18px; height:18px; color:#7c7b8f; }
+    .series-panel { background:rgba(192,193,255,0.04); border:1px solid rgba(192,193,255,0.15); border-radius:6px; padding:0.75rem; display:flex; flex-direction:column; gap:0.625rem; }
+    .series-toggle-row { display:flex; align-items:center; gap:0.5rem; cursor:pointer; user-select:none; }
+    .series-toggle-row input[type="checkbox"] { accent-color:#c0c1ff; width:14px; height:14px; cursor:pointer; }
+    .series-toggle-label { font-family:'JetBrains Mono',monospace; font-size:11px; text-transform:uppercase; color:#c0c1ff; letter-spacing:0.06em; }
+    .series-fields { display:grid; grid-template-columns:1fr 1fr; gap:0.625rem; }
+    .series-field-label { font-family:'JetBrains Mono',monospace; font-size:10px; text-transform:uppercase; color:#908fa0; letter-spacing:0.08em; margin-bottom:2px; }
+    .series-input { background:rgba(255,255,255,0.04); border:1px solid rgba(192,193,255,0.2); border-radius:4px; color:#dae2fd; font-family:'JetBrains Mono',monospace; font-size:13px; padding:0.35rem 0.5rem; width:100%; box-sizing:border-box; }
+    .series-input:focus { outline:none; border-color:#c0c1ff; }
+    .series-hint { font-size:10px; color:#7c7b8f; font-family:'JetBrains Mono',monospace; grid-column:1/-1; }
   `],
   template: `
     <div class="header">
@@ -157,12 +168,40 @@ export type QuickCreateDialogResult = { created: true; subject_name?: string } |
         </mat-form-field>
       </div>
 
+      @if (data.preset_series && mode() === 'appointment') {
+        <div class="series-panel" data-testid="series-panel">
+          <label class="series-toggle-row">
+            <input type="checkbox" [checked]="showSeries()" (change)="showSeries.set(!showSeries())" data-testid="series-toggle"/>
+            <span class="series-toggle-label">Repetir série de sessões</span>
+          </label>
+          @if (showSeries()) {
+            <div class="series-fields">
+              <div>
+                <div class="series-field-label">Nº de sessões</div>
+                <input type="number" class="series-input" min="2" max="20"
+                       [value]="seriesCount()"
+                       (input)="onSeriesCountChange($event)"
+                       data-testid="series-count-input"/>
+              </div>
+              <div>
+                <div class="series-field-label">Intervalo (dias)</div>
+                <input type="number" class="series-input" min="1" max="365"
+                       [value]="seriesInterval()"
+                       (input)="onSeriesIntervalChange($event)"
+                       data-testid="series-interval-input"/>
+              </div>
+              <span class="series-hint">{{ seriesCount() }} sessões · 1ª em {{ formatStart() }}</span>
+            </div>
+          }
+        </div>
+      }
+
       @if (errorMsg()) { <div class="error">{{ errorMsg() }}</div> }
     </div>
     <div class="footer">
       <button mat-button (click)="cancel()" [disabled]="submitting()">Cancelar</button>
       <button class="submit-btn" [disabled]="!canSubmit() || submitting()" (click)="submit()">
-        {{ submitting() ? 'Salvando...' : 'Salvar' }}
+        {{ submitting() ? 'Salvando...' : (showSeries() && data.preset_series && seriesCount() > 1 ? 'Agendar série' : 'Salvar') }}
       </button>
     </div>
   `,
@@ -187,6 +226,11 @@ export class QuickCreateDialogComponent {
   appointmentType: AppointmentType = 'consulta';
   errorMsg = signal('');
   submitting = signal(false);
+
+  /** Series scheduling signals — only active when preset_series is provided */
+  showSeries = signal(!!this.data.preset_series);
+  seriesCount = signal(Math.min(20, Math.max(2, this.data.preset_series?.count ?? 2)));
+  seriesInterval = signal(Math.min(365, Math.max(1, this.data.preset_series?.interval_days ?? 30)));
 
   private allSubjects = signal<SubjectModel[]>([]);
 
@@ -235,6 +279,16 @@ export class QuickCreateDialogComponent {
     this.errorMsg.set('');
   }
 
+  onSeriesCountChange(event: Event): void {
+    const v = parseInt((event.target as HTMLInputElement).value, 10);
+    if (Number.isFinite(v)) this.seriesCount.set(Math.min(20, Math.max(2, v)));
+  }
+
+  onSeriesIntervalChange(event: Event): void {
+    const v = parseInt((event.target as HTMLInputElement).value, 10);
+    if (Number.isFinite(v)) this.seriesInterval.set(Math.min(365, Math.max(1, v)));
+  }
+
   onSearch(text: string | SubjectModel) {
     if (typeof text !== 'string') {
       this.selectedSubject = text;
@@ -270,6 +324,43 @@ export class QuickCreateDialogComponent {
     if (!this.canSubmit()) return;
     this.submitting.set(true);
     this.errorMsg.set('');
+
+    // Series mode: appointment + preset_series present + toggle ON + count > 1
+    const useSeriesMode = this.mode() === 'appointment'
+      && !!this.data.preset_series
+      && this.showSeries()
+      && this.seriesCount() > 1;
+
+    if (useSeriesMode) {
+      const seriesBody: CreateSeriesBody = {
+        start_at: this.data.start_at,
+        duration_minutes: this.durationMinutes,
+        count: this.seriesCount(),
+        interval_days: this.seriesInterval(),
+        subject_id: this.selectedSubject!.id,
+        appointment_type: this.appointmentType,
+        notes: this.notes.trim() || null,
+      };
+
+      this.agenda.createSeries(seriesBody).subscribe({
+        next: (result) => {
+          this.ref.close({
+            created: true,
+            subject_name: this.selectedSubject?.name,
+          });
+        },
+        error: (err) => {
+          this.submitting.set(false);
+          const e = err.error || {};
+          if (e.code === 'OVERLAP') {
+            this.errorMsg.set('Um ou mais horários da série já estão ocupados.');
+          } else {
+            this.errorMsg.set(e.error || 'Erro ao criar série de agendamentos. Tente novamente.');
+          }
+        },
+      });
+      return;
+    }
 
     const body = this.mode() === 'block'
       ? {

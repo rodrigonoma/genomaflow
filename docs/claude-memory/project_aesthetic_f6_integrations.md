@@ -104,7 +104,7 @@ Todos os caracteres PT-BR acentuados rendem corretamente no PDF:
 - ~~**Timeline deep-link**: `openAesthetic(id)` em timeline-panel é stub (console.log). Router navigate + lazy load do componente analysis-result quando deep-link existir.~~ **CONCLUÍDO (TODO#2, 2026-05-11)**
 - **PDF preview no frontend**: hoje download direto. Poderia abrir em modal iframe.
 - **Encounter sugestão automática**: ao criar encounter sem related_id mas com aesthetic_analyses recente, sugerir vínculo (UX).
-- **Treatment "Agendar X sessões"**: hoje agenda 1 procedimento — poderia gerar series de N appointments espaçados pelo interval_days do catálogo.
+- ~~**Treatment "Agendar X sessões"**: hoje agenda 1 procedimento — poderia gerar series de N appointments espaçados pelo interval_days do catálogo.~~ **CONCLUÍDO (TODO#4, 2026-05-11)**
 
 ## TODO#2 — Timeline deep-link (entregue 2026-05-11)
 
@@ -131,5 +131,41 @@ Branch: `feat/aesthetic-todo-02-timeline-deeplink`
 - Timeline UNION extra: marginal (1 SELECT extra por timeline call). ~5ms.
 - Agenda wire: zero custo extra.
 - Encounter link validate: 1 SELECT extra ao criar encounter com link. ~2ms.
+
+## TODO#4 — Agendar série de N sessões (entregue 2026-05-11)
+
+Branch: `feat/aesthetic-todo-04-series-scheduling`
+
+**Backend:** `POST /agenda/appointments/series` em `apps/api/src/routes/agenda.js`.
+- Parâmetros: `{ start_at, duration_minutes, count, interval_days, subject_id, appointment_type?, reason?, notes? }`
+- `count` clampado 2–20; `interval_days` clampado 1–365.
+- Transação BEGIN/COMMIT: cria N appointments com `start_at = baseDate + i * interval_days * 86400000ms`.
+- ROLLBACK em qualquer falha (incluindo 23P01 overlap → 409).
+- Valida `subject_id` dentro da transação (SELECT subjects).
+- Redis pub/sub `appointment:series_created` best-effort.
+- Retorna `{ count: N, appointments: [...] }` com status 201.
+
+**AgendaService:** método `createSeries(body: CreateSeriesBody): Observable<SeriesCreatedResult>` adicionado.
+
+**Frontend — QuickCreateDialogData:** novo campo `preset_series?: { count: number; interval_days: number }`.
+
+**Frontend — QuickCreateDialogComponent:** 
+- Signals `showSeries`, `seriesCount`, `seriesInterval` inicializados a partir de `preset_series`.
+- Painel de série renderizado SOMENTE quando `data.preset_series` presente + `mode='appointment'`.
+- Toggle checkbox: ao desligar, fallback ao single POST.
+- `submit()` detecta `useSeriesMode = mode=appointment && preset_series && showSeries && count>1` → chama `agenda.createSeries()`.
+- Botão exibe "Agendar série" quando série ativa.
+- Backward compat: sem `preset_series`, fluxo idêntico ao anterior.
+
+**Frontend — AnalysisResultComponent:**
+- `onScheduleTreatment` agora passa `preset_series: { count, interval_days }` quando `sessions_recommended > 1` E `interval_days >= 1`.
+- Quando `sessions_recommended <= 1`, `preset_series` = `undefined` (single appointment, sem toggle).
+
+**Tests:**
+- API: `tests/routes/agenda-series.test.js` — 15 testes (auth gate, count 2-20, interval 1-365, espaçamento correto, rollback mid-insert, subject_id validation). Adicionado ao `test:unit`.
+- Web: `quick-create-dialog.component.spec.ts` — 10 testes (painel visível/invisível, createSeries chamado com payload correto, toggle OFF→single create, erro OVERLAP, etc.).
+- Web: `analysis-result.component.spec.ts` — +3 testes (preset_series passado quando sessions>1, omitido quando sessions=1, omitido quando sessions=null).
+
+**Contagem total:** +15 API + +13 web = 28 novos testes, 0 regressões.
 
 **Plataforma aesthetic está completa e production-ready.**

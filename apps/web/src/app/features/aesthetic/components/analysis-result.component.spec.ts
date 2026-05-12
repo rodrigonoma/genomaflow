@@ -353,6 +353,71 @@ describe('AnalysisResultComponent', () => {
   });
 
   // -------------------------------------------------------------------------
+  // F6.6 / TODO#4: onScheduleTreatment passa preset_series quando sessions > 1
+  // -------------------------------------------------------------------------
+  it('onScheduleTreatment passa preset_series quando sessions_recommended > 1 e interval_days >= 1', () => {
+    const analysis = makeAnalysis();
+    const fixture = createFixture(analysis);
+    const comp = fixture.componentInstance;
+
+    const item = {
+      treatment_name: 'Peeling Químico',
+      indication_text: 'Para manchas',
+      sessions_recommended: 4,
+      interval_days: 21,
+      urgency: 'medium',
+      expected_outcome: 'Melhora de tom',
+      treatment_id: 'treat-001',
+    };
+
+    comp.onScheduleTreatment(item);
+
+    expect(dialogSpy).toHaveBeenCalledTimes(1);
+    const data = dialogSpy.mock.calls[0][1]?.data;
+    expect(data?.preset_series).toEqual({ count: 4, interval_days: 21 });
+  });
+
+  it('onScheduleTreatment NÃO passa preset_series quando sessions_recommended = 1', () => {
+    const analysis = makeAnalysis();
+    const fixture = createFixture(analysis);
+    const comp = fixture.componentInstance;
+
+    const item = {
+      treatment_name: 'Avaliação Inicial',
+      indication_text: 'Consulta inicial',
+      sessions_recommended: 1,
+      interval_days: 30,
+      urgency: 'low',
+      expected_outcome: 'Diagnóstico',
+    };
+
+    comp.onScheduleTreatment(item);
+
+    const data = dialogSpy.mock.calls[0][1]?.data;
+    expect(data?.preset_series).toBeUndefined();
+  });
+
+  it('onScheduleTreatment NÃO passa preset_series quando sessions_recommended é nulo', () => {
+    const analysis = makeAnalysis();
+    const fixture = createFixture(analysis);
+    const comp = fixture.componentInstance;
+
+    const item = {
+      treatment_name: 'Tratamento Sem Sessões',
+      indication_text: 'Sem sessões definidas',
+      sessions_recommended: null as any,
+      interval_days: 14,
+      urgency: 'low',
+      expected_outcome: 'Melhora geral',
+    };
+
+    comp.onScheduleTreatment(item);
+
+    const data = dialogSpy.mock.calls[0][1]?.data;
+    expect(data?.preset_series).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
   // F6.5: downloadPdf chama HttpClient.get com responseType blob
   // -------------------------------------------------------------------------
   it('downloadPdf chama HttpClient.get com responseType blob para o analysis.id correto', () => {
