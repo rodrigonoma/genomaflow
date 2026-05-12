@@ -1,7 +1,46 @@
 ---
 name: GenomaFlow Project Context
-description: Frontend + backend em produção — stack, arquitetura, estado atual (atualizado 2026-05-05 — Phase 4 IA clínica entregue: OCR foto, follow-up, IA pró-ativa, co-piloto)
+description: Frontend + backend em produção — stack, arquitetura, estado atual (atualizado 2026-05-12 — plataforma Aesthetic F1-F6 + 13 polish TODOs completa)
 type: project
+---
+
+## Estado em 2026-05-11/12 — Plataforma Aesthetic completa
+
+Pacote completo de funcionalidades para clínicas de estética entregue em ~9 horas via subagent-driven development (F1-F6 + 13 TODOs polish + 1 bugfix multi-módulo). Módulo `estetica` é o terceiro módulo da plataforma (após `human` e `veterinary`), com `subject_type='human'`.
+
+**6 fases (F1-F6):**
+- **F1 Facial Analysis** (`project_aesthetic_f1_facial.md`) — 11 métricas Sonnet Vision + Opus recommender + SVG overlay + comparação evolutiva. 5 créditos/análise.
+- **F2 Body Analysis** (`project_aesthetic_f2_body.md`) — 6 regiões corporais (legs/glutes/abdomen/arms/breast/full_body), 29 métricas, region picker, comparação antes/depois com overlay duplo.
+- **F3 Catalog + Recomendação Rica** (`project_aesthetic_f3_catalog.md`) — 22 tratamentos seed + master CRUD + job mensal Opus discovery + treatment matching com synonyms.
+- **F4 Nutrition + Profile** (`project_aesthetic_f4_nutrition.md`) — migration 095 `subjects.aesthetic_profile JSONB` + TMB Mifflin-St Jeor backend + disclaimer CRN fail-safe.
+- **F5 Sensitive Regions** (`project_aesthetic_f5_sensitive.md`) — auto-crop Sonnet Vision + sharp pixelate, reinforced consent gate, purge job diário 04h BRT (retenção LGPD 1y).
+- **F6 Polish + Integrations** (`project_aesthetic_f6_integrations.md`) — migration 096 encounter↔analysis link, timeline UNION, PDF export pdf-lib, agenda quick-create wire.
+
+**13 TODOs polish** (`project_aesthetic_polish_todos.md`):
+1. PDF UTF-8 via fontkit + Roboto (acentos PT-BR)
+2. Timeline deep-link para análise
+3. Treatment matching normalize + synonyms BR (~30 brand→generic)
+4. Agendar série N sessões transacional
+5. Auto-crop preview pre-upload
+6. PDF preview iframe modal
+7. Encounter auto-suggest análise recente
+8. Histórico aesthetic_profile via audit_log
+9. Purge audit channel='system'
+10. Purge forceRun via Redis admin pub/sub
+11. TICK_UTC_HOUR env var (TZ clarification)
+12. RETENTION_DAYS env var
+13. TMB allow_extreme_ranges flag + warnings PT-BR
+
+**Bugfix multi-módulo (2026-05-12):** cadastro de paciente em estética rendia form vazio + backend caía em fluxo vet exigindo species. Fix: `if (module === 'human' || module === 'estetica')` em ambas as camadas. Lição em `feedback_multi_module_estetica.md`.
+
+**CI/CD fix (2026-05-12):** `deploy.yml` sem `concurrency` cap acumulou 20 runs simultâneos por 10h. Lição em `feedback_ci_concurrency.md`.
+
+**Spec de referência:** `docs/superpowers/specs/2026-05-11-aesthetic-platform-design.md`. Plans em `docs/superpowers/plans/2026-05-11-aesthetic-f{1..6}-*.md` (F4-F6 retroativos). User-help em `docs/user-help/aesthetic-*.md` (6 documentos cobrindo todos os fluxos).
+
+**Total:** ~290 testes novos no aesthetic + 75 testes polish = **~365 testes**, 0 regressões em todas as fases. Suite total da plataforma: API 819 + Worker 160 + Web 192 = **1171 testes**.
+
+Migrations aplicadas: 088-096 (aditivas, multi-módulo safe).
+
 ---
 
 ## Estado em 2026-05-05 — Phase 4 IA clínica entregue

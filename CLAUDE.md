@@ -69,6 +69,8 @@ Detalhes: `docs/claude-memory/feedback_web_android_ios_parity.md`.
 
 Tabela completa de diferenças relevantes (sujeito, owner, agentes IA, campos clínicos extras, ícone, label, prescrições, professional_type) em `docs/claude-memory/feedback_multi_module.md`.
 
+**Condicional `module === 'human'` DEVE incluir `'estetica'`** — estetica usa `subject_type='human'`. Bugfix 2026-05-12: form cadastro paciente rendia vazio + backend exigia species. Detalhes: `docs/claude-memory/feedback_multi_module_estetica.md`.
+
 ---
 
 ## Sem Regressão e Sem Gambiarra (OBRIGATÓRIO)
@@ -298,6 +300,8 @@ Arquitetura completa: `docs/claude-memory/project_master_broadcasts.md`.
 ## Testes e CI gate (OBRIGATÓRIO)
 
 CI gate em `.github/workflows/deploy.yml` roda job `test` antes do `deploy` (`needs: test`). Falha bloqueia build/push/update de ECS. Não confundir com `.github/workflows/deploy-mobile.yml` (workflow separado, só em tags `v*.*.*`).
+
+**Concurrency cap obrigatório**: workflow tem `concurrency: { group: deploy-production, cancel-in-progress: true }`. Pushes consecutivos para main cancelam runs antigas. Sem isso, runners saturam e nenhum deploy chega em prod (incidente 2026-05-12 — 20 runs travados por 10h). Detalhes: `docs/claude-memory/feedback_ci_concurrency.md`.
 
 - `apps/api` → `npm run test:unit` (subset sem DB)
 - `apps/worker` → `npm test`

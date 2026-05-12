@@ -2547,48 +2547,48 @@
   <div class="split-col" style="border-right:none">
     <div class="section-label">Aesthetic module</div>
     <div class="split-heading">ESTÉTICA</div>
-    <p class="split-sub">Gestão clínica completa para clínicas de estética — prontuário, agenda e análise facial e corporal por IA (face, pálpebras, pescoço, braços, abdômen, coxas, glúteos, mama e silhueta completa), em conformidade com CFM, CFE e CRN.</p>
+    <p class="split-sub">Plataforma completa para clínicas de estética — análise facial e corporal por IA (face, pálpebras, pescoço, braços, abdômen, coxas, glúteos, mama, silhueta completa), perfil nutricional com TMB calculado, catálogo curado de tratamentos atualizado mensalmente, protocolo em PDF, agendamento em série, e proteção LGPD reforçada para regiões sensíveis. Conformidade CFM, CFE e CRN.</p>
     <div class="module-list" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0">
       <div class="module-card">
-        <span class="module-code">FACIAL-1</span>
+        <span class="module-code">IA-FACIAL</span>
         <div>
           <div class="module-name">Análise Facial IA</div>
-          <div class="module-desc">11 métricas (rugas, firmeza, manchas, poros e mais) geradas por dois agentes IA em sequência. Anotações SVG sobre a foto.</div>
+          <div class="module-desc">11 métricas (rugas, firmeza, manchas, poros, olheiras, simetria e mais) com anotações SVG sobre a foto. Dois agentes IA em sequência: leitura de métricas + sugestão de protocolo. Tempo médio &lt; 60 segundos.</div>
         </div>
       </div>
       <div class="module-card">
-        <span class="module-code">EVOL-1</span>
+        <span class="module-code">IA-CORPORAL</span>
         <div>
-          <div class="module-name">Comparação Evolutiva</div>
-          <div class="module-desc">Compare fotos de datas distintas e visualize delta por métrica. Sem nova chamada IA — cálculo imediato no frontend.</div>
+          <div class="module-name">Análise Corporal IA</div>
+          <div class="module-desc">6 regiões (pernas, glúteos, abdômen, braços, mama, silhueta completa) com 29 métricas adicionais. Comparação antes/depois com overlay duplo e delta matemático por métrica — sem nova chamada IA.</div>
         </div>
       </div>
       <div class="module-card">
-        <span class="module-code">PROTO-1</span>
+        <span class="module-code">CATÁLOGO</span>
         <div>
-          <div class="module-name">Sugestão de Protocolo</div>
-          <div class="module-desc">Recomendações com base em catálogo curado de tratamentos — sessões, intervalo, custo estimado e contraindicações pré-validados. Atualização automática mensal por IA.</div>
+          <div class="module-name">Catálogo de Tratamentos</div>
+          <div class="module-desc">22+ procedimentos curados pelo GenomaFlow (Toxina, HIFU, Microagulhamento, Peelings, RF, etc.) com sessões, intervalo, custo BRL e contraindicações. IA escolhe APENAS do catálogo. Job mensal descobre novidades do mercado para revisão.</div>
         </div>
       </div>
       <div class="module-card">
-        <span class="module-code">LGPD-1</span>
+        <span class="module-code">PRIVACIDADE</span>
         <div>
-          <div class="module-name">Consentimento + Privacidade</div>
-          <div class="module-desc">Consentimento reforçado para regiões sensíveis (mama, glúteo, abdômen) + auto-blur de áreas íntimas via IA antes do armazenamento + retenção LGPD 1 ano com purge automático. Audit log + RLS + criptografia at-rest.</div>
+          <div class="module-name">Consentimento + Auto-Blur</div>
+          <div class="module-desc">Consent reforçado obrigatório para regiões sensíveis. Auto-blur via IA detecta áreas íntimas + pixelização antes do upload. Modal de preview antes/depois para revisão profissional. Retenção LGPD 1 ano com purge automático. Audit log + criptografia at-rest.</div>
         </div>
       </div>
       <div class="module-card">
-        <span class="module-code">PROTOCOLO-1</span>
+        <span class="module-code">PROTOCOLO</span>
         <div>
-          <div class="module-name">Protocolo PDF + Agenda</div>
-          <div class="module-desc">Exporta protocolo completo em PDF (paciente, métricas, tratamentos, nutrição, disclaimer regulatório) com um clique. Botão "Agendar agora" cria appointment na agenda da clínica já preenchido.</div>
+          <div class="module-name">PDF + Agenda em Série</div>
+          <div class="module-desc">Protocolo completo em PDF (acentuação PT-BR via Roboto) com paciente, métricas, tratamentos, nutrição e disclaimer regulatório. Modal preview antes do download. "Agendar série" cria N appointments transacionalmente espaçados pelo catálogo — lembretes T-24h/T-2h via WhatsApp automáticos.</div>
         </div>
       </div>
       <div class="module-card">
-        <span class="module-code">NUTRI-1</span>
+        <span class="module-code">NUTRIÇÃO</span>
         <div>
-          <div class="module-name">Perfil + Nutrição</div>
-          <div class="module-desc">Perfil antropométrico do paciente com cálculo de TMB (Mifflin-St Jeor) e macros. IA sugere alimentos, hidratação e exercício baseado nos objetivos. Disclaimer: complementar à consulta com nutricionista (CRN).</div>
+          <div class="module-name">Perfil + TMB Mifflin-St Jeor</div>
+          <div class="module-desc">Perfil antropométrico (altura, peso, idade, sexo, atividade, objetivos, restrições). Cálculo de TMB + calorias + macros server-side (não delegado ao LLM). IA sugere alimentos, hidratação e exercício. Disclaimer CRN fail-safe. Histórico de mudanças via audit log.</div>
         </div>
       </div>
     </div>
