@@ -18,6 +18,7 @@ const {
   todayYMD,
   RETENTION_DAYS,
   BATCH_LIMIT,
+  TICK_UTC_HOUR,
 } = require('../../src/jobs/aesthetic-purge-sensitive');
 
 const { deleteFile } = require('../../src/storage/s3');
@@ -29,13 +30,28 @@ const { deleteFile } = require('../../src/storage/s3');
 /**
  * Build a minimal pool mock.
  *
- * The mock routes queries by SQL fragment matching (same pattern as the
- * discovery test suite). Unmatched queries return { rows: [], rowCount: 0 }.
+ * softDeleteAndPurge now uses pool.connect() → client with BEGIN/COMMIT/ROLLBACK
+ * + SET LOCAL + UPDATE. Other functions (alreadyRanToday, findEligible) use
+ * pool.query directly.
  *
  * @param {{ alreadyRanRows?: object[], eligibleRows?: object[], updateRowCount?: number }} opts
  */
 function makePool({ alreadyRanRows = [], eligibleRows = [], updateRowCount = 1 } = {}) {
+  // client returned by pool.connect() — used inside softDeleteAndPurge transaction
+  const mockClient = {
+    query: jest.fn(async (sql) => {
+      if (/BEGIN|COMMIT|ROLLBACK/i.test(sql)) return {};
+      if (/SET LOCAL/i.test(sql)) return {};
+      if (/UPDATE aesthetic_photos\s+SET deleted_at/i.test(sql)) {
+        return { rowCount: updateRowCount };
+      }
+      return { rows: [], rowCount: 0 };
+    }),
+    release: jest.fn(),
+  };
+
   return {
+    mockClient,
     query: jest.fn(async (sql) => {
       // alreadyRanToday query
       if (/SELECT 1 FROM aesthetic_photos\s+WHERE is_sensitive = true\s+AND deleted_at IS NOT NULL/i.test(sql)) {
@@ -45,12 +61,9 @@ function makePool({ alreadyRanRows = [], eligibleRows = [], updateRowCount = 1 }
       if (/SELECT id, tenant_id, s3_key/i.test(sql)) {
         return { rows: eligibleRows };
       }
-      // softDelete UPDATE
-      if (/UPDATE aesthetic_photos\s+SET deleted_at/i.test(sql)) {
-        return { rowCount: updateRowCount };
-      }
       return { rows: [], rowCount: 0 };
     }),
+    connect: jest.fn(async () => mockClient),
   };
 }
 
@@ -104,6 +117,7 @@ describe('alreadyRanToday', () => {
         calls.push({ sql, params });
         return { rows: [] };
       }),
+      connect: jest.fn(),
     };
     const now = new Date(Date.UTC(2026, 4, 11, 14, 35, 22));
     await alreadyRanToday(pool, now);
@@ -134,6 +148,7 @@ describe('findEligible', () => {
         calls.push({ sql, params });
         return { rows: [] };
       }),
+      connect: jest.fn(),
     };
     await findEligible(pool);
     expect(calls[0].params[0]).toBe(String(RETENTION_DAYS)); // '365'
@@ -175,8 +190,39 @@ describe('softDeleteAndPurge', () => {
     const result = await softDeleteAndPurge(pool, row);
     expect(result.s3_deleted).toBe(false);
     expect(result.error).toBe('S3 network error');
-    // DB UPDATE still happened (pool.query was called)
-    expect(pool.query).toHaveBeenCalledTimes(1);
+    // DB transaction still committed (client.query was called for BEGIN + SET LOCAL × 2 + UPDATE + COMMIT)
+    expect(pool.mockClient.query).toHaveBeenCalledWith('BEGIN');
+    expect(pool.mockClient.query).toHaveBeenCalledWith('COMMIT');
+  });
+
+  // #9 — actor_channel: softDeleteAndPurge must set actor_channel='system' in the tx
+  test('#9 SET LOCAL app.actor_channel = system inside the transaction', async () => {
+    const pool = makePool({ updateRowCount: 1 });
+    const row = { id: 'p1', tenant_id: 't1', s3_key: 'k.jpg' };
+    await softDeleteAndPurge(pool, row);
+
+    const calls = pool.mockClient.query.mock.calls;
+    // Verify the sequence: BEGIN, SET LOCAL tenant_id, SET LOCAL actor_channel='system', UPDATE, COMMIT
+    expect(calls[0][0]).toBe('BEGIN');
+    const setChannelCall = calls.find(([sql]) => /SET LOCAL app\.actor_channel/i.test(sql));
+    expect(setChannelCall).toBeDefined();
+    expect(setChannelCall[0]).toMatch(/'system'/);
+    // COMMIT must follow
+    const commitIdx = calls.findIndex(([sql]) => sql === 'COMMIT');
+    expect(commitIdx).toBeGreaterThan(0);
+    // client.release() called after commit/rollback
+    expect(pool.mockClient.release).toHaveBeenCalled();
+  });
+
+  test('#9 SET LOCAL app.tenant_id is set to the row tenant_id', async () => {
+    const pool = makePool({ updateRowCount: 1 });
+    const row = { id: 'p1', tenant_id: 'tenant-abc', s3_key: 'k.jpg' };
+    await softDeleteAndPurge(pool, row);
+    const setTenantCall = pool.mockClient.query.mock.calls.find(
+      ([sql]) => /SET LOCAL app\.tenant_id/i.test(sql)
+    );
+    expect(setTenantCall).toBeDefined();
+    expect(setTenantCall[1]).toEqual(['tenant-abc']);
   });
 });
 
@@ -270,11 +316,64 @@ describe('runPurge', () => {
 // 7. Constants sanity
 // ---------------------------------------------------------------------------
 describe('module constants', () => {
-  test('RETENTION_DAYS is 365', () => {
+  test('RETENTION_DAYS is 365 (default)', () => {
     expect(RETENTION_DAYS).toBe(365);
   });
 
-  test('BATCH_LIMIT is 100', () => {
+  test('BATCH_LIMIT is 100 (default)', () => {
     expect(BATCH_LIMIT).toBe(100);
+  });
+
+  // #11 — TICK_UTC_HOUR exported and defaults to 7
+  test('#11 TICK_UTC_HOUR defaults to 7 (= 04:00 BRT, UTC-3 fixed)', () => {
+    expect(TICK_UTC_HOUR).toBe(7);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. Env var overrides — #11 TICK_UTC_HOUR, #12 RETENTION_DAYS / BATCH_LIMIT
+//
+// Constants are captured at module-load time. To test env var overrides we
+// must re-require the module inside jest.isolateModules after setting env.
+// ---------------------------------------------------------------------------
+describe('env var overrides', () => {
+  // #12 — AESTHETIC_SENSITIVE_RETENTION_DAYS overrides RETENTION_DAYS
+  test('#12 RETENTION_DAYS respects AESTHETIC_SENSITIVE_RETENTION_DAYS env var', () => {
+    let freshModule;
+    jest.isolateModules(() => {
+      process.env.AESTHETIC_SENSITIVE_RETENTION_DAYS = '180';
+      // re-mock s3 for the freshly required module
+      jest.mock('../../src/storage/s3', () => ({ deleteFile: jest.fn() }));
+      freshModule = require('../../src/jobs/aesthetic-purge-sensitive');
+    });
+    delete process.env.AESTHETIC_SENSITIVE_RETENTION_DAYS;
+    expect(freshModule.RETENTION_DAYS).toBe(180);
+  });
+
+  // #12 — AESTHETIC_PURGE_BATCH overrides BATCH_LIMIT
+  test('#12 BATCH_LIMIT respects AESTHETIC_PURGE_BATCH env var', () => {
+    let freshModule;
+    jest.isolateModules(() => {
+      process.env.AESTHETIC_PURGE_BATCH = '50';
+      jest.mock('../../src/storage/s3', () => ({ deleteFile: jest.fn() }));
+      freshModule = require('../../src/jobs/aesthetic-purge-sensitive');
+    });
+    delete process.env.AESTHETIC_PURGE_BATCH;
+    expect(freshModule.BATCH_LIMIT).toBe(50);
+  });
+
+  // #11 — AESTHETIC_PURGE_HOUR_UTC overrides TICK_UTC_HOUR + shouldTickRun behaviour
+  test('#11 shouldTickRun respects AESTHETIC_PURGE_HOUR_UTC env var', () => {
+    let freshModule;
+    jest.isolateModules(() => {
+      process.env.AESTHETIC_PURGE_HOUR_UTC = '3';
+      jest.mock('../../src/storage/s3', () => ({ deleteFile: jest.fn() }));
+      freshModule = require('../../src/jobs/aesthetic-purge-sensitive');
+    });
+    delete process.env.AESTHETIC_PURGE_HOUR_UTC;
+    expect(freshModule.TICK_UTC_HOUR).toBe(3);
+    // At UTC 03:00 → true; at UTC 07:00 → false (old default)
+    expect(freshModule.shouldTickRun(new Date(Date.UTC(2026, 4, 11, 3, 0, 0)))).toBe(true);
+    expect(freshModule.shouldTickRun(new Date(Date.UTC(2026, 4, 11, 7, 0, 0)))).toBe(false);
   });
 });

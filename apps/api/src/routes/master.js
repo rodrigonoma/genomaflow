@@ -1447,4 +1447,41 @@ module.exports = async function masterRoutes(fastify) {
     if (!rows[0]) return reply.status(404).send({ error: 'Sugestão não encontrada ou já revisada' });
     return reply.send(rows[0]);
   });
+
+  // ── Aesthetic Purge Sensitive — force run (ops/test) ──────────────────────
+  //
+  // POST /master/aesthetic-purge-sensitive/run-now
+  //
+  // Publishes to Redis channel 'admin:purge-sensitive-trigger'. The worker
+  // scheduler (subscribeAdminTriggers) listens on that channel and fires
+  // runPurgeSensitive({ pool, forceRun: true }) asynchronously.
+  //
+  // Design decision: API and Worker are separate ECS containers — they cannot
+  // share a filesystem or call each other directly. Redis pub/sub is the
+  // established inter-service signalling pattern in this codebase (same as
+  // chat events). The API endpoint is therefore fire-and-forget: it publishes
+  // the trigger and responds immediately. The actual purge result is logged
+  // in the worker container.
+  //
+  // Limitation: the caller cannot know how many rows were purged from this
+  // HTTP response alone. For post-hoc confirmation, check the worker logs or
+  // query audit_log WHERE entity_type='aesthetic_photos' AND actor_channel='system'.
+  fastify.post('/aesthetic-purge-sensitive/run-now', auth(), async (request, reply) => {
+    try {
+      await fastify.redis.publish(
+        'admin:purge-sensitive-trigger',
+        JSON.stringify({
+          triggered_by: request.user.user_id,
+          triggered_at: new Date().toISOString(),
+        })
+      );
+      return reply.send({
+        ok: true,
+        message: 'Job de purga disparado via Redis. Resultado será logado no worker.',
+      });
+    } catch (e) {
+      request.log.error({ err: e }, 'purge-sensitive trigger failed');
+      return reply.status(500).send({ error: 'TRIGGER_FAILED', message: e.message });
+    }
+  });
 };

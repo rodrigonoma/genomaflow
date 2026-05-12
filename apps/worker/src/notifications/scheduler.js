@@ -15,9 +15,15 @@
  * é OK pra T-2h / T-24h reminders.
  *
  * Mock mode: se ZAPI_MOCK=1 ou SES_MOCK=1, envia "fake" e atualiza row.
+ *
+ * Admin triggers:
+ * Redis channel 'admin:purge-sensitive-trigger' → dispara runPurgeSensitive
+ * com forceRun=true. Publicado por POST /master/aesthetic-purge-sensitive/run-now
+ * na API. Subscribed em subscribeAdminTriggers() chamado no startScheduler.
  */
 
 const { Pool } = require('pg');
+const Redis = require('ioredis');
 const path = require('path');
 const { runDiscovery, shouldTickRun } = require('../jobs/aesthetic-treatment-discovery');
 const { runPurge: runPurgeSensitive, shouldTickRun: shouldPurgeRun } = require('../jobs/aesthetic-purge-sensitive');
@@ -577,8 +583,60 @@ async function tick() {
   }
 }
 
+/**
+ * Subscribe to the Redis channel 'admin:purge-sensitive-trigger'.
+ *
+ * When the master API publishes to this channel (via POST
+ * /master/aesthetic-purge-sensitive/run-now), this subscriber fires
+ * runPurgeSensitive({ pool, forceRun: true }) and logs the result.
+ *
+ * Implementation notes:
+ * - Uses a dedicated ioredis subscriber connection (pub/sub requires a
+ *   dedicated connection — cannot share the main client).
+ * - global.__purgeAdminRedisSub guards against double-subscription when
+ *   startScheduler is called multiple times in tests.
+ * - Errors in the triggered purge are caught and logged; they do NOT crash
+ *   the scheduler (same non-fatal pattern as the regular tick).
+ *
+ * @returns {Promise<void>}
+ */
+async function subscribeAdminTriggers() {
+  if (global.__purgeAdminRedisSub) return; // already subscribed
+
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) {
+    console.warn('[notif] REDIS_URL not set — admin purge trigger unavailable');
+    return;
+  }
+
+  const sub = new Redis(redisUrl, { lazyConnect: false });
+  global.__purgeAdminRedisSub = sub;
+
+  sub.on('error', (err) => {
+    console.error('[notif] admin purge redis subscriber error:', err.message);
+  });
+
+  await sub.subscribe('admin:purge-sensitive-trigger');
+  console.log('[notif] Subscribed to admin:purge-sensitive-trigger');
+
+  sub.on('message', async (channel, message) => {
+    if (channel !== 'admin:purge-sensitive-trigger') return;
+    console.log('[notif] purge-sensitive forced via admin trigger:', message);
+    try {
+      const result = await runPurgeSensitive({ pool: getPool(), forceRun: true });
+      console.log('[notif] forced purge result:', JSON.stringify(result));
+    } catch (e) {
+      console.error('[notif] forced purge failed:', e.message);
+    }
+  });
+}
+
 function startScheduler({ intervalMs = 5 * 60 * 1000 } = {}) {
   console.log(`[notif] Scheduler iniciado — tick a cada ${intervalMs / 1000}s`);
+  // Subscribe to admin triggers (fire-and-forget — non-fatal if Redis unavailable)
+  subscribeAdminTriggers().catch((e) =>
+    console.error('[notif] subscribeAdminTriggers failed:', e.message)
+  );
   // Primeira execução em 30s pra deixar o worker estabilizar
   setTimeout(tick, 30 * 1000);
   setInterval(tick, intervalMs);
@@ -592,4 +650,5 @@ module.exports = {
   generateVaccineDoseReminders,
   sendPendingNotifications,
   cleanupOldErrorLogs,
+  subscribeAdminTriggers,
 };
