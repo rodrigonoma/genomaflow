@@ -1,9 +1,11 @@
-import { Component, Input, Output, EventEmitter, signal, computed, inject } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { EncountersService, EncounterCreatePayload, ClinicalEncounter, VitalSigns, CopilotResponse } from './encounters.service';
 import { VetVitalSignsComponent } from './vet/vet-vital-signs.component';
 import { HumanVitalSignsComponent } from './human/human-vital-signs.component';
+import { AestheticFacialService } from '../aesthetic/services/aesthetic-facial.service';
+import { AestheticAnalysisListItem } from '../aesthetic/models/analysis.model';
 
 /**
  * Shell shared do formulário de evolução. Renderiza:
@@ -42,6 +44,27 @@ import { HumanVitalSignsComponent } from './human/human-vital-signs.component';
         Queixa principal
         <textarea rows="2" [(ngModel)]="chiefComplaint" name="chief_complaint"></textarea>
       </label>
+
+      @if (module === 'estetica') {
+        <div class="field-group">
+          <label class="field-label">Análise estética vinculada <span class="optional">(opcional)</span></label>
+          @if (loadingAnalyses()) {
+            <span class="text-muted">Carregando análises...</span>
+          } @else if (recentAnalyses().length === 0) {
+            <span class="text-muted">Nenhuma análise estética disponível para este paciente.</span>
+          } @else {
+            <select [ngModel]="selectedAnalysisId()" (ngModelChange)="selectedAnalysisId.set($event)"
+                    name="related_aesthetic_analysis_id" class="form-select">
+              <option [ngValue]="null">— Nenhuma —</option>
+              @for (a of recentAnalyses(); track a.id) {
+                <option [ngValue]="a.id">
+                  {{ a.analysis_type }} — {{ (a.completed_at || a.created_at) | date:'dd/MM/yyyy HH:mm' }} ({{ a.status }})
+                </option>
+              }
+            </select>
+          }
+        </div>
+      }
 
       <label class="full">
         {{ module === 'human' ? 'História da doença atual' : 'Anamnese' }}
@@ -290,6 +313,15 @@ import { HumanVitalSignsComponent } from './human/human-vital-signs.component';
                      padding-top: 8px; border-top: 1px solid rgba(192,193,255,0.08);
                      margin: 4px 0 0; }
 
+    /* Aesthetic analysis link field */
+    .field-group { display: flex; flex-direction: column; gap: 4px; }
+    .field-label { font-size: 0.75rem; color: #c7c5d0; }
+    .field-label .optional { color: #7c7b8f; font-weight: 400; }
+    .text-muted { font-size: 0.8125rem; color: #7c7b8f; font-style: italic; }
+    .form-select { padding: 8px; background: #060d20; border: 1px solid #2a3148;
+      color: #dbe2fd; border-radius: 4px; font-family: inherit; font-size: 0.875rem;
+      width: 100%; }
+
     /* Responsive: empilha em viewport menor */
     @media (max-width: 920px) {
       .layout { flex-direction: column; }
@@ -297,15 +329,21 @@ import { HumanVitalSignsComponent } from './human/human-vital-signs.component';
     }
   `]
 })
-export class EncounterFormComponent {
+export class EncounterFormComponent implements OnInit {
   @Input({ required: true }) subjectId!: string;
-  @Input({ required: true }) module!: 'human' | 'veterinary';
+  @Input({ required: true }) module!: 'human' | 'veterinary' | 'estetica';
   @Input() appointmentId: string | null = null;
 
   @Output() saved = new EventEmitter<ClinicalEncounter>();
   @Output() cancel = new EventEmitter<void>();
 
   private encountersService = inject(EncountersService);
+  private aestheticService = inject(AestheticFacialService);
+
+  // ── Análise estética vinculada (F6 — estetica only) ───────────────────
+  recentAnalyses = signal<AestheticAnalysisListItem[]>([]);
+  loadingAnalyses = signal(false);
+  selectedAnalysisId = signal<string | null>(null);
 
   encounterType: ClinicalEncounter['encounter_type'] = 'consulta';
   chiefComplaint = '';
@@ -321,6 +359,19 @@ export class EncounterFormComponent {
 
   saving = signal(false);
   errorMsg = signal('');
+
+  ngOnInit(): void {
+    if (this.module === 'estetica' && this.subjectId) {
+      this.loadingAnalyses.set(true);
+      this.aestheticService.listAnalyses(this.subjectId, undefined, 20).subscribe({
+        next: (r) => {
+          this.recentAnalyses.set(r.items || []);
+          this.loadingAnalyses.set(false);
+        },
+        error: () => this.loadingAnalyses.set(false),
+      });
+    }
+  }
 
   // ── Co-piloto IA (4.4) ─────────────────────────────────────────────
   copilotOpen = signal(false);
@@ -385,6 +436,10 @@ export class EncounterFormComponent {
       payload.medical_history = this.medicalHistory || null;
       payload.medications_in_use = this.medicationsInUse || null;
       payload.allergies = this.allergies || null;
+    }
+
+    if (this.module === 'estetica') {
+      payload.related_aesthetic_analysis_id = this.selectedAnalysisId();
     }
 
     // Só envia vital_signs se algum campo preenchido

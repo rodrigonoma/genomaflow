@@ -36,6 +36,8 @@ export interface ClinicalEncounter {
   medical_history?: string | null;
   medications_in_use?: string | null;
   allergies?: string | null;
+  // estetica only
+  related_aesthetic_analysis_id?: string | null;
   attachments: any[];
   source?: 'manual' | 'video_ai' | null;
   signed_at: string | null;
@@ -68,6 +70,8 @@ export interface EncounterCreatePayload {
   medical_history?: string | null;
   medications_in_use?: string | null;
   allergies?: string | null;
+  // estetica only — vínculo com análise estética (F6)
+  related_aesthetic_analysis_id?: string | null;
   attachments?: any[];
   vital_signs?: VitalSigns;
 }
