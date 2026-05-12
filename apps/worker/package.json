@@ -4,8 +4,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "jest --runInBand",
-    "test:unit": "jest --runInBand"
+    "test": "jest --runInBand --forceExit",
+    "test:unit": "jest --runInBand --forceExit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
