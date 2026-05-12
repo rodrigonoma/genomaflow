@@ -103,7 +103,7 @@ Todos os caracteres PT-BR acentuados rendem corretamente no PDF:
 
 - ~~**Timeline deep-link**: `openAesthetic(id)` em timeline-panel é stub (console.log). Router navigate + lazy load do componente analysis-result quando deep-link existir.~~ **CONCLUÍDO (TODO#2, 2026-05-11)**
 - ~~**PDF preview no frontend**: hoje download direto. Poderia abrir em modal iframe.~~ **CONCLUÍDO (TODO#6, 2026-05-11)**
-- **Encounter sugestão automática**: ao criar encounter sem related_id mas com aesthetic_analyses recente, sugerir vínculo (UX).
+- ~~**Encounter sugestão automática**: ao criar encounter sem related_id mas com aesthetic_analyses recente, sugerir vínculo (UX).~~ **CONCLUÍDO (TODO#7, 2026-05-11)**
 - ~~**Treatment "Agendar X sessões"**: hoje agenda 1 procedimento — poderia gerar series de N appointments espaçados pelo interval_days do catálogo.~~ **CONCLUÍDO (TODO#4, 2026-05-11)**
 
 ## TODO#2 — Timeline deep-link (entregue 2026-05-11)
@@ -189,3 +189,30 @@ Branch: `feat/aesthetic-todo-06-pdf-preview-modal`
 - `HttpClient` e `environment` removidos dos imports (delegados à modal).
 
 **Tests:** +5 em `pdf-preview-modal.component.spec.ts` (iframe carrega, error path, anchor download, revokeObjectURL no destroy, filename customizado). 1 test em `analysis-result.component.spec.ts` atualizado: `downloadPdf calls HttpClient` → `openPdfPreview abre MatDialog com PdfPreviewModalComponent`. +1 test extra: sem id não abre dialog. Total 26 verdes nos dois specs. 185 verdes no full suite, 0 regressões.
+
+## TODO#7 — Auto-suggest análise no encounter-form (entregue 2026-05-11)
+
+Branch: `feat/aesthetic-todo-07-encounter-autosuggest`
+
+**Comportamento:** ao abrir `EncounterFormComponent` em `module='estetica'` sem `existingEncounter?.related_aesthetic_analysis_id` setado, o componente pré-seleciona automaticamente a análise mais recente do subject se ela for ≤30 dias e `status='done'`.
+
+**Mudanças em `encounter-form.component.ts`:**
+- Novo `@Input() existingEncounter` para receber encounter existente ao editar.
+- Novo signal `autoSuggested = signal(false)`.
+- Lógica em `ngOnInit` após `recentAnalyses.set(r.items)`:
+  1. Se `existingEncounter?.related_aesthetic_analysis_id` existir → usa e retorna (preserva escolha salva).
+  2. Filtra análises com `status === 'done'` E `(completed_at || created_at) >= Date.now() - 30d`.
+  3. Ordena desc por data → `selectedAnalysisId.set(eligible[0].id)` + `autoSuggested.set(true)`.
+- Novo método `onAnalysisChange(id)` chamado pelo `(ngModelChange)` do select → reseta `autoSuggested` quando usuário troca manualmente.
+- Banner inline `<p class="auto-suggest-note" data-testid="auto-suggest-note">` visível apenas quando `autoSuggested()=true`.
+
+**Multi-módulo safe:** toda lógica dentro do gate `module === 'estetica'`. Human/vet inalterados.
+
+**Tests:** +5 em `EncounterFormComponent — §9.3 auto-suggest análise estética`:
+1. Sem related_id + análise recente → pré-seleciona + autoSuggested=true
+2. Com related_id existente → usa o ID salvo, autoSuggested=false
+3. Análise >30 dias → selectedAnalysisId null, autoSuggested=false
+4. Usuário troca dropdown → autoSuggested=false
+5. Múltiplas análises ≤30d → escolhe a mais recente
+
+Total suite web: 190 verdes, 0 regressões.

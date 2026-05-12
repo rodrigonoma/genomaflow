@@ -53,7 +53,12 @@ import { AestheticAnalysisListItem } from '../aesthetic/models/analysis.model';
           } @else if (recentAnalyses().length === 0) {
             <span class="text-muted">Nenhuma análise estética disponível para este paciente.</span>
           } @else {
-            <select [ngModel]="selectedAnalysisId()" (ngModelChange)="selectedAnalysisId.set($event)"
+            @if (autoSuggested()) {
+              <p class="auto-suggest-note" data-testid="auto-suggest-note">
+                ✦ Vinculado automaticamente à análise mais recente. Você pode trocar ou remover.
+              </p>
+            }
+            <select [ngModel]="selectedAnalysisId()" (ngModelChange)="onAnalysisChange($event)"
                     name="related_aesthetic_analysis_id" class="form-select">
               <option [ngValue]="null">— Nenhuma —</option>
               @for (a of recentAnalyses(); track a.id) {
@@ -322,6 +327,17 @@ import { AestheticAnalysisListItem } from '../aesthetic/models/analysis.model';
       color: #dbe2fd; border-radius: 4px; font-family: inherit; font-size: 0.875rem;
       width: 100%; }
 
+    /* Auto-suggest banner */
+    .auto-suggest-note {
+      margin: 0 0 4px;
+      padding: 6px 10px;
+      font-size: 0.75rem;
+      color: #c0c1ff;
+      background: rgba(192,193,255,0.08);
+      border: 1px solid rgba(192,193,255,0.2);
+      border-radius: 4px;
+    }
+
     /* Responsive: empilha em viewport menor */
     @media (max-width: 920px) {
       .layout { flex-direction: column; }
@@ -333,6 +349,7 @@ export class EncounterFormComponent implements OnInit {
   @Input({ required: true }) subjectId!: string;
   @Input({ required: true }) module!: 'human' | 'veterinary' | 'estetica';
   @Input() appointmentId: string | null = null;
+  @Input() existingEncounter: { related_aesthetic_analysis_id?: string | null } | null = null;
 
   @Output() saved = new EventEmitter<ClinicalEncounter>();
   @Output() cancel = new EventEmitter<void>();
@@ -344,6 +361,7 @@ export class EncounterFormComponent implements OnInit {
   recentAnalyses = signal<AestheticAnalysisListItem[]>([]);
   loadingAnalyses = signal(false);
   selectedAnalysisId = signal<string | null>(null);
+  autoSuggested = signal(false);
 
   encounterType: ClinicalEncounter['encounter_type'] = 'consulta';
   chiefComplaint = '';
@@ -367,10 +385,39 @@ export class EncounterFormComponent implements OnInit {
         next: (r) => {
           this.recentAnalyses.set(r.items || []);
           this.loadingAnalyses.set(false);
+
+          const existingLink = this.existingEncounter?.related_aesthetic_analysis_id;
+          if (existingLink) {
+            this.selectedAnalysisId.set(existingLink);
+            return; // respect existing choice
+          }
+
+          // Auto-suggest: most recent within 30 days, status='done'
+          const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+          const eligible = (r.items || []).filter((a: AestheticAnalysisListItem) => {
+            if (a.status !== 'done') return false;
+            const ts = new Date(a.completed_at || a.created_at).getTime();
+            return Number.isFinite(ts) && ts >= cutoff;
+          });
+          if (eligible.length) {
+            // sort newest first
+            eligible.sort((a: AestheticAnalysisListItem, b: AestheticAnalysisListItem) => {
+              const ta = new Date(a.completed_at || a.created_at).getTime();
+              const tb = new Date(b.completed_at || b.created_at).getTime();
+              return tb - ta;
+            });
+            this.selectedAnalysisId.set(eligible[0].id);
+            this.autoSuggested.set(true);
+          }
         },
         error: () => this.loadingAnalyses.set(false),
       });
     }
+  }
+
+  onAnalysisChange(id: string | null): void {
+    this.selectedAnalysisId.set(id);
+    this.autoSuggested.set(false);
   }
 
   // ── Co-piloto IA (4.4) ─────────────────────────────────────────────
