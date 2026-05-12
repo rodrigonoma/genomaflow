@@ -384,7 +384,7 @@ export class ComparisonViewComponent {
   // Inputs (signal-based)
   // -------------------------------------------------------------------------
 
-  readonly currentAnalysisId    = input<string>();
+  readonly currentAnalysisId    = input<string | null | undefined>();
   readonly availableBaselines   = input<AestheticAnalysisListItem[]>([]);
 
   // -------------------------------------------------------------------------

@@ -127,7 +127,7 @@ export interface Prescription {
 export interface ClinicProfile {
   id: string;
   name: string;
-  module: 'human' | 'veterinary';
+  module: 'human' | 'veterinary' | 'estetica';
   cnpj: string | null;
   clinic_logo_url: string | null;
   contact_email: string | null;
@@ -201,7 +201,7 @@ export interface JwtPayload {
   user_id: string;
   tenant_id: string;
   role: 'admin' | 'master';
-  module: 'human' | 'veterinary';
+  module: 'human' | 'veterinary' | 'estetica';
 }
 
 export type BillingStatus = 'pending_payment' | 'active' | 'past_due' | 'cancelled' | 'grandfathered';

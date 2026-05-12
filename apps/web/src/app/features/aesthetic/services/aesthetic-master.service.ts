@@ -24,7 +24,7 @@ export interface AestheticTreatment {
   updated_at: string;
 }
 
-export type TreatmentInput = Partial<Omit<AestheticTreatment, 'id' | 'tenant_id' | 'created_at' | 'updated_at' | 'usage_count_30d' | 'is_active'>>;
+export type TreatmentInput = Partial<Omit<AestheticTreatment, 'id' | 'tenant_id' | 'created_at' | 'updated_at' | 'usage_count_30d'>>;
 
 export const TREATMENT_CATEGORIES = [
   'corpo_modelagem',

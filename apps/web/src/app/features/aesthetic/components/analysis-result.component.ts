@@ -53,11 +53,11 @@ import { PdfPreviewModalComponent } from './pdf-preview-modal.component';
 export interface TreatmentProtocolItem {
   treatment_id?: string | null;
   treatment_name: string;
-  indication_text: string;
-  sessions_recommended: number;
-  interval_days: number;
-  urgency: string;
-  expected_outcome: string;
+  indication_text?: string;
+  sessions_recommended?: number;
+  interval_days?: number;
+  urgency?: string;
+  expected_outcome?: string;
   in_catalog?: boolean;
   requires_medico?: boolean;
   cost_estimate_brl_min?: number | null;
