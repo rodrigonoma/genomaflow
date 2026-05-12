@@ -40,6 +40,16 @@ export interface ConsentModalData {
       background: rgba(192,193,255,0.04); border-radius: 6px;
       padding: 0.75rem 1rem; border-left: 3px solid #c0c1ff;
     }
+    .consent-text.reinforced-warning {
+      border-left-color: #ff9b6b;
+      background: rgba(255,155,107,0.06);
+      color: #c8b8a8;
+    }
+    .regions-list-header {
+      font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 700;
+      color: #ff9b6b; text-transform: uppercase; letter-spacing: 0.05em;
+      margin: 0 0 0.25rem;
+    }
     .regions-list {
       margin: 0.75rem 0; padding-left: 1.25rem;
       font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #7c7b8f;
@@ -62,12 +72,24 @@ export interface ConsentModalData {
         conforme consentimento obtido fora do sistema.
       </p>
 
-      @if (data.reinforced_regions && data.reinforced_regions.length > 0) {
+      @if (hasReinforced) {
+        <p class="consent-text reinforced-warning" data-testid="reinforced-disclaimer">
+          <strong>Consentimento reforçado — região sensível:</strong>
+          Confirmo que obtive consentimento ESPECÍFICO do paciente para análise de imagem de região
+          anatômica sensível (mama / glúteo / abdômen). Estas fotos têm retenção LGPD reduzida (1 ano)
+          e podem passar por blur automático em áreas íntimas via IA antes do armazenamento.
+        </p>
+        <p class="regions-list-header">REGIÕES SENSÍVEIS — consentimento reforçado obrigatório:</p>
         <ul class="regions-list">
-          @for (region of data.reinforced_regions; track region) {
-            <li>{{ region }}</li>
+          @for (region of data.reinforced_regions!; track region) {
+            <li><strong>{{ region }}</strong></li>
           }
         </ul>
+        <div class="checkbox-row">
+          <mat-checkbox [formControl]="reinforcedAckControl" data-testid="reinforced-ack">
+            Confirmo o consentimento reforçado para a(s) região(ões) sensível(eis) acima.
+          </mat-checkbox>
+        </div>
       }
 
       <div class="checkbox-row">
@@ -101,15 +123,26 @@ export class ConsentModalComponent {
   readonly form = this.fb.group({
     lgpdAware: [false, Validators.requiredTrue],
     signerName: ['', [Validators.required, Validators.minLength(3)]],
+    reinforcedAck: [false],
   });
 
   get lgpdControl() { return this.form.controls.lgpdAware; }
   get signerNameControl() { return this.form.controls.signerName; }
+  get reinforcedAckControl() { return this.form.controls.reinforcedAck; }
 
-  /** Returns true only when checkbox is checked AND signer name >= 3 chars. */
+  /** True when reinforced_regions are present and non-empty. */
+  get hasReinforced(): boolean {
+    return (this.data.reinforced_regions?.length ?? 0) > 0;
+  }
+
+  /** Returns true only when all required fields are satisfied.
+   *  When reinforced_regions are present, reinforcedAck must also be checked. */
   canConfirm(): boolean {
     const v = this.form.value;
-    return !!v.lgpdAware && !!v.signerName && v.signerName.trim().length >= 3;
+    const base = !!v.lgpdAware && !!v.signerName && (v.signerName?.trim().length ?? 0) >= 3;
+    if (!base) return false;
+    if (this.hasReinforced) return !!v.reinforcedAck;
+    return true;
   }
 
   confirm(): void {

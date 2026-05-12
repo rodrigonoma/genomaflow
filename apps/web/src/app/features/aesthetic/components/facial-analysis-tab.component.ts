@@ -31,6 +31,7 @@ import { AestheticWsService, AestheticEvent } from '../services/aesthetic-ws.ser
 import {
   AestheticAnalysisDetail,
   AestheticAnalysisListItem,
+  AestheticConsent,
   AnalysisType,
 } from '../models/analysis.model';
 
@@ -402,18 +403,26 @@ export class FacialAnalysisTabComponent implements OnInit {
   checkConsent(): void {
     this.svc.getConsent(this.subject().id).subscribe({
       next: (consent) => {
-        // Consent exists and is not revoked → go to guide
+        // Consent exists and is not revoked
         if (consent && !consent.revoked_at) {
+          // For sensitive region: also verify reinforced consent covers this region
+          if (this._pickedRegionIsSensitive() && !this._hasReinforcedFor(consent, this.selectedRegion())) {
+            // Existing consent doesn't cover this sensitive region → open modal in reinforced mode
+            this._openConsentModal([this.selectedRegion()]);
+            return;
+          }
+          // All good → advance to guide
           this.step.set('guide');
         } else {
-          this._openConsentModal();
+          // No valid consent → open modal; mark reinforced if sensitive
+          this._openConsentModal(this._pickedRegionIsSensitive() ? [this.selectedRegion()] : undefined);
         }
       },
       error: (err: unknown) => {
         // 404 → no consent yet → open modal
         const status = (err as { status?: number })?.status;
         if (status === 404) {
-          this._openConsentModal();
+          this._openConsentModal(this._pickedRegionIsSensitive() ? [this.selectedRegion()] : undefined);
         } else {
           this.error.set('Erro ao verificar consentimento. Tente novamente.');
           this.step.set('idle');
@@ -496,11 +505,12 @@ export class FacialAnalysisTabComponent implements OnInit {
   // Private helpers
   // -------------------------------------------------------------------------
 
-  private _openConsentModal(): void {
+  private _openConsentModal(reinforced_regions?: string[]): void {
     this.step.set('consent_ask');
 
     const data: ConsentModalData = {
       subject_id: this.subject().id,
+      reinforced_regions,
     };
 
     const ref = this.dialog.open(ConsentModalComponent, {
@@ -515,6 +525,18 @@ export class FacialAnalysisTabComponent implements OnInit {
         this.step.set('idle');
       }
     });
+  }
+
+  /** Returns true when the currently selected region is anatomically sensitive. */
+  private _pickedRegionIsSensitive(): boolean {
+    const SENSITIVE = new Set<string>(['breast', 'glutes', 'abdomen']);
+    return SENSITIVE.has(this.selectedRegion());
+  }
+
+  /** Returns true when existing consent already covers reinforced consent for the given region. */
+  private _hasReinforcedFor(consent: AestheticConsent | null, region: string): boolean {
+    if (!consent || !consent.reinforced_regions) return false;
+    return consent.reinforced_regions.includes(region);
   }
 
   private _fetchAnalysisAndAdvance(analysisId: string): void {

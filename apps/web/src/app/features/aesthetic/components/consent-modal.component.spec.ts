@@ -10,11 +10,6 @@ import { AestheticFacialService } from '../services/aesthetic-facial.service';
 // Mocks
 // ---------------------------------------------------------------------------
 
-const mockDialogData = {
-  subject_id: 'sub-uuid-001',
-  reinforced_regions: ['face', 'neck'],
-};
-
 const mockDialogRef = {
   close: jest.fn(),
 };
@@ -24,22 +19,27 @@ const mockAestheticService = {
 };
 
 // ---------------------------------------------------------------------------
-// Specs
+// Helper: create TestBed with given dialog data
 // ---------------------------------------------------------------------------
 
-describe('ConsentModalComponent', () => {
-  beforeEach(async () => {
-    jest.clearAllMocks();
+async function setupModule(dialogData: { subject_id: string; reinforced_regions?: string[] }) {
+  jest.clearAllMocks();
+  await TestBed.configureTestingModule({
+    imports: [ConsentModalComponent, NoopAnimationsModule],
+    providers: [
+      { provide: MAT_DIALOG_DATA, useValue: dialogData },
+      { provide: MatDialogRef, useValue: mockDialogRef },
+      { provide: AestheticFacialService, useValue: mockAestheticService },
+    ],
+  }).compileComponents();
+}
 
-    await TestBed.configureTestingModule({
-      imports: [ConsentModalComponent, NoopAnimationsModule],
-      providers: [
-        { provide: MAT_DIALOG_DATA, useValue: mockDialogData },
-        { provide: MatDialogRef, useValue: mockDialogRef },
-        { provide: AestheticFacialService, useValue: mockAestheticService },
-      ],
-    }).compileComponents();
-  });
+// ---------------------------------------------------------------------------
+// Specs — standard mode (no reinforced_regions)
+// ---------------------------------------------------------------------------
+
+describe('ConsentModalComponent — modo padrão (sem reinforced_regions)', () => {
+  beforeEach(() => setupModule({ subject_id: 'sub-uuid-001' }));
 
   // -------------------------------------------------------------------------
   // Test 1: Confirmar button disabled when checkbox false OR name < 3 chars
@@ -69,9 +69,9 @@ describe('ConsentModalComponent', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Test 2: Confirmar button enabled when checkbox true AND name >= 3 chars
+  // Test 2: Confirmar enabled when lgpdAware + signerName >= 3 (no reinforcedAck needed)
   // -------------------------------------------------------------------------
-  it('botão Confirmar habilita quando checkbox marcado e nome ≥ 3 chars', () => {
+  it('botão Confirmar habilita sem reinforcedAck quando reinforced_regions ausente', () => {
     const fixture = TestBed.createComponent(ConsentModalComponent);
     fixture.detectChanges();
     const comp = fixture.componentInstance;
@@ -83,16 +83,98 @@ describe('ConsentModalComponent', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Test 3: confirm() chama createConsent e fecha com true
+  // Test 3: confirm() chama createConsent sem reinforced_regions
   // -------------------------------------------------------------------------
-  it('confirm() chama createConsent com dados corretos e fecha o dialog com true', () => {
+  it('confirm() chama createConsent sem reinforced_regions e fecha com true', () => {
     mockAestheticService.createConsent.mockReturnValue(of({ id: 'consent-uuid-001' }));
 
     const fixture = TestBed.createComponent(ConsentModalComponent);
     fixture.detectChanges();
     const comp = fixture.componentInstance;
 
-    comp.form.patchValue({ lgpdAware: true, signerName: 'Dra. Ana Lima' });
+    comp.form.patchValue({ lgpdAware: true, signerName: 'Dr. João' });
+    fixture.detectChanges();
+
+    comp.confirm();
+
+    expect(mockAestheticService.createConsent).toHaveBeenCalledWith({
+      subject_id: 'sub-uuid-001',
+      notes: 'Dr. João',
+      reinforced_regions: undefined,
+    });
+    expect(mockDialogRef.close).toHaveBeenCalledWith(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 4: hasReinforced é false quando reinforced_regions ausente
+  // -------------------------------------------------------------------------
+  it('hasReinforced é false quando reinforced_regions está ausente', () => {
+    const fixture = TestBed.createComponent(ConsentModalComponent);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.hasReinforced).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Specs — reinforced mode (com reinforced_regions)
+// ---------------------------------------------------------------------------
+
+describe('ConsentModalComponent — modo reforçado (com reinforced_regions)', () => {
+  const mockDialogDataReinforced = {
+    subject_id: 'sub-uuid-001',
+    reinforced_regions: ['breast'],
+  };
+
+  beforeEach(() => setupModule(mockDialogDataReinforced));
+
+  // -------------------------------------------------------------------------
+  // Test 5: hasReinforced é true quando reinforced_regions presente
+  // -------------------------------------------------------------------------
+  it('hasReinforced é true quando reinforced_regions tem itens', () => {
+    const fixture = TestBed.createComponent(ConsentModalComponent);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.hasReinforced).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 6: canConfirm é false sem reinforcedAck mesmo com lgpd + nome válidos
+  // -------------------------------------------------------------------------
+  it('canConfirm é false quando reinforcedAck não marcado, mesmo com lgpd e nome válidos', () => {
+    const fixture = TestBed.createComponent(ConsentModalComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+
+    comp.form.patchValue({ lgpdAware: true, signerName: 'Dra. Ana Lima', reinforcedAck: false });
+    fixture.detectChanges();
+
+    expect(comp.canConfirm()).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 7: canConfirm é true quando lgpd + nome + reinforcedAck todos marcados
+  // -------------------------------------------------------------------------
+  it('canConfirm é true quando reinforcedAck marcado + lgpd + nome válidos', () => {
+    const fixture = TestBed.createComponent(ConsentModalComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+
+    comp.form.patchValue({ lgpdAware: true, signerName: 'Dra. Ana Lima', reinforcedAck: true });
+    fixture.detectChanges();
+
+    expect(comp.canConfirm()).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 8: confirm() chama createConsent com reinforced_regions e fecha com true
+  // -------------------------------------------------------------------------
+  it('confirm() chama createConsent com reinforced_regions e fecha com true', () => {
+    mockAestheticService.createConsent.mockReturnValue(of({ id: 'consent-uuid-002' }));
+
+    const fixture = TestBed.createComponent(ConsentModalComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+
+    comp.form.patchValue({ lgpdAware: true, signerName: 'Dra. Ana Lima', reinforcedAck: true });
     fixture.detectChanges();
 
     comp.confirm();
@@ -100,8 +182,19 @@ describe('ConsentModalComponent', () => {
     expect(mockAestheticService.createConsent).toHaveBeenCalledWith({
       subject_id: 'sub-uuid-001',
       notes: 'Dra. Ana Lima',
-      reinforced_regions: ['face', 'neck'],
+      reinforced_regions: ['breast'],
     });
     expect(mockDialogRef.close).toHaveBeenCalledWith(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 9: disclaimer de região sensível renderizado no template
+  // -------------------------------------------------------------------------
+  it('disclaimer reinforced-warning é renderizado no template', () => {
+    const fixture = TestBed.createComponent(ConsentModalComponent);
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('[data-testid="reinforced-disclaimer"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="reinforced-ack"]')).not.toBeNull();
   });
 });

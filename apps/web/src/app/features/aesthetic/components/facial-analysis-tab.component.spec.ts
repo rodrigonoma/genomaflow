@@ -19,6 +19,7 @@ import '@angular/compiler';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { of, throwError, Subject } from 'rxjs';
 
 import { FacialAnalysisTabComponent } from './facial-analysis-tab.component';
@@ -347,5 +348,105 @@ describe('FacialAnalysisTabComponent', () => {
 
     expect(comp.selectedRegion()).toBe('legs');
     expect(comp.step()).toBe('consent_check');
+  });
+
+  it('região sensível + consent válido COM reinforced para região → avança direto para guide', () => {
+    // Consent exists AND reinforced_regions already covers 'abdomen'
+    mockFacialService.getConsent!.mockReturnValue(of({
+      id: 'c-002',
+      subject_id: 'subject-001',
+      revoked_at: null,
+      reinforced_regions: ['abdomen'],
+    } as any));
+
+    const fixture = createFixture();
+    const comp = fixture.componentInstance;
+
+    comp.startNewAnalysis();
+    comp.onRegionSelected('abdomen');
+    fixture.detectChanges();
+
+    expect(comp.step()).toBe('guide');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F5 Task 4: Sensitive region reinforced consent gate — needs separate TestBed
+// (MatDialog mock must be provided before compileComponents)
+// ---------------------------------------------------------------------------
+
+describe('FacialAnalysisTabComponent — F5 reinforced consent gate', () => {
+  let wsEventsSubject: Subject<AestheticEvent>;
+  let mockFacialService: jest.Mocked<Partial<AestheticFacialService>>;
+  let mockDialog: { open: jest.Mock };
+  let mockDialogRef: { afterClosed: jest.Mock };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    wsEventsSubject = new Subject<AestheticEvent>();
+    mockDialogRef = { afterClosed: jest.fn().mockReturnValue(of(undefined)) };
+    mockDialog = { open: jest.fn().mockReturnValue(mockDialogRef) };
+
+    mockFacialService = {
+      getConsent:     jest.fn(),
+      createConsent:  jest.fn(),
+      getAnalysis:    jest.fn(),
+      createAnalysis: jest.fn(),
+      getPhotoUrl:    jest.fn(),
+      listAnalyses:   jest.fn().mockReturnValue(of({ items: [] })),
+    };
+
+    await TestBed.configureTestingModule({
+      imports: [FacialAnalysisTabComponent, NoopAnimationsModule],
+      providers: [
+        { provide: AestheticFacialService, useValue: mockFacialService },
+        {
+          provide: AestheticWsService,
+          useValue: { events$: wsEventsSubject.asObservable() },
+        },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+  });
+
+  function createFixture(): ComponentFixture<FacialAnalysisTabComponent> {
+    const fixture = TestBed.createComponent(FacialAnalysisTabComponent);
+    fixture.componentRef.setInput('subject', { id: 'subject-001', name: 'Maria Silva' });
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('região sensível + consent válido sem reinforced_regions → step=consent_ask (modal reforçado)', () => {
+    // Consent exists but reinforced_regions is null (not covering 'breast')
+    mockFacialService.getConsent!.mockReturnValue(of({
+      id: 'c-001',
+      subject_id: 'subject-001',
+      revoked_at: null,
+      reinforced_regions: null,
+    } as any));
+
+    const fixture = createFixture();
+    const comp = fixture.componentInstance;
+
+    // Use a Subject so afterClosed doesn't emit synchronously and reset step to idle
+    const afterClosedSubject = new Subject<boolean | undefined>();
+    const dialogInstance: MatDialog = (comp as any)['dialog'];
+    const dialogSpy = jest.spyOn(dialogInstance, 'open').mockReturnValue(
+      { afterClosed: () => afterClosedSubject.asObservable() } as any,
+    );
+
+    comp.startNewAnalysis();
+    comp.onRegionSelected('breast');
+    fixture.detectChanges();
+
+    // Step should be consent_ask (set before dialog.open is called)
+    expect(comp.step()).toBe('consent_ask');
+    // Dialog was opened with reinforced_regions containing 'breast'
+    expect(dialogSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        data: expect.objectContaining({ reinforced_regions: ['breast'] }),
+      }),
+    );
   });
 });
