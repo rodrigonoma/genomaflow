@@ -63,6 +63,12 @@ function validateEncounterBody(body, module, isUpdate = false) {
     if (typeof body.appointment_id !== 'string') return 'appointment_id deve ser uuid string ou null';
   }
 
+  if (body.related_aesthetic_analysis_id !== undefined && body.related_aesthetic_analysis_id !== null) {
+    if (typeof body.related_aesthetic_analysis_id !== 'string') {
+      return 'related_aesthetic_analysis_id deve ser uuid string ou null';
+    }
+  }
+
   // Strings textuais — limita tamanho razoável
   for (const f of ['chief_complaint', 'anamnesis', 'physical_exam', 'hypothesis', 'conduct',
                    'return_recommendation', 'medical_history', 'medications_in_use', 'allergies']) {
@@ -216,17 +222,29 @@ module.exports = async function (fastify) {
           }
         }
 
+        // Aesthetic analysis link — valida existência + tenant + mesmo subject
+        if (body.related_aesthetic_analysis_id) {
+          const { rows: aaRows } = await client.query(
+            `SELECT id FROM aesthetic_analyses
+             WHERE id = $1 AND tenant_id = $2 AND subject_id = $3 AND deleted_at IS NULL`,
+            [body.related_aesthetic_analysis_id, tenant_id, body.subject_id]
+          );
+          if (aaRows.length === 0) {
+            const e = new Error('invalid_aesthetic_link'); e.code = 'INVALID_AESTHETIC_LINK'; throw e;
+          }
+        }
+
         const { rows: encRows } = await client.query(
           `INSERT INTO clinical_encounters (
             tenant_id, subject_id, professional_user_id, appointment_id, encounter_type,
             chief_complaint, anamnesis, physical_exam, hypothesis, conduct, return_recommendation,
             medical_history, medications_in_use, allergies,
-            attachments
+            attachments, related_aesthetic_analysis_id
           ) VALUES (
             $1, $2, $3, $4, $5,
             $6, $7, $8, $9, $10, $11,
             $12, $13, $14,
-            $15::jsonb
+            $15::jsonb, $16
           ) RETURNING *`,
           [
             tenant_id, body.subject_id, user_id, body.appointment_id || null,
@@ -235,6 +253,7 @@ module.exports = async function (fastify) {
             body.hypothesis || null, body.conduct || null, body.return_recommendation || null,
             body.medical_history || null, body.medications_in_use || null, body.allergies || null,
             JSON.stringify(body.attachments || []),
+            body.related_aesthetic_analysis_id || null,
           ]
         );
         const encounter = encRows[0];
@@ -280,6 +299,7 @@ module.exports = async function (fastify) {
     } catch (err) {
       if (err.code === 'SUBJECT_INVALID') return reply.status(400).send({ error: 'subject_id inválido' });
       if (err.code === 'APPOINTMENT_INVALID') return reply.status(400).send({ error: 'appointment_id inválido' });
+      if (err.code === 'INVALID_AESTHETIC_LINK') return reply.status(400).send({ error: 'INVALID_AESTHETIC_LINK', message: 'Análise estética não encontrada ou não pertence ao paciente' });
       throw err;
     }
   });
@@ -383,6 +403,24 @@ module.exports = async function (fastify) {
           const e = new Error('edit_window_expired'); e.code = 'EDIT_WINDOW'; throw e;
         }
 
+        // Aesthetic analysis link update — valida se passado
+        if (body.related_aesthetic_analysis_id) {
+          // Need subject_id of existing encounter for validation
+          const { rows: encSubRows } = await client.query(
+            `SELECT subject_id FROM clinical_encounters WHERE id = $1 AND tenant_id = $2`,
+            [id, tenant_id]
+          );
+          const subjectId = encSubRows[0]?.subject_id;
+          const { rows: aaCheckRows } = await client.query(
+            `SELECT id FROM aesthetic_analyses
+             WHERE id = $1 AND tenant_id = $2 AND subject_id = $3 AND deleted_at IS NULL`,
+            [body.related_aesthetic_analysis_id, tenant_id, subjectId]
+          );
+          if (aaCheckRows.length === 0) {
+            const e = new Error('invalid_aesthetic_link'); e.code = 'INVALID_AESTHETIC_LINK'; throw e;
+          }
+        }
+
         // Update encounter fields
         const setParts = [];
         const values = [];
@@ -400,6 +438,10 @@ module.exports = async function (fastify) {
         if (body.attachments !== undefined) {
           setParts.push(`attachments = $${i++}::jsonb`);
           values.push(JSON.stringify(body.attachments));
+        }
+        if (body.related_aesthetic_analysis_id !== undefined) {
+          setParts.push(`related_aesthetic_analysis_id = $${i++}`);
+          values.push(body.related_aesthetic_analysis_id);
         }
         if (setParts.length > 0) {
           values.push(id, tenant_id);
@@ -473,6 +515,7 @@ module.exports = async function (fastify) {
       if (err.code === 'SIGNED') return reply.status(409).send({ error: 'encontro assinado é imutável' });
       if (err.code === 'FORBIDDEN_AUTHOR') return reply.status(403).send({ error: 'apenas o autor pode editar este encontro' });
       if (err.code === 'EDIT_WINDOW') return reply.status(409).send({ error: 'janela de edição expirou (24h). Crie um adendo (encounter_type=retorno).' });
+      if (err.code === 'INVALID_AESTHETIC_LINK') return reply.status(400).send({ error: 'INVALID_AESTHETIC_LINK', message: 'Análise estética não encontrada ou não pertence ao paciente' });
       throw err;
     }
   });

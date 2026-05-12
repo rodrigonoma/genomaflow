@@ -7,6 +7,11 @@ jest.mock('../../src/queues/aesthetic-analysis-queue', () => ({
   enqueue: jest.fn(async () => 'job-123'),
 }));
 
+// Mock pdf-lib para o teste de rota (evita I/O pesado nos testes de rota)
+jest.mock('../../src/services/aesthetic-pdf-export', () => ({
+  buildAnalysisPDF: jest.fn(async () => Buffer.from('%PDF-1.4 mock-pdf-content')),
+}));
+
 async function buildApp({ balance = 100, hasConsent = true, photosOk = true, role = 'admin', module = 'estetica', consentRow = null } = {}) {
   const app = Fastify({ logger: false });
   app.decorate('authenticate', async (req) => {
@@ -224,5 +229,53 @@ describe('POST /aesthetic/analyses/:id/compare', () => {
     expect(body.deltas.rugas).toBe(-20);
     expect(body.deltas.firmeza).toBe(+20);
     expect(body.overall_change).toBeDefined();
+  });
+});
+
+describe('GET /aesthetic/analyses/:id/export.pdf', () => {
+  test('retorna 200 + Content-Type application/pdf + corpo iniciando com %PDF', async () => {
+    const app = await buildApp();
+    app.pg.query.mockImplementation(async (sql, params) => {
+      if (/SELECT \* FROM aesthetic_analyses/i.test(sql)) {
+        return { rows: [{ id: 'a-pdf', subject_id: 'sub1', analysis_type: 'facial', status: 'done', metrics: {}, result: {} }] };
+      }
+      if (/SELECT id, name FROM tenants/i.test(sql)) {
+        return { rows: [{ id: 't1', name: 'Clinica PDF Test' }] };
+      }
+      if (/SELECT id, name, birth_date, sex FROM subjects/i.test(sql)) {
+        return { rows: [{ id: 'sub1', name: 'Paciente Teste', birth_date: '1985-01-15', sex: 'F' }] };
+      }
+      return { rows: [] };
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/aesthetic/analyses/a-pdf/export.pdf' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.body.startsWith('%PDF')).toBe(true);
+  });
+
+  test('404 para análise inexistente', async () => {
+    const app = await buildApp();
+    app.pg.query.mockImplementation(async (sql) => {
+      if (/SELECT \* FROM aesthetic_analyses/i.test(sql)) return { rows: [] };
+      return { rows: [] };
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/aesthetic/analyses/nao-existe/export.pdf' });
+    expect(res.statusCode).toBe(404);
+    expect(JSON.parse(res.body).error).toBe('Análise não encontrada');
+  });
+
+  test('500 BAD_PDF_GENERATION quando buildAnalysisPDF lanca erro', async () => {
+    const { buildAnalysisPDF } = require('../../src/services/aesthetic-pdf-export');
+    buildAnalysisPDF.mockRejectedValueOnce(new Error('pdf render failed'));
+    const app = await buildApp();
+    app.pg.query.mockImplementation(async (sql) => {
+      if (/SELECT \* FROM aesthetic_analyses/i.test(sql)) {
+        return { rows: [{ id: 'a-err', subject_id: 'sub1', analysis_type: 'facial', status: 'done', metrics: {}, result: {} }] };
+      }
+      return { rows: [] };
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/aesthetic/analyses/a-err/export.pdf' });
+    expect(res.statusCode).toBe(500);
+    expect(JSON.parse(res.body).error).toBe('BAD_PDF_GENERATION');
   });
 });

@@ -6,6 +6,7 @@ const { getBalance, debit } = require('../services/aesthetic-credits');
 const { getConsent } = require('../services/aesthetic-consent');
 const { createPending, validatePhotosOwnership, listForSubject, getDetail, softDelete, getMetricsOnly, computeDeltas } = require('../services/aesthetic-analyses');
 const { enqueue } = require('../queues/aesthetic-analysis-queue');
+const { buildAnalysisPDF } = require('../services/aesthetic-pdf-export');
 
 const COST_BY_TYPE = {
   facial: Number(process.env.AESTHETIC_FACIAL_COST || 5),
@@ -162,5 +163,44 @@ module.exports = async function (fastify) {
       deltas: result.deltas,
       overall_change: result.overall_change,
     });
+  });
+
+  // GET /aesthetic/analyses/:id/export.pdf
+  fastify.get('/analyses/:id/export.pdf', {
+    preHandler: [fastify.authenticate, requireEsteticaModule],
+    config: { rateLimit: { max: 30, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
+    const tenantId = request.user.tenant_id;
+    const detail = await getDetail(fastify.pg, request.params.id, tenantId);
+    if (!detail) return reply.status(404).send({ error: 'Análise não encontrada' });
+
+    const { rows: tRows } = await fastify.pg.query(
+      'SELECT id, name FROM tenants WHERE id = $1',
+      [tenantId]
+    );
+    const tenant = tRows[0] || null;
+
+    const { rows: sRows } = await fastify.pg.query(
+      'SELECT id, name, birth_date, sex FROM subjects WHERE id = $1 AND tenant_id = $2',
+      [detail.subject_id, tenantId]
+    );
+    const subject = sRows[0] || null;
+
+    const result = detail.result || {};
+    try {
+      const pdf = await buildAnalysisPDF({
+        tenant, subject, analysis: detail,
+        metrics: result.metrics || detail.metrics || {},
+        treatments: result.treatment_protocol || [],
+        lifestyle: result.lifestyle || null,
+      });
+      reply
+        .header('Content-Type', 'application/pdf')
+        .header('Content-Disposition', `attachment; filename="analise-${detail.id}.pdf"`)
+        .send(pdf);
+    } catch (e) {
+      request.log.error({ err: e }, 'pdf export failed');
+      return reply.status(500).send({ error: 'BAD_PDF_GENERATION', message: 'Falha ao gerar PDF' });
+    }
   });
 };
