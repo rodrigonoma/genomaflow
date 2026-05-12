@@ -27,7 +27,11 @@ function makePool() {
 
 let pool = makePool();
 
-/** Aplica todas as migrations em ordem. Idempotente. */
+/**
+ * Aplica todas as migrations em ordem. Idempotente.
+ * No CI as migrations são aplicadas no step `apply migrations` ANTES do Jest
+ * (pra não competir com Fastify pluginTimeout). Aqui mantém pra dev local.
+ */
 async function runMigrations() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS _migrations (

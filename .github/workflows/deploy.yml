@@ -98,11 +98,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: API — install + integration tests (aesthetic mutations)
+      - name: API — install deps
         working-directory: apps/api
-        run: |
-          npm ci --no-audit --no-fund
-          npm run test:integration
+        run: npm ci --no-audit --no-fund
+      # Migrations rodam FORA do Jest pra evitar competir com pluginTimeout
+      # do Fastify (boot do app no beforeAll fica mais limpo).
+      - name: API — apply migrations
+        working-directory: apps/api
+        run: node src/db/migrate.js
+      - name: API — integration tests (aesthetic mutations)
+        working-directory: apps/api
+        run: npm run test:integration
 
   deploy:
     needs: [test, integration]
