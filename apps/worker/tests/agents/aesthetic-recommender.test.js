@@ -202,3 +202,154 @@ describe('recommendProtocol', () => {
     expect(tx.in_catalog).toBe(false);
   });
 });
+
+// ===========================================================================
+// F4: aestheticProfile + computedNutrition
+// ===========================================================================
+
+describe('recommendProtocol — F4 aestheticProfile + nutrition', () => {
+  test('aestheticProfile vazio → lifestyle é sanitizado normalmente (sem fallback de computedNutrition)', async () => {
+    mockCreate.mockResolvedValueOnce({
+      content: [{ text: JSON.stringify({
+        treatment_protocol: [],
+        lifestyle_recommendations: null,
+        summary_for_patient: 'Sem perfil nutricional',
+      })}],
+      usage: { input_tokens: 500, output_tokens: 200 },
+    });
+
+    const result = await recommendProtocol({
+      metrics: { rugas: { score: 60 } },
+      subject: { age_years: 35, sex: 'F', aesthetic_profile: {} },
+      professionalType: 'medico',
+      aestheticProfile: {},      // vazio
+      computedNutrition: null,   // sem cálculo
+    });
+
+    // Quando LLM retorna null e computedNutrition é null → lifestyle_recommendations é null
+    expect(result.recommendations.lifestyle_recommendations).toBeNull();
+  });
+
+  test('computedNutrition presente → prompt contém calorias + macros + instrução de uso exato', async () => {
+    let capturedPrompt = '';
+    mockCreate.mockImplementationOnce(async (params) => {
+      capturedPrompt = params.messages[0].content;
+      return {
+        content: [{ text: JSON.stringify({
+          treatment_protocol: [],
+          lifestyle_recommendations: {
+            estimated_daily_calories_kcal: 2000,
+            macro_distribution_g: { protein: 125, carbs: 225, fat: 67 },
+            hydration_ml_per_day: 2100,
+            foods_to_emphasize: ['frango', 'aveia'],
+            foods_to_minimize: ['açúcar', 'frituras'],
+          },
+          summary_for_patient: 'Ok',
+        })}],
+        usage: { input_tokens: 900, output_tokens: 400 },
+      };
+    });
+
+    const computedNutrition = { tmb: 1400, calories: 2170, macros: { protein_g: 136, carbs_g: 244, fat_g: 72 }, primary_goal: 'wellness' };
+
+    await recommendProtocol({
+      metrics: { rugas: { score: 60 } },
+      subject: { age_years: 35, sex: 'F', aesthetic_profile: {} },
+      professionalType: 'medico',
+      aestheticProfile: { height_cm: 165, weight_kg: 60, age: 35, sex: 'F', activity_level: 'moderate', goals: ['wellness'] },
+      computedNutrition,
+    });
+
+    // Prompt deve conter os valores pré-computados
+    expect(capturedPrompt).toContain('2170');
+    expect(capturedPrompt).toContain('1400');
+    expect(capturedPrompt).toContain('NÃO recalcule');
+  });
+
+  test('CRN disclaimer sempre presente no lifestyle, mesmo quando LLM não retorna disclaimer', async () => {
+    mockCreate.mockResolvedValueOnce({
+      content: [{ text: JSON.stringify({
+        treatment_protocol: [],
+        lifestyle_recommendations: {
+          estimated_daily_calories_kcal: 1800,
+          // Sem disclaimer — LLM esqueceu
+        },
+        summary_for_patient: 'Ok',
+      })}],
+      usage: { input_tokens: 500, output_tokens: 200 },
+    });
+
+    const result = await recommendProtocol({
+      metrics: { rugas: { score: 60 } },
+      subject: { age_years: 35, sex: 'F', aesthetic_profile: {} },
+      professionalType: 'medico',
+    });
+
+    expect(result.recommendations.lifestyle_recommendations).not.toBeNull();
+    expect(result.recommendations.lifestyle_recommendations.disclaimer).toMatch(/CRN/);
+    expect(result.recommendations.lifestyle_recommendations.disclaimer).toMatch(/nutricionista/i);
+  });
+
+  test('sanitização: calories absurda (99999) → clamp para 5000', () => {
+    const raw = {
+      lifestyle_recommendations: {
+        estimated_daily_calories_kcal: 99999,
+        macro_distribution_g: { protein: 50, carbs: 100, fat: 40 },
+      },
+    };
+    const clean = sanitizeRecommendations(raw, 'medico', null);
+    expect(clean.lifestyle_recommendations.estimated_daily_calories_kcal).toBe(5000);
+  });
+
+  test('sanitização: calories muito baixa (100) → clamp para 800', () => {
+    const raw = {
+      lifestyle_recommendations: {
+        estimated_daily_calories_kcal: 100,
+      },
+    };
+    const clean = sanitizeRecommendations(raw, 'medico', null);
+    expect(clean.lifestyle_recommendations.estimated_daily_calories_kcal).toBe(800);
+  });
+
+  test('LLM não retorna lifestyle + computedNutrition presente → fallback com valores do backend', () => {
+    const raw = {
+      lifestyle_recommendations: null,
+    };
+    const computedNutrition = {
+      tmb: 1400,
+      calories: 2170,
+      macros: { protein_g: 136, carbs_g: 244, fat_g: 72 },
+      primary_goal: 'wellness',
+    };
+    const clean = sanitizeRecommendations(raw, 'medico', computedNutrition);
+    expect(clean.lifestyle_recommendations).not.toBeNull();
+    expect(clean.lifestyle_recommendations.estimated_daily_calories_kcal).toBe(2170);
+    expect(clean.lifestyle_recommendations.macro_distribution_g.protein).toBe(136);
+    expect(clean.lifestyle_recommendations.disclaimer).toMatch(/CRN/);
+  });
+
+  test('hydration clamp: abaixo de 1500 → 1500; acima de 4000 → 4000', () => {
+    const rawLow = { lifestyle_recommendations: { estimated_daily_calories_kcal: 2000, hydration_ml_per_day: 500 } };
+    const cleanLow = sanitizeRecommendations(rawLow, 'medico', null);
+    expect(cleanLow.lifestyle_recommendations.hydration_ml_per_day).toBe(1500);
+
+    const rawHigh = { lifestyle_recommendations: { estimated_daily_calories_kcal: 2000, hydration_ml_per_day: 9999 } };
+    const cleanHigh = sanitizeRecommendations(rawHigh, 'medico', null);
+    expect(cleanHigh.lifestyle_recommendations.hydration_ml_per_day).toBe(4000);
+  });
+
+  test('foods arrays: truncados a 15 itens, strings cortadas em 80 chars', () => {
+    const longStr = 'a'.repeat(200);
+    const manyFoods = Array.from({ length: 20 }, (_, i) => `food_${i}`);
+    const raw = {
+      lifestyle_recommendations: {
+        estimated_daily_calories_kcal: 2000,
+        foods_to_emphasize: [...manyFoods, longStr],
+        foods_to_minimize: [longStr],
+      },
+    };
+    const clean = sanitizeRecommendations(raw, 'medico', null);
+    expect(clean.lifestyle_recommendations.foods_to_emphasize.length).toBeLessThanOrEqual(15);
+    expect(clean.lifestyle_recommendations.foods_to_minimize[0].length).toBeLessThanOrEqual(80);
+  });
+});

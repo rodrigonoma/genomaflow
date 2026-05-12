@@ -149,6 +149,118 @@ describe('processAestheticAnalysis — catalog fetch', () => {
   });
 });
 
+describe('processAestheticAnalysis — aesthetic_profile fetch (F4)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test('quando subjects.aesthetic_profile não vazio → recommendProtocol chamado com computedNutrition non-null', async () => {
+    const { analyzeFacial } = require('../../src/agents/aesthetic-facial');
+    const { recommendProtocol } = require('../../src/agents/aesthetic-recommender');
+
+    analyzeFacial.mockResolvedValue({
+      metrics: { rugas: { score: 72, regions: [] } },
+      observations: {},
+      tokens_input: 1000, tokens_output: 500,
+    });
+    recommendProtocol.mockResolvedValue({
+      recommendations: { treatment_protocol: [], lifestyle_recommendations: {} },
+      tokens_input: 500, tokens_output: 300,
+    });
+
+    // Perfil completo para computeAll retornar resultado (Mifflin-St Jeor precisa de height_cm, weight_kg, age, sex)
+    const fakeProfile = {
+      height_cm: 165, weight_kg: 60, age: 30, sex: 'F',
+      activity_level: 'moderate', goals: ['wellness'],
+    };
+
+    const pool = {
+      connect: jest.fn(async () => ({
+        query: jest.fn(async (sql, params) => {
+          if (/SELECT .* FROM aesthetic_photos/i.test(sql)) {
+            return { rows: params[0].map((id) => ({ id, s3_key: `aesthetic-photos/t/s/${id}.jpg` })) };
+          }
+          if (/SELECT .* FROM subjects/i.test(sql)) {
+            // Primeira query de subjects (com s.*) retorna o subject completo
+            if (/SELECT s\.\*/i.test(sql) || /EXTRACT/i.test(sql)) {
+              return { rows: [{ id: 'sub1', fitzpatrick_type: 3, sex: 'F', birth_date: '1990-01-01', aesthetic_profile: fakeProfile }] };
+            }
+            // Segunda query de subjects (aesthetic_profile) retorna o profile
+            return { rows: [{ aesthetic_profile: fakeProfile }] };
+          }
+          return { rows: [] };
+        }),
+        release: jest.fn(),
+      })),
+    };
+
+    await processAestheticAnalysis({
+      pool,
+      data: { analysis_id: 'a1', tenant_id: 't1', subject_id: 'sub1', user_id: 'u1',
+              analysis_type: 'facial', photo_ids: ['p1'], professional_type: 'medico' },
+    });
+
+    // recommendProtocol deve ter sido chamado com computedNutrition não-null
+    expect(recommendProtocol).toHaveBeenCalledWith(
+      expect.objectContaining({
+        computedNutrition: expect.objectContaining({
+          tmb: expect.any(Number),
+          calories: expect.any(Number),
+          macros: expect.objectContaining({
+            protein_g: expect.any(Number),
+            carbs_g: expect.any(Number),
+            fat_g: expect.any(Number),
+          }),
+        }),
+      })
+    );
+  });
+
+  test('quando subjects.aesthetic_profile está vazio → computedNutrition é null', async () => {
+    const { analyzeFacial } = require('../../src/agents/aesthetic-facial');
+    const { recommendProtocol } = require('../../src/agents/aesthetic-recommender');
+
+    analyzeFacial.mockResolvedValue({
+      metrics: { rugas: { score: 72, regions: [] } },
+      observations: {},
+      tokens_input: 1000, tokens_output: 500,
+    });
+    recommendProtocol.mockResolvedValue({
+      recommendations: { treatment_protocol: [], lifestyle_recommendations: {} },
+      tokens_input: 500, tokens_output: 300,
+    });
+
+    const pool = {
+      connect: jest.fn(async () => ({
+        query: jest.fn(async (sql, params) => {
+          if (/SELECT .* FROM aesthetic_photos/i.test(sql)) {
+            return { rows: params[0].map((id) => ({ id, s3_key: `path/${id}.jpg` })) };
+          }
+          if (/SELECT .* FROM subjects/i.test(sql)) {
+            if (/EXTRACT/i.test(sql)) {
+              return { rows: [{ id: 'sub1', fitzpatrick_type: 3, sex: 'F', birth_date: '1990-01-01' }] };
+            }
+            // aesthetic_profile vazio/null
+            return { rows: [{ aesthetic_profile: null }] };
+          }
+          return { rows: [] };
+        }),
+        release: jest.fn(),
+      })),
+    };
+
+    await processAestheticAnalysis({
+      pool,
+      data: { analysis_id: 'a1', tenant_id: 't1', subject_id: 'sub1', user_id: 'u1',
+              analysis_type: 'facial', photo_ids: ['p1'], professional_type: 'medico' },
+    });
+
+    expect(recommendProtocol).toHaveBeenCalledWith(
+      expect.objectContaining({
+        computedNutrition: null,
+      })
+    );
+  });
+});
+
 describe('processAestheticAnalysis — body region routing', () => {
   beforeEach(() => jest.clearAllMocks());
 

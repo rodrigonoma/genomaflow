@@ -98,6 +98,24 @@ async function processAestheticAnalysis({ pool, data } = {}) {
       console.warn(`[aesthetic][${analysis_id}] catalog fetch falhou (continuando sem catálogo):`, catalogErr.message);
     }
 
+    // Fetch aesthetic_profile para enriquecer recommender com TMB/nutrição (F4)
+    let aestheticProfile = null;
+    let computedNutrition = null;
+    try {
+      const { rows: subjRows } = await client.query(
+        `SELECT aesthetic_profile FROM subjects WHERE id = $1 AND tenant_id = $2`,
+        [subject_id, tenant_id]
+      );
+      aestheticProfile = (subjRows[0] && subjRows[0].aesthetic_profile) || null;
+      if (aestheticProfile && Object.keys(aestheticProfile).length > 0) {
+        const { computeAll } = require('../lib/tmb');
+        computedNutrition = computeAll(aestheticProfile);
+      }
+    } catch (profileErr) {
+      // Perfil nutricional é best-effort — análise continua sem nutrição
+      console.warn(`[aesthetic][${analysis_id}] aesthetic_profile fetch falhou (continuando sem nutrição):`, profileErr.message);
+    }
+
     // Call #2: recomendação de protocolo (best-effort — falha aqui preserva métricas)
     stage = 'call_2_recommender';
     let recResult = { recommendations: null, tokens_input: 0, tokens_output: 0, model: null, error: null };
@@ -107,6 +125,8 @@ async function processAestheticAnalysis({ pool, data } = {}) {
         subject,
         professionalType: professional_type,
         availableTreatments,
+        aestheticProfile,
+        computedNutrition,
       });
     } catch (err) {
       console.warn(`[aesthetic][${analysis_id}] recommender falhou:`, err.message);

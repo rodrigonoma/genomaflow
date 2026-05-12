@@ -8,7 +8,8 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 6
 const VALID_URGENCIES = new Set(['low', 'medium', 'high']);
 const MAX_TREATMENTS = 10;
 const MAX_FOODS = 15;
-const NUTRITION_DISCLAIMER = 'Orientações gerais de estilo de vida. Não substituem consulta com nutricionista (CRN).';
+// CRN disclaimer — sempre injetado, independente do que o LLM retornar (compliance regulatório)
+const NUTRITION_DISCLAIMER = 'Estas orientações de estilo de vida são complementares e NÃO substituem consulta com nutricionista (CRN).';
 
 function clampInt(n, min, max) {
   const x = parseInt(n, 10);
@@ -45,34 +46,75 @@ function sanitizeTreatment(t, profType) {
   return treatment;
 }
 
-function sanitizeLifestyle(l) {
-  if (!l || typeof l !== 'object') return null;
-  return {
-    estimated_daily_calories_kcal: clampInt(l.estimated_daily_calories_kcal, 800, 4500),
-    macro_distribution_g: l.macro_distribution_g && typeof l.macro_distribution_g === 'object' ? {
-      protein: clampInt(l.macro_distribution_g.protein, 30, 400),
-      carbs:   clampInt(l.macro_distribution_g.carbs, 50, 700),
-      fat:     clampInt(l.macro_distribution_g.fat, 30, 250),
-    } : null,
-    hydration_ml_per_day: clampInt(l.hydration_ml_per_day, 1000, 6000),
-    meal_timing_suggestion: slice(l.meal_timing_suggestion, 300),
-    exercise_recommendation: l.exercise_recommendation && typeof l.exercise_recommendation === 'object' ? {
-      aerobic:  slice(l.exercise_recommendation.aerobic, 300),
-      strength: slice(l.exercise_recommendation.strength, 300),
-    } : null,
-    foods_to_emphasize:            Array.isArray(l.foods_to_emphasize)            ? l.foods_to_emphasize.slice(0, MAX_FOODS).map(s => slice(s, 80))            : [],
-    foods_to_minimize:             Array.isArray(l.foods_to_minimize)             ? l.foods_to_minimize.slice(0, MAX_FOODS).map(s => slice(s, 80))             : [],
-    supplementation_consideration: Array.isArray(l.supplementation_consideration) ? l.supplementation_consideration.slice(0, 10).map(s => slice(s, 80)) : [],
-    disclaimer: NUTRITION_DISCLAIMER, // sempre nosso — overwrite por compliance CRN
-  };
+function sanitizeLifestyle(l, computedNutrition) {
+  // Se LLM não retornou lifestyle mas temos computedNutrition do backend → fallback mínimo
+  if (!l || typeof l !== 'object') {
+    if (computedNutrition) {
+      return {
+        estimated_daily_calories_kcal: computedNutrition.calories,
+        macro_distribution_g: computedNutrition.macros ? {
+          protein: computedNutrition.macros.protein_g,
+          carbs:   computedNutrition.macros.carbs_g,
+          fat:     computedNutrition.macros.fat_g,
+        } : null,
+        disclaimer: NUTRITION_DISCLAIMER,
+      };
+    }
+    return null;
+  }
+
+  const lifestyle = {};
+
+  // Calorias: preferir valor do LLM (clampado), fallback para backend
+  if (Number.isFinite(Number(l.estimated_daily_calories_kcal))) {
+    lifestyle.estimated_daily_calories_kcal = clampInt(l.estimated_daily_calories_kcal, 800, 5000);
+  } else if (computedNutrition) {
+    lifestyle.estimated_daily_calories_kcal = computedNutrition.calories;
+  } else {
+    lifestyle.estimated_daily_calories_kcal = null;
+  }
+
+  // Macros: preferir LLM (clampado), fallback para backend
+  if (l.macro_distribution_g && typeof l.macro_distribution_g === 'object') {
+    lifestyle.macro_distribution_g = {
+      protein: clampInt(l.macro_distribution_g.protein, 0, 500),
+      carbs:   clampInt(l.macro_distribution_g.carbs, 0, 700),
+      fat:     clampInt(l.macro_distribution_g.fat, 0, 250),
+    };
+  } else if (computedNutrition && computedNutrition.macros) {
+    lifestyle.macro_distribution_g = {
+      protein: computedNutrition.macros.protein_g,
+      carbs:   computedNutrition.macros.carbs_g,
+      fat:     computedNutrition.macros.fat_g,
+    };
+  } else {
+    lifestyle.macro_distribution_g = null;
+  }
+
+  lifestyle.hydration_ml_per_day = Number.isFinite(Number(l.hydration_ml_per_day))
+    ? clampInt(l.hydration_ml_per_day, 1500, 4000)
+    : null;
+  lifestyle.meal_timing_suggestion = slice(l.meal_timing_suggestion, 300);
+  lifestyle.exercise_recommendation = l.exercise_recommendation && typeof l.exercise_recommendation === 'object' ? {
+    aerobic:  slice(l.exercise_recommendation.aerobic, 300),
+    strength: slice(l.exercise_recommendation.strength, 300),
+  } : null;
+  lifestyle.foods_to_emphasize            = Array.isArray(l.foods_to_emphasize)            ? l.foods_to_emphasize.slice(0, MAX_FOODS).map(s => slice(s, 80))            : [];
+  lifestyle.foods_to_minimize             = Array.isArray(l.foods_to_minimize)             ? l.foods_to_minimize.slice(0, MAX_FOODS).map(s => slice(s, 80))             : [];
+  lifestyle.supplementation_consideration = Array.isArray(l.supplementation_consideration) ? l.supplementation_consideration.slice(0, 10).map(s => slice(s, 80)) : [];
+
+  // Disclaimer CRN SEMPRE injetado — overwrite qualquer disclaimer do LLM (compliance regulatório)
+  lifestyle.disclaimer = NUTRITION_DISCLAIMER;
+
+  return lifestyle;
 }
 
-function sanitizeRecommendations(raw, profType) {
+function sanitizeRecommendations(raw, profType, computedNutrition) {
   if (!raw || typeof raw !== 'object') return {};
   const treatments = Array.isArray(raw.treatment_protocol)
     ? raw.treatment_protocol.slice(0, MAX_TREATMENTS).map(t => sanitizeTreatment(t, profType)).filter(Boolean)
     : [];
-  const lifestyle = sanitizeLifestyle(raw.lifestyle_recommendations);
+  const lifestyle = sanitizeLifestyle(raw.lifestyle_recommendations, computedNutrition);
   const summary = slice(raw.summary_for_patient, 1500);
   const follow = raw.follow_up_protocol && typeof raw.follow_up_protocol === 'object' ? {
     next_analysis_recommended_in_days: clampInt(raw.follow_up_protocol.next_analysis_recommended_in_days, 7, 365),
@@ -104,7 +146,51 @@ function buildCatalogBlock(availableTreatments) {
   return `\nTRATAMENTOS DISPONÍVEIS NO CATÁLOGO (use APENAS esses; se nada bater, marque o tratamento sugerido como NOVO):\n${lines.join('\n')}\n`;
 }
 
-function buildPrompt({ metrics, subject, professionalType, availableTreatments }) {
+function buildNutritionBlock(aestheticProfile, computedNutrition) {
+  if (!computedNutrition) return '';
+
+  const ap = aestheticProfile || {};
+  const activityLabel = ap.activity_level || 'moderate';
+  const goalsLabel = Array.isArray(ap.goals) && ap.goals.length ? ap.goals.join(', ') : 'wellness';
+  const dietaryLabel = Array.isArray(ap.dietary_restrictions) && ap.dietary_restrictions.length
+    ? ap.dietary_restrictions.join(', ') : 'nenhuma';
+  const allergiesLabel = Array.isArray(ap.allergies) && ap.allergies.length
+    ? ap.allergies.join(', ') : 'nenhuma';
+  const conditionsLabel = Array.isArray(ap.medical_conditions) && ap.medical_conditions.length
+    ? ap.medical_conditions.join(', ') : 'nenhuma';
+
+  const ageLabel = typeof ap.age === 'number' ? ap.age : (typeof ap.age_years === 'number' ? ap.age_years : '?');
+  const sexLabel = ap.sex === 'F' ? 'feminino' : (ap.sex === 'M' ? 'masculino' : '?');
+  const heightLabel = ap.height_cm || ap.altura_cm || '?';
+  const weightLabel = ap.weight_kg || ap.peso_kg || '?';
+
+  const { tmb, calories, macros, primary_goal } = computedNutrition;
+
+  return `
+PERFIL DO PACIENTE (preenchido pelo profissional):
+- Idade: ${ageLabel}, Sexo: ${sexLabel}, Altura: ${heightLabel}cm, Peso: ${weightLabel}kg
+- Nível de atividade: ${activityLabel}
+- Objetivos: ${goalsLabel}
+- Restrições alimentares: ${dietaryLabel}
+- Alergias: ${allergiesLabel}
+- Condições médicas: ${conditionsLabel}
+
+CÁLCULO NUTRICIONAL (Mifflin-St Jeor pré-computado pelo backend — use EXATAMENTE estes valores):
+- TMB basal: ${tmb} kcal/dia
+- Calorias ajustadas (atividade × goal "${primary_goal}"): ${calories} kcal/dia
+- Macros sugeridos: ${macros.protein_g}g proteína, ${macros.carbs_g}g carboidratos, ${macros.fat_g}g gorduras
+
+INSTRUÇÕES NUTRIÇÃO:
+- Use OS NÚMEROS ACIMA exatamente. NÃO recalcule.
+- Sugira 5-8 "foods_to_emphasize" (alimentos a priorizar) considerando dietary_restrictions e alergies.
+- Sugira 3-5 "foods_to_minimize".
+- Sugira hydration_ml_per_day (35ml × peso_kg, mínimo 1500 máximo 4000).
+- Sugira exercise_recommendation com aerobic e strength conforme objetivos.
+- NÃO inclua disclaimer no JSON — ele é adicionado automaticamente pelo backend.
+`;
+}
+
+function buildPrompt({ metrics, subject, professionalType, availableTreatments, aestheticProfile, computedNutrition }) {
   const profile = subject && subject.aesthetic_profile ? subject.aesthetic_profile : {};
   const profStr = professionalType || 'esteticista';
   const restricaoStr = profStr === 'esteticista'
@@ -127,7 +213,10 @@ function buildPrompt({ metrics, subject, professionalType, availableTreatments }
 
   const catalogBlock = buildCatalogBlock(availableTreatments);
 
-  return `Você é um assistente de protocolo estético. Com base nas métricas analisadas e\nno perfil do paciente, recomende protocolo de tratamento.\n\nPROFISSIONAL: ${profStr}\n${restricaoStr}\n\nPACIENTE:\n- ${ageText} anos, ${sexText}\n- fototipo: ${fitzText}\n- altura: ${alturaText} cm, peso: ${pesoText} kg\n- objetivo: ${goalsText}\n- comorbidades: ${comorbidText}\n- medicações: ${medText}\n\nMÉTRICAS DA ANÁLISE:\n${metricsLines}\n${catalogBlock}\nCADA tratamento sugerido DEVE conter:\n- treatment_name (nome canônico do procedimento, ex: "Microagulhamento", "Botox")\n- target_metric (qual métrica visa melhorar)\n- indication_text (2-3 linhas justificando)\n- sessions_recommended (1-20)\n- interval_days (7-365)\n- estimated_total_cost_brl_range [min, max]\n- urgency: "low" | "medium" | "high"\n- expected_outcome (1-2 linhas)\n- contraindications_flagged (lista de flags se houver)\n- requires_medico (true|false)\n\nPara NUTRIÇÃO/ESTILO DE VIDA (orientação geral, NÃO plano terapêutico):\n- estimated_daily_calories_kcal\n- macro_distribution_g: { protein, carbs, fat }\n- hydration_ml_per_day\n- meal_timing_suggestion (1 linha)\n- exercise_recommendation: { aerobic, strength }\n- foods_to_emphasize / foods_to_minimize (listas)\n- supplementation_consideration (lista)\n\nNÃO inclua disclaimer no JSON — eu adiciono automaticamente.\n\nOutput JSON estrito:\n{\n  "treatment_protocol": [...],\n  "lifestyle_recommendations": {...},\n  "summary_for_patient": "<plano resumido em 3-5 linhas>",\n  "follow_up_protocol": { "next_analysis_recommended_in_days": ..., "checkpoint_metrics": [...] }\n}`;
+  // Bloco de nutrição pré-computada (F4) — só presente quando aesthetic_profile foi preenchido
+  const nutritionBlock = buildNutritionBlock(aestheticProfile, computedNutrition);
+
+  return `Você é um assistente de protocolo estético. Com base nas métricas analisadas e\nno perfil do paciente, recomende protocolo de tratamento.\n\nPROFISSIONAL: ${profStr}\n${restricaoStr}\n\nPACIENTE:\n- ${ageText} anos, ${sexText}\n- fototipo: ${fitzText}\n- altura: ${alturaText} cm, peso: ${pesoText} kg\n- objetivo: ${goalsText}\n- comorbidades: ${comorbidText}\n- medicações: ${medText}\n${nutritionBlock}\nMÉTRICAS DA ANÁLISE:\n${metricsLines}\n${catalogBlock}\nCADA tratamento sugerido DEVE conter:\n- treatment_name (nome canônico do procedimento, ex: "Microagulhamento", "Botox")\n- target_metric (qual métrica visa melhorar)\n- indication_text (2-3 linhas justificando)\n- sessions_recommended (1-20)\n- interval_days (7-365)\n- estimated_total_cost_brl_range [min, max]\n- urgency: "low" | "medium" | "high"\n- expected_outcome (1-2 linhas)\n- contraindications_flagged (lista de flags se houver)\n- requires_medico (true|false)\n\nPara NUTRIÇÃO/ESTILO DE VIDA (orientação geral, NÃO plano terapêutico):\n- estimated_daily_calories_kcal\n- macro_distribution_g: { protein, carbs, fat }\n- hydration_ml_per_day\n- meal_timing_suggestion (1 linha)\n- exercise_recommendation: { aerobic, strength }\n- foods_to_emphasize / foods_to_minimize (listas)\n- supplementation_consideration (lista)\n\nNÃO inclua disclaimer no JSON — eu adiciono automaticamente.\n\nOutput JSON estrito:\n{\n  "treatment_protocol": [...],\n  "lifestyle_recommendations": {...},\n  "summary_for_patient": "<plano resumido em 3-5 linhas>",\n  "follow_up_protocol": { "next_analysis_recommended_in_days": ..., "checkpoint_metrics": [...] }\n}`;
 }
 
 function applyCatalogMatching(recommendations, availableTreatments) {
@@ -154,13 +243,13 @@ function applyCatalogMatching(recommendations, availableTreatments) {
   }
 }
 
-async function recommendProtocol({ metrics, subject, professionalType, availableTreatments }) {
+async function recommendProtocol({ metrics, subject, professionalType, availableTreatments, aestheticProfile, computedNutrition }) {
   let response;
   try {
     response = await client.messages.create({
       model: MODELS.CLINICAL_PREMIUM,
       max_tokens: 2500,
-      messages: [{ role: 'user', content: buildPrompt({ metrics, subject, professionalType, availableTreatments }) }],
+      messages: [{ role: 'user', content: buildPrompt({ metrics, subject, professionalType, availableTreatments, aestheticProfile, computedNutrition }) }],
     });
   } catch (err) {
     throw Object.assign(new Error(`Anthropic call failed: ${err.message}`), { code: 'ANTHROPIC_FAIL', cause: err });
@@ -175,7 +264,8 @@ async function recommendProtocol({ metrics, subject, professionalType, available
     throw Object.assign(new Error('BAD_LLM_OUTPUT'), { code: 'BAD_LLM_OUTPUT', raw: rawText.slice(0, 500) });
   }
 
-  const recommendations = sanitizeRecommendations(parsed, professionalType);
+  // sanitizeRecommendations recebe computedNutrition pra usar como fallback no lifestyle
+  const recommendations = sanitizeRecommendations(parsed, professionalType, computedNutrition);
 
   // Post-process: match treatment names → catalog IDs (F3 — exact match, case-insensitive + trim)
   applyCatalogMatching(recommendations, availableTreatments);
