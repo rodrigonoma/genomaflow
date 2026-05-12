@@ -1,11 +1,31 @@
 'use strict';
 
-const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const fs = require('fs');
+const path = require('path');
+const { PDFDocument, rgb } = require('pdf-lib');
+const fontkit = require('@pdf-lib/fontkit');
+
+const FONT_REGULAR_PATH = path.join(__dirname, '..', 'assets', 'fonts', 'Roboto-Regular.ttf');
+const FONT_BOLD_PATH = path.join(__dirname, '..', 'assets', 'fonts', 'Roboto-Bold.ttf');
+
+// Module-level cache so we don't re-read from disk on every call
+let _fontBufRegular = null;
+let _fontBufBold = null;
+
+function getFontBuf(which) {
+  if (which === 'regular') {
+    if (!_fontBufRegular) _fontBufRegular = fs.readFileSync(FONT_REGULAR_PATH);
+    return _fontBufRegular;
+  }
+  if (!_fontBufBold) _fontBufBold = fs.readFileSync(FONT_BOLD_PATH);
+  return _fontBufBold;
+}
 
 async function buildAnalysisPDF({ tenant, subject, analysis, metrics, treatments, lifestyle } = {}) {
   const doc = await PDFDocument.create();
-  const helvetica = await doc.embedFont(StandardFonts.Helvetica);
-  const helveticaBold = await doc.embedFont(StandardFonts.HelveticaBold);
+  doc.registerFontkit(fontkit);
+  const helvetica = await doc.embedFont(getFontBuf('regular'));
+  const helveticaBold = await doc.embedFont(getFontBuf('bold'));
 
   let page = doc.addPage([595, 842]); // A4 portrait
   const { width, height } = page.getSize();
@@ -35,8 +55,8 @@ async function buildAnalysisPDF({ tenant, subject, analysis, metrics, treatments
   };
 
   // Header
-  draw('PROTOCOLO ESTETICO — GenomaFlow', { bold: true, size: 16 });
-  draw(`${tenant?.name || 'Clinica'}`, { size: 10, color: rgb(0.4, 0.4, 0.5) });
+  draw('PROTOCOLO ESTÉTICO — GenomaFlow', { bold: true, size: 16 });
+  draw(`${tenant?.name || 'Clínica'}`, { size: 10, color: rgb(0.4, 0.4, 0.5) });
   hr();
 
   // Patient
@@ -47,16 +67,16 @@ async function buildAnalysisPDF({ tenant, subject, analysis, metrics, treatments
   hr();
 
   // Analysis
-  draw('Analise', { bold: true, size: 12 });
+  draw('Análise', { bold: true, size: 12 });
   draw(`Tipo: ${analysis?.analysis_type || '—'}`);
   if (analysis?.completed_at) {
-    draw(`Concluida: ${new Date(analysis.completed_at).toLocaleString('pt-BR')}`);
+    draw(`Concluída: ${new Date(analysis.completed_at).toLocaleString('pt-BR')}`);
   }
   hr();
 
   // Metrics (top 12)
   if (metrics && typeof metrics === 'object') {
-    draw('Metricas (score 0-100)', { bold: true, size: 12 });
+    draw('Métricas (score 0-100)', { bold: true, size: 12 });
     const entries = Object.entries(metrics)
       .filter(([, v]) => v && typeof v === 'object' && typeof v.score === 'number')
       .sort((a, b) => b[1].score - a[1].score)
@@ -74,9 +94,9 @@ async function buildAnalysisPDF({ tenant, subject, analysis, metrics, treatments
     for (const tx of treatments) {
       ensure(60);
       draw(`${tx.treatment_name}`, { bold: true });
-      if (tx.indication_text) draw(`  Indicacao: ${tx.indication_text}`, { size: 10 });
+      if (tx.indication_text) draw(`  Indicação: ${tx.indication_text}`, { size: 10 });
       if (tx.sessions_recommended != null) {
-        draw(`  Sessoes: ${tx.sessions_recommended} (intervalo ${tx.interval_days || '?'} dias)`, { size: 10 });
+        draw(`  Sessões: ${tx.sessions_recommended} (intervalo ${tx.interval_days || '?'} dias)`, { size: 10 });
       }
       if (tx.cost_estimate_brl_min != null && tx.cost_estimate_brl_max != null) {
         draw(`  Custo estimado: R$ ${tx.cost_estimate_brl_min} – R$ ${tx.cost_estimate_brl_max}`, { size: 10 });
@@ -89,13 +109,13 @@ async function buildAnalysisPDF({ tenant, subject, analysis, metrics, treatments
 
   // Lifestyle
   if (lifestyle) {
-    draw('Orientacoes de Estilo de Vida', { bold: true, size: 12 });
+    draw('Orientações de Estilo de Vida', { bold: true, size: 12 });
     if (lifestyle.calories) draw(`Calorias: ${lifestyle.calories} kcal/dia`);
     if (lifestyle.macros) {
       draw(`Macros: P ${lifestyle.macros.protein_g}g · C ${lifestyle.macros.carbs_g}g · F ${lifestyle.macros.fat_g}g`);
     }
-    if (lifestyle.hydration_ml) draw(`Hidratacao: ${lifestyle.hydration_ml} ml/dia`);
-    if (lifestyle.exercise_minutes) draw(`Exercicio: ${lifestyle.exercise_minutes} min/dia`);
+    if (lifestyle.hydration_ml) draw(`Hidratação: ${lifestyle.hydration_ml} ml/dia`);
+    if (lifestyle.exercise_minutes) draw(`Exercício: ${lifestyle.exercise_minutes} min/dia`);
     if (lifestyle.foods?.to_emphasize?.length) {
       ensure(40);
       draw('Alimentos recomendados:', { bold: true, size: 10 });
@@ -115,12 +135,12 @@ async function buildAnalysisPDF({ tenant, subject, analysis, metrics, treatments
 
   // Disclaimer
   ensure(120);
-  draw('DISCLAIMER REGULATORIO', { bold: true, size: 10, color: rgb(0.5, 0.1, 0.1) });
+  draw('DISCLAIMER REGULATÓRIO', { bold: true, size: 10, color: rgb(0.5, 0.1, 0.1) });
   const disclaimer = [
-    'Sugestoes geradas por IA tem carater informativo. Decisao clinica e prescricao',
-    'sao responsabilidade do profissional habilitado (CFM/CFE/CRN).',
-    'Orientacoes de estilo de vida NAO substituem consulta com nutricionista (CRN).',
-    'Procedimentos medicos exigem avaliacao medica presencial.',
+    'Sugestões geradas por IA têm caráter informativo. Decisão clínica e prescrição',
+    'são responsabilidade do profissional habilitado (CFM/CFE/CRN).',
+    'Orientações de estilo de vida NÃO substituem consulta com nutricionista (CRN).',
+    'Procedimentos médicos exigem avaliação médica presencial.',
   ];
   for (const line of disclaimer) {
     draw(line, { size: 9, color: rgb(0.3, 0.3, 0.4) });
@@ -128,7 +148,7 @@ async function buildAnalysisPDF({ tenant, subject, analysis, metrics, treatments
 
   // Footer
   ensure(40);
-  draw('Documento gerado pelo GenomaFlow — sistema de gestao clinica multimodulo', { size: 8, color: rgb(0.5, 0.5, 0.55) });
+  draw('Documento gerado pelo GenomaFlow — sistema de gestão clínica multimódulo', { size: 8, color: rgb(0.5, 0.5, 0.55) });
   draw(`Emitido em ${new Date().toLocaleString('pt-BR')}`, { size: 8, color: rgb(0.5, 0.5, 0.55) });
 
   return Buffer.from(await doc.save());

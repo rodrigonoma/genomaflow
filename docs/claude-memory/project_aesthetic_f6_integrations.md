@@ -32,17 +32,15 @@ Fase final da plataforma aesthetic. Não traz feature nova de IA — costura tud
 | Agenda quick-create | `apps/web/src/app/features/agenda/quick-create-dialog.component.ts` | Aceita `preset_appointment_type`, `preset_subject_id`, `preset_notes` (additive backward-compat). Constructor pré-popula. |
 | analysis-result | `apps/web/src/app/features/aesthetic/components/analysis-result.component.ts` | `onScheduleTreatment` abre `QuickCreateDialogComponent` pré-preenchida com `procedimento_estetico` + notes referenciando `treatment_name`, `treatment_id`, `analysis.id`. Novo botão "Baixar PDF" via HttpClient blob + anchor programático. |
 | encounter-form | `apps/web/src/app/features/encounters/encounter-form.component.ts` | @Input module estendido para incluir 'estetica'. Dropdown "Análise estética vinculada" renderizado APENAS module=='estetica'. Fetcha GET /aesthetic/analyses?subject_id. Submit payload inclui `related_aesthetic_analysis_id`. |
+| PDF service (TODO#1 fix) | `apps/api/src/services/aesthetic-pdf-export.js` | Roboto TTF embarcado via fontkit para Unicode correto — todos os acentos PT-BR renderizados nativamente no PDF. |
 
-## Limitação conhecida — PDF UTF-8
+## PDF UTF-8 — Resolvido (2026-05-11)
 
-`pdf-lib` Helvetica é WinAnsi (latin-1), não UTF-8. Caracteres acentuados são substituídos por equivalentes ASCII no PDF gerado:
-- "Análise" → "Analise"
-- "Métricas" → "Metricas"
-- "Médico" → "Medico"
-
-**Por que aceitamos:** funciona, é legível, evita complexidade de empacotar font UTF-8 (Roboto/NotoSans precisariam fontkit + arquivo .ttf no repo).
-
-**Plano para resolver:** F6.5+ (futuro) — embed Roboto-Regular.ttf via fontkit; adiciona ~150KB ao bundle do api Docker mas resolve definitivamente. Tracking: TODO ao final desta memória.
+`@pdf-lib/fontkit` + Roboto-Regular.ttf / Roboto-Bold.ttf embarcados via `apps/api/src/assets/fonts/`.
+Todos os caracteres PT-BR acentuados rendem corretamente no PDF:
+- "Análise", "Métricas", "Concluída", "Orientações", "Hidratação", "Sessões", etc.
+- Fontes carregadas na inicialização do módulo com cache em memória (sem re-read em cada request).
+- TTFs: ~503KB cada; branch `feat/aesthetic-todo-01-pdf-utf8` → merged em main.
 
 ## Pipeline atualizado F1→F6 (completo)
 
@@ -103,7 +101,6 @@ Fase final da plataforma aesthetic. Não traz feature nova de IA — costura tud
 
 ## TODOs / Futuro
 
-- **PDF UTF-8 font**: embed Roboto-Regular.ttf via fontkit (F6.5 polish).
 - **Timeline deep-link**: `openAesthetic(id)` em timeline-panel é stub (console.log). Router navigate + lazy load do componente analysis-result quando deep-link existir.
 - **PDF preview no frontend**: hoje download direto. Poderia abrir em modal iframe.
 - **Encounter sugestão automática**: ao criar encounter sem related_id mas com aesthetic_analyses recente, sugerir vínculo (UX).

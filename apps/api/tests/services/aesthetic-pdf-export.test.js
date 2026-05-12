@@ -76,4 +76,24 @@ describe('buildAnalysisPDF', () => {
     // Com 15 tratamentos o PDF deve ser maior que um PDF minimalista
     expect(buf.length).toBeGreaterThan(2000);
   });
+
+  test('renderiza UTF-8 acentuado sem throw', async () => {
+    const buf = await buildAnalysisPDF({
+      tenant: { name: 'Clínica Estética Ltda' },
+      subject: { name: 'Maria Conceição', sex: 'F' },
+      analysis: { id: 'a1', analysis_type: 'facial' },
+      metrics: { rugas: { score: 70 }, manchas_solares: { score: 60 } },
+      lifestyle: {
+        hydration_ml: 2000,
+        foods: {
+          to_emphasize: ['Abóbora', 'Açaí'],
+          to_minimize: ['Açúcar', 'Álcool'],
+        },
+      },
+    });
+    expect(buf).toBeInstanceOf(Buffer);
+    expect(buf.slice(0, 4).toString()).toBe('%PDF');
+    // Roboto TTF é embutido no PDF — arquivo fica bem maior que o antigo Helvetica (referência ~2KB)
+    expect(buf.length).toBeGreaterThan(50000);
+  });
 });
