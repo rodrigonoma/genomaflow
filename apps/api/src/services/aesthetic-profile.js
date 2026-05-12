@@ -13,6 +13,17 @@ function clampNumber(v, min, max) {
   return Math.min(max, Math.max(min, n));
 }
 
+/**
+ * Rejects values outside [min, max] strictly — does NOT silently clamp.
+ * Returns null for non-finite or out-of-range inputs.
+ */
+function strictRange(v, min, max) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  if (n < min || n > max) return null;
+  return n;
+}
+
 function sanitizeStringArray(v, maxItems, maxLen) {
   if (!Array.isArray(v)) return [];
   return v
@@ -21,23 +32,56 @@ function sanitizeStringArray(v, maxItems, maxLen) {
     .slice(0, maxItems);
 }
 
+/**
+ * Ranges padrão (adultos): altura 140-220, peso 35-200, idade 12-100.
+ * Com allow_extreme_ranges=true: altura 100-230, peso 25-300, idade 5-110.
+ * Usa rejeição estrita (não clamp silencioso) para não falsificar dados clínicos.
+ */
 function validate(body) {
   if (!body || typeof body !== 'object') return { error: 'body obrigatório' };
+  const allowExtreme = body.allow_extreme_ranges === true;
+  const warnings = [];
   const out = {};
 
   if (body.height_cm != null) {
-    out.height_cm = clampNumber(body.height_cm, 140, 220);
-    if (out.height_cm == null) return { error: 'height_cm inválido (140-220cm)' };
+    const lo = allowExtreme ? 100 : 140;
+    const hi = allowExtreme ? 230 : 220;
+    const n = strictRange(body.height_cm, lo, hi);
+    if (n == null) {
+      return { error: allowExtreme ? 'height_cm inválido (100-230cm)' : 'height_cm inválido (140-220cm)' };
+    }
+    out.height_cm = n;
+    if (allowExtreme && (n < 140 || n > 220)) {
+      warnings.push('Altura fora da faixa adulta padrão (140-220cm).');
+    }
   }
+
   if (body.weight_kg != null) {
-    out.weight_kg = clampNumber(body.weight_kg, 35, 200);
-    if (out.weight_kg == null) return { error: 'weight_kg inválido (35-200kg)' };
+    const lo = allowExtreme ? 25 : 35;
+    const hi = allowExtreme ? 300 : 200;
+    const n = strictRange(body.weight_kg, lo, hi);
+    if (n == null) {
+      return { error: allowExtreme ? 'weight_kg inválido (25-300kg)' : 'weight_kg inválido (35-200kg)' };
+    }
+    out.weight_kg = n;
+    if (allowExtreme && (n < 35 || n > 200)) {
+      warnings.push('Peso fora da faixa adulta padrão (35-200kg) — TMB Mifflin-St Jeor pode não ser preciso.');
+    }
   }
+
   if (body.age != null) {
-    const n = clampNumber(body.age, 12, 100);
-    if (n == null) return { error: 'age inválido (12-100)' };
+    const lo = allowExtreme ? 5 : 12;
+    const hi = allowExtreme ? 110 : 100;
+    const n = strictRange(body.age, lo, hi);
+    if (n == null) {
+      return { error: allowExtreme ? 'age inválido (5-110)' : 'age inválido (12-100)' };
+    }
     out.age = Math.round(n);
+    if (allowExtreme && (out.age < 12 || out.age > 100)) {
+      warnings.push('Idade fora da faixa adulta padrão (12-100) — TMB Mifflin-St Jeor é otimizado para adultos.');
+    }
   }
+
   if (body.sex !== undefined) {
     if (!VALID_SEX.has(body.sex)) return { error: 'sex inválido (F|M)' };
     out.sex = body.sex;
@@ -57,7 +101,11 @@ function validate(body) {
     if (!Array.isArray(body.dietary_restrictions)) return { error: 'dietary_restrictions deve ser array' };
     out.dietary_restrictions = body.dietary_restrictions.filter(d => VALID_DIETARY.has(d)).slice(0, 10);
   }
-  return { profile: out };
+
+  // Persist opt-in flag inside JSONB so GET responses and UI can show badge
+  if (allowExtreme) out.extreme_ranges_used = true;
+
+  return { profile: out, warnings: warnings.length ? warnings : undefined };
 }
 
 async function get(pg, tenantId, subjectId) {

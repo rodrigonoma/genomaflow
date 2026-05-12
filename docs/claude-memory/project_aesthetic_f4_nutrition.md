@@ -104,8 +104,9 @@ Shape do JSONB (validado na camada de aplicação):
 - API: +13 (aesthetic-tmb service) +15 (aesthetic-profile routes) +4 (history route) = 32 novos. Total 803 verdes.
 - Worker: +12 (lib/tmb) +7 (recommender lifestyle) +2 (processor profile fetch) = 21 novos. Total 160 verdes.
 - Web: +7 (profile form) +2 (history: toggleHistory + diffSummary) = 9 novos. Total 192 verdes.
+- TODO#13 (extreme ranges): +8 novos testes em aesthetic-profile.test.js. Total API 815 verdes.
 
-**~62 testes novos acumulados, 0 regressões.**
+**~70 testes novos acumulados, 0 regressões.**
 
 ## Multi-módulo zero quebra
 
@@ -114,9 +115,29 @@ Shape do JSONB (validado na camada de aplicação):
 - Aba "Perfil Estético" só visível com `module === 'estetica'`.
 - Worker fetch é try/catch — se profile vazio, recommender opera em modo F3 puro (só catálogo, sem nutrição).
 
+## TODO#13 — Extreme Ranges Flag (entregue 2026-05-11, branch feat/aesthetic-todo-13-tmb-extreme)
+
+`PUT /aesthetic/profile` aceita `allow_extreme_ranges: true` no body para expandir os limites de validação:
+
+| Campo | Range padrão | Range extremo |
+|---|---|---|
+| height_cm | 140-220 cm | 100-230 cm |
+| weight_kg | 35-200 kg | 25-300 kg |
+| age | 12-100 | 5-110 |
+
+**Comportamento:**
+- Sem flag: ranges padrão, rejeição estrita (não clamp silencioso — mudança de comportamento vs clampNumber)
+- Com flag: ranges expandidos + warnings PT-BR descrevendo cada campo fora da faixa adulta padrão
+- `extreme_ranges_used: true` é persistido no JSONB (`aesthetic_profile`) — GETs futuros expõem a flag, UI pode mostrar badge
+- Resposta PUT sempre inclui `warnings: string[]` (array vazio se sem avisos)
+
+**Mudança de comportamento importante:** a refatoração de `clampNumber` → `strictRange` significa que valores como `weight_kg=30` agora retornam 400 em vez de ser silenciosamente clampados para 35. Isso é correto — não falsificar dados clínicos.
+
+**Frontend:** deferred (TODO#13 é só backend). UI ainda não renderiza warnings nem badge de extreme_ranges_used.
+
 ## Limitações honestas
 
-- **Ranges clinicamente conservadores** (peso 35-200, altura 140-220, idade 12-100). Casos extremos (atleta de elite, criança, idoso obeso) podem precisar override manual — não implementado.
+- **Ranges extremos exigem flag explícita** (`allow_extreme_ranges: true`). Default mantém ranges conservadores adultos. UI frontend ainda não implementa o toggle (deferred).
 - **Mifflin-St Jeor é estimativa**: precisão clínica real exige calorimetria indireta. UI deixa claro que é estimativa.
 - **CRN: orientações qualitativas apenas**: foods to_emphasize/to_minimize são sugestões gerais, não prescrição de plano alimentar. Disclaimer reforça.
 - **Histórico de profile implementado (TODO#8, 2026-05-11)**: `GET /aesthetic/profile/:id/history` filtra `audit_log` por `entity_type='subjects'` + `changed_fields @> ARRAY['aesthetic_profile']`. Retorna lista cronológica com `actor_email`, `aesthetic_profile_before/after`. Frontend: painel expansível "Ver histórico de mudanças" no `aesthetic-profile-form` com `diffSummary()` que humaniza campos alterados.

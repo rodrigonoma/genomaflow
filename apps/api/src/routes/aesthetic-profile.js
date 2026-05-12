@@ -19,7 +19,7 @@ module.exports = async function (fastify) {
     preHandler: [fastify.authenticate, requireEsteticaModule],
     config: { rateLimit: { max: 30, timeWindow: '1 hour' } },
   }, async (request, reply) => {
-    const { error, profile } = profileService.validate(request.body || {});
+    const { error, profile, warnings } = profileService.validate(request.body || {});
     if (error) return reply.status(400).send({ error });
     const updated = await profileService.update(
       fastify.pg, request.user.tenant_id, request.user.user_id,
@@ -27,7 +27,7 @@ module.exports = async function (fastify) {
     );
     if (!updated) return reply.status(404).send({ error: 'Paciente não encontrado' });
     const computed = computeAll(updated.aesthetic_profile);
-    return reply.send({ profile: updated.aesthetic_profile, computed });
+    return reply.send({ profile: updated.aesthetic_profile, computed, warnings: warnings || [] });
   });
 
   fastify.get('/profile/:subject_id/history', {

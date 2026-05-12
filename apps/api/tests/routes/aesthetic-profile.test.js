@@ -253,6 +253,112 @@ describe('PUT /aesthetic/profile/:subject_id', () => {
   });
 });
 
+// ─── PUT /aesthetic/profile — extreme ranges (TODO#13) ────────────────────────
+
+describe('PUT /aesthetic/profile — extreme ranges', () => {
+  test('400 weight_kg=30 sem flag (fora do range padrão 35-200)', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/aesthetic/profile/sub1',
+      payload: { weight_kg: 30 },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/weight_kg.*35-200/i);
+  });
+
+  test('200 weight_kg=30 COM allow_extreme_ranges → persiste 30, warning PT-BR', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/aesthetic/profile/sub1',
+      payload: { weight_kg: 30, allow_extreme_ranges: true },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.profile.weight_kg).toBe(30);
+    expect(body.profile.extreme_ranges_used).toBe(true);
+    expect(body.warnings).toBeInstanceOf(Array);
+    expect(body.warnings.length).toBeGreaterThan(0);
+    expect(body.warnings[0]).toMatch(/peso.*faixa.*padrão/i);
+  });
+
+  test('400 weight_kg=20 COM flag (fora do extreme range 25-300)', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/aesthetic/profile/sub1',
+      payload: { weight_kg: 20, allow_extreme_ranges: true },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/weight_kg.*25-300/i);
+  });
+
+  test('200 weight_kg=70 COM flag → sem warning (peso dentro da faixa padrão)', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/aesthetic/profile/sub1',
+      payload: { weight_kg: 70, allow_extreme_ranges: true },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.profile.weight_kg).toBe(70);
+    expect(body.profile.extreme_ranges_used).toBe(true);
+    expect(body.warnings).toEqual([]);
+  });
+
+  test('200 age=8 COM flag → warning de idade', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/aesthetic/profile/sub1',
+      payload: { age: 8, allow_extreme_ranges: true },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.profile.age).toBe(8);
+    expect(body.warnings.some(w => /idade.*faixa.*padrão/i.test(w))).toBe(true);
+  });
+
+  test('200 height_cm=120 COM flag → warning de altura', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/aesthetic/profile/sub1',
+      payload: { height_cm: 120, allow_extreme_ranges: true },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.profile.height_cm).toBe(120);
+    expect(body.warnings.some(w => /altura.*faixa.*padrão/i.test(w))).toBe(true);
+  });
+
+  test('400 height_cm=120 SEM flag (fora do range padrão 140-220)', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/aesthetic/profile/sub1',
+      payload: { height_cm: 120 },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/height_cm.*140-220/i);
+  });
+
+  test('200 sem flag → warnings array vazio na resposta', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/aesthetic/profile/sub1',
+      payload: { sex: 'F', height_cm: 165, weight_kg: 65, age: 30 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.warnings).toEqual([]);
+    expect(body.profile.extreme_ranges_used).toBeUndefined();
+  });
+});
+
 // ─── GET /aesthetic/profile/:subject_id/history ───────────────────────────────
 
 describe('GET /aesthetic/profile/:subject_id/history', () => {
