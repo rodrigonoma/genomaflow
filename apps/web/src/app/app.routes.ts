@@ -68,6 +68,13 @@ export const routes: Routes = [
         .then(m => m.MasterTreatmentCatalogComponent)
   },
   {
+    path: 'master/aesthetic-suggestions',
+    canActivate: [authGuard, masterGuard],
+    loadComponent: () =>
+      import('./features/aesthetic/components/master/master-treatment-suggestions.component')
+        .then(m => m.MasterTreatmentSuggestionsComponent)
+  },
+  {
     // Impersonate launch — recebe token via query param e salva em sessionStorage.
     // Sem authGuard pq nesse momento ainda não tem sessão; o componente cria.
     path: 'impersonate-launch',

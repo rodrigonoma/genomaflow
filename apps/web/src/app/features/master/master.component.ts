@@ -230,6 +230,10 @@ interface Stats {
         <span class="nav-icon material-icons">spa</span>
         Catálogo Estética
       </div>
+      <div class="nav-item" (click)="goToAestheticSuggestions()">
+        <span class="nav-icon material-icons">auto_awesome</span>
+        Sugestões IA
+      </div>
     </div>
 
     <!-- Main content -->
@@ -1259,6 +1263,11 @@ export class MasterComponent implements OnInit {
   /** Navega para o catálogo global de tratamentos estéticos */
   goToAestheticCatalog(): void {
     this.router.navigate(['/master/aesthetic-catalog']);
+  }
+
+  /** Navega para a fila de revisão de sugestões IA de tratamentos estéticos */
+  goToAestheticSuggestions(): void {
+    this.router.navigate(['/master/aesthetic-suggestions']);
   }
 
   /** Abre modal de detalhe de um erro (stack trace, body, user-agent, contexto) */
