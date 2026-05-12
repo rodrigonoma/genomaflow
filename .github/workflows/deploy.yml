@@ -58,12 +58,12 @@ jobs:
   # Bug 2026-05-12 PUT /aesthetic/profile 500 (column updated_at) teria sido
   # capturado aqui antes do deploy.
   integration:
-    name: Integration tests (Postgres real) [WIP — não bloqueia deploy]
+    name: Integration tests (Postgres real)
     runs-on: ubuntu-latest
-    # WIP: contrato CI ↔ app boot ainda em estabilização (6 iterações bootstrap).
-    # continue-on-error: true permite que o job rode + revele bugs sem bloquear
-    # deploy. Reverter pra obrigatório quando boot estável.
-    continue-on-error: true
+    # GATE OBRIGATÓRIO desde 2026-05-12: bug ref_id em credit_ledger
+    # (4º bug schema do dia) seria pego aqui se o gate estivesse on.
+    # Estabilizado via: migrations FORA do Jest + pluginTimeout 0 em test +
+    # beforeAll/jest.setTimeout 180s + Postgres+Redis service containers.
     services:
       postgres:
         image: pgvector/pgvector:pg15
@@ -115,11 +115,9 @@ jobs:
         run: npm run test:integration
 
   deploy:
-    # integration removido temporariamente — em estabilização (test runner trava
-    # boot do app no CI cold start mesmo com pluginTimeout=0, Jest beforeAll
-    # default 60s aborta antes). Reabilitar quando contrato CI ↔ app estável.
-    # Detalhes: docs/claude-memory/feedback_ci_integration_setup.md
-    needs: [test]
+    # Gate obrigatório: BOTH test (unit + ng build prod) AND integration
+    # (Postgres real + smoke aesthetic mutations) precisam passar.
+    needs: [test, integration]
     runs-on: ubuntu-latest
     environment: production
 

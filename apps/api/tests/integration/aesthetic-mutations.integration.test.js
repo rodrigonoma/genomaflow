@@ -32,10 +32,17 @@ const {
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'integration-test-secret';
 const app = require('../../src/server');
 
+// Cold boot do Fastify no CI excede 60s (50+ rotas, pg pool, redis pubsub
+// subscribe, JWT plugin). Aumentado pra 180s — em prod o boot é instantâneo.
+jest.setTimeout(180_000);
+
 let ctx; // { tenantId, adminUserId, subjectId }
 let adminToken;
 
 beforeAll(async () => {
+  // CI: migrations já aplicadas no step `apply migrations` antes do Jest
+  //     (workflow deploy.yml). runMigrations() aqui é no-op idempotente.
+  // Local dev: aplica em ordem se ainda não tiver.
   await runMigrations();
   await app.ready();
   ctx = await seedAestheticTenant();
@@ -45,7 +52,7 @@ beforeAll(async () => {
     role: 'admin',
     module: 'estetica',
   });
-}, 60_000);
+}, 180_000);
 
 afterAll(async () => {
   await teardownAestheticTenant();
@@ -168,6 +175,56 @@ describe('POST /aesthetic/consent — schema + audit trigger reais', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.reinforced_regions).toEqual(expect.arrayContaining(['breast']));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /aesthetic/photos + /aesthetic/analyses — REGRESSION GUARD bug 2026-05-12
+// (credit_ledger.ref_id schema mismatch — bug 4 do dia)
+// ---------------------------------------------------------------------------
+
+describe('POST /aesthetic/analyses — credit_ledger.ref_id schema (regression)', () => {
+  test('debit créditos não retorna 500 (regression ref_id)', async () => {
+    // Pre-requisito: tenant precisa ter saldo de créditos. Cria via INSERT direto
+    // pra não depender de Stripe checkout.
+    const { getPool } = require('./setup');
+    const pool = getPool();
+    await pool.query(
+      `INSERT INTO credit_ledger (tenant_id, amount, kind, description)
+       VALUES ($1, 100, 'adjustment', 'integration test seed')`,
+      [ctx.tenantId]
+    );
+
+    // Upload uma foto via path direto no DB (não vamos testar S3 aqui — só
+    // a chain photos → analyses para pegar bug ref_id).
+    const photoId = require('crypto').randomUUID();
+    await pool.query(
+      `INSERT INTO aesthetic_photos (id, tenant_id, subject_id, user_id, photo_type, s3_key, is_sensitive)
+       VALUES ($1, $2, $3, $4, 'facial_front', $5, false)`,
+      [photoId, ctx.tenantId, ctx.subjectId, ctx.adminUserId, `test/${photoId}.jpg`]
+    );
+
+    // Registrar consent operacional (pre-flight do POST /analyses)
+    await supertest(app.server)
+      .post('/api/aesthetic/consent')
+      .set(auth())
+      .send({ subject_id: ctx.subjectId, reinforced_regions: [] });
+
+    const res = await supertest(app.server)
+      .post('/api/aesthetic/analyses')
+      .set(auth())
+      .send({
+        analysis_type: 'facial',
+        subject_id: ctx.subjectId,
+        photo_ids: [photoId],
+      });
+
+    // 500 com 'column "ref_id" of relation "credit_ledger" does not exist'
+    // era o bug. Agora deve ser 201 com analysis_id + status pending.
+    expect(res.status).toBe(201);
+    expect(res.body.analysis_id).toBeDefined();
+    expect(res.body.status).toBe('pending');
+    expect(res.body.credits_charged).toBeGreaterThan(0);
   });
 });
 

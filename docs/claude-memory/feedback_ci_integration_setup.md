@@ -13,9 +13,17 @@ em 2026-05-12 pra pegar bugs como o `updated_at` que rotas unit-mocked
 não cobrem. Bootstrap inicial teve 6 iterações antes de revelar que o
 boot do app no CI cold start excede o `beforeAll` default do Jest (60s).
 
-Status atual: **job `integration` rodando como `continue-on-error: true`**
-— não bloqueia deploy mas executa + reporta falhas. Reabilitar como
-gate obrigatório quando boot estável.
+Status atual: **GATE OBRIGATÓRIO** desde 2026-05-12 — `needs: [test, integration]`
+no deploy job. Estabilizado via:
+- migrations FORA do Jest (step CI separado)
+- `pluginTimeout: 0` em NODE_ENV=test (Fastify server.js)
+- `beforeAll` + `jest.setTimeout` 180s no integration suite
+- Postgres + Redis service containers
+
+Bugs schema/SQL futuros são pegos antes de chegar em prod.
+Bug 4 do 2026-05-12 (`ref_id` em credit_ledger) foi a gota — passou pelos
+9 testes unitários mockados + Camada 1 (production build) e só explodiu
+em prod. Camada 2 obrigatória previne classe inteira.
 
 ## Iterações já validadas
 
@@ -116,6 +124,6 @@ Cobertura desejável (em ordem de criticidade):
 
 ## Decisão atual
 
-`integration` job está como `continue-on-error: true` + removido de `needs:` do deploy. Reabilitar como gate obrigatório quando iteração 7 estabilizar boot.
+`integration` job é gate obrigatório desde 2026-05-12. Deploy só passa se Camada 1 (unit tests + ng build prod) E Camada 2 (Postgres real + smoke aesthetic) passarem.
 
 **Não regredir os fixes já aplicados** — eles são necessários para qualquer cenário de integration test, mesmo após a estabilização final do boot.
