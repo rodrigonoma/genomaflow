@@ -118,9 +118,11 @@ async function get(pg, tenantId, subjectId) {
 
 async function update(pg, tenantId, userId, subjectId, profile) {
   return withTenant(pg, tenantId, async (client) => {
+    // updated_at vai dentro do JSONB porque a tabela subjects NÃO tem coluna
+    // updated_at própria (migration 003 só tem created_at).
     const enriched = { ...profile, updated_at: new Date().toISOString() };
     const { rows } = await client.query(
-      `UPDATE subjects SET aesthetic_profile = $1, updated_at = NOW()
+      `UPDATE subjects SET aesthetic_profile = $1::jsonb
        WHERE id = $2 AND tenant_id = $3
        RETURNING id, aesthetic_profile`,
       [JSON.stringify(enriched), subjectId, tenantId]

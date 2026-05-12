@@ -409,3 +409,31 @@ describe('GET /aesthetic/profile/:subject_id/history', () => {
     expect(body.items).toEqual([]);
   });
 });
+
+// Source inspection — prevenção de regressão para bug 2026-05-12:
+// UPDATE original incluía `updated_at = NOW()` mas tabela `subjects` (migration 003)
+// não tem coluna updated_at — só created_at. Em prod, query falhava com
+// 'column updated_at does not exist' → 500. Tests mockam pg.query e não pegam.
+describe('aesthetic-profile.js update() SQL — regression guard (2026-05-12)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const SOURCE = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'src', 'services', 'aesthetic-profile.js'),
+    'utf8'
+  );
+
+  test('UPDATE NÃO referencia coluna updated_at em subjects', () => {
+    // subjects.updated_at NÃO existe — updated_at vai dentro do JSONB
+    expect(SOURCE).not.toMatch(/UPDATE subjects[\s\S]*?updated_at\s*=\s*NOW\(\)/);
+  });
+
+  test('updated_at é gravado dentro do JSONB aesthetic_profile', () => {
+    // Persiste timestamp dentro do JSONB pra UI mostrar última edição
+    expect(SOURCE).toMatch(/enriched\s*=\s*\{[\s\S]*?updated_at:/);
+  });
+
+  test('JSONB cast explícito $1::jsonb', () => {
+    // Postgres JSONB columns precisam de cast quando o param é string JSON
+    expect(SOURCE).toMatch(/aesthetic_profile\s*=\s*\$1::jsonb/);
+  });
+});
