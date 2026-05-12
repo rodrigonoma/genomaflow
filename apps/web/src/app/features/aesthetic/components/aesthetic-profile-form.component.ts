@@ -6,11 +6,13 @@ import {
   input,
   signal,
 } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
   AestheticProfileService,
   AestheticProfile,
   ComputedNutrition,
+  ProfileHistoryEntry,
   ACTIVITY_LEVELS,
   GOAL_OPTIONS,
   DIETARY_OPTIONS,
@@ -20,7 +22,7 @@ import {
   selector: 'app-aesthetic-profile-form',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule],
+  imports: [FormsModule, DatePipe],
   styles: [`
     :host {
       display: block;
@@ -265,7 +267,99 @@ import {
     .form-footer {
       display: flex;
       justify-content: flex-end;
+      align-items: center;
+      gap: 1rem;
       padding-top: 0.5rem;
+    }
+
+    /* ── History toggle button ── */
+    .btn-history {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 8px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid rgba(192,193,255,0.2);
+      background: transparent;
+      color: #a09fb2;
+      transition: all 150ms;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .btn-history:hover { border-color: rgba(192,193,255,0.4); color: #dae2fd; }
+    .btn-history.active { border-color: rgba(192,193,255,0.4); color: #c0c1ff; }
+
+    /* ── History panel ── */
+    .history-panel {
+      background: #0b1326;
+      border: 1px solid rgba(192,193,255,0.1);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-top: 1rem;
+    }
+    .history-panel h4 {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #a09fb2;
+      margin: 0 0 1rem;
+    }
+    .history-loading,
+    .history-empty {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #6e6d80;
+      text-align: center;
+      padding: 1rem 0;
+    }
+    .history-entry {
+      border-bottom: 1px solid rgba(192,193,255,0.06);
+      padding: 0.75rem 0;
+    }
+    .history-entry:last-child { border-bottom: none; }
+    .history-entry header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.5rem;
+    }
+    .history-ts {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #dae2fd;
+    }
+    .history-actor {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #c0c1ff;
+    }
+    .history-action {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #6e6d80;
+      background: rgba(192,193,255,0.06);
+      border-radius: 3px;
+      padding: 2px 6px;
+    }
+    .history-diff {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .history-diff li {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #a09fb2;
+      background: rgba(192,193,255,0.03);
+      border-radius: 3px;
+      padding: 3px 8px;
     }
   `],
   template: `
@@ -423,6 +517,15 @@ import {
 
           <div class="form-footer">
             <button
+              class="btn btn-history"
+              [class.active]="showHistory()"
+              (click)="toggleHistory()"
+              data-testid="btn-history"
+            >
+              {{ showHistory() ? 'Ocultar histórico' : 'Ver histórico de mudanças' }}
+              @if (history().length > 0) { ({{ history().length }}) }
+            </button>
+            <button
               class="btn btn-primary"
               (click)="saveProfile()"
               [disabled]="saving()"
@@ -431,6 +534,32 @@ import {
               {{ saving() ? 'Salvando...' : 'Salvar perfil' }}
             </button>
           </div>
+
+          @if (showHistory()) {
+            <section class="history-panel" data-testid="history-panel">
+              <h4>Histórico de mudanças</h4>
+              @if (loadingHistory()) {
+                <p class="history-loading" data-testid="history-loading">Carregando...</p>
+              } @else if (history().length === 0) {
+                <p class="history-empty" data-testid="history-empty">Sem alterações registradas.</p>
+              } @else {
+                @for (h of history(); track h.id) {
+                  <article class="history-entry" [attr.data-testid]="'history-entry-' + h.id">
+                    <header>
+                      <span class="history-ts">{{ h.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
+                      <span class="history-actor">{{ h.actor_email || 'Sistema' }}</span>
+                      <span class="history-action">{{ h.action }}</span>
+                    </header>
+                    <ul class="history-diff">
+                      @for (d of diffSummary(h.aesthetic_profile_before, h.aesthetic_profile_after); track d) {
+                        <li>{{ d }}</li>
+                      }
+                    </ul>
+                  </article>
+                }
+              }
+            </section>
+          }
         </div>
 
         <!-- Right: computed nutrition panel -->
@@ -496,6 +625,11 @@ export class AestheticProfileFormComponent implements OnInit {
   successMsg = signal<string | null>(null);
   formProfile = signal<AestheticProfile>({});
   computed = signal<ComputedNutrition | null>(null);
+
+  // History signals
+  history = signal<ProfileHistoryEntry[]>([]);
+  loadingHistory = signal(false);
+  showHistory = signal(false);
 
   ngOnInit(): void {
     this.loadProfile();
@@ -589,5 +723,59 @@ export class AestheticProfileFormComponent implements OnInit {
       .map((l) => l.trim())
       .filter((l) => l.length > 0)
       .slice(0, 20);
+  }
+
+  // Toggle history panel — fetches on first open
+  toggleHistory(): void {
+    if (this.showHistory()) {
+      this.showHistory.set(false);
+      return;
+    }
+    this.showHistory.set(true);
+    this.loadingHistory.set(true);
+    this.svc.history(this.subjectId()).subscribe({
+      next: (res) => {
+        this.history.set(res.items);
+        this.loadingHistory.set(false);
+      },
+      error: () => {
+        this.loadingHistory.set(false);
+      },
+    });
+  }
+
+  // Produces a human-readable diff summary between two profile snapshots
+  diffSummary(
+    before: AestheticProfile | null,
+    after: AestheticProfile | null
+  ): string[] {
+    const b = before ?? {};
+    const a = after ?? {};
+
+    const FIELD_LABELS: Record<string, string> = {
+      height_cm: 'Altura (cm)',
+      weight_kg: 'Peso (kg)',
+      age: 'Idade',
+      sex: 'Sexo',
+      activity_level: 'Nível de atividade',
+      goals: 'Objetivos',
+      allergies: 'Alergias',
+      medical_conditions: 'Condições médicas',
+      dietary_restrictions: 'Restrições alimentares',
+    };
+
+    const diffs: string[] = [];
+
+    for (const key of Object.keys(FIELD_LABELS) as (keyof AestheticProfile)[]) {
+      const bVal = b[key];
+      const aVal = a[key];
+      const bStr = Array.isArray(bVal) ? bVal.join(', ') : String(bVal ?? '—');
+      const aStr = Array.isArray(aVal) ? aVal.join(', ') : String(aVal ?? '—');
+      if (bStr !== aStr) {
+        diffs.push(`${FIELD_LABELS[key]}: ${bStr} → ${aStr}`);
+      }
+    }
+
+    return diffs.length > 0 ? diffs : ['(sem mudanças detectadas)'];
   }
 }

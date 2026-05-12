@@ -101,11 +101,11 @@ Shape do JSONB (validado na camada de aplicação):
 
 ## Tests
 
-- API: +13 (aesthetic-tmb service) +15 (aesthetic-profile routes) = 28 novos. Total 727 verdes.
-- Worker: +12 (lib/tmb) +7 (recommender lifestyle) +2 (processor profile fetch) = 21 novos. Total 128 verdes.
-- Web: +7 (profile form) = 7 novos. Total 132 verdes.
+- API: +13 (aesthetic-tmb service) +15 (aesthetic-profile routes) +4 (history route) = 32 novos. Total 803 verdes.
+- Worker: +12 (lib/tmb) +7 (recommender lifestyle) +2 (processor profile fetch) = 21 novos. Total 160 verdes.
+- Web: +7 (profile form) +2 (history: toggleHistory + diffSummary) = 9 novos. Total 192 verdes.
 
-**~56 testes novos, 0 regressões.**
+**~62 testes novos acumulados, 0 regressões.**
 
 ## Multi-módulo zero quebra
 
@@ -119,7 +119,7 @@ Shape do JSONB (validado na camada de aplicação):
 - **Ranges clinicamente conservadores** (peso 35-200, altura 140-220, idade 12-100). Casos extremos (atleta de elite, criança, idoso obeso) podem precisar override manual — não implementado.
 - **Mifflin-St Jeor é estimativa**: precisão clínica real exige calorimetria indireta. UI deixa claro que é estimativa.
 - **CRN: orientações qualitativas apenas**: foods to_emphasize/to_minimize são sugestões gerais, não prescrição de plano alimentar. Disclaimer reforça.
-- **Sem histórico de profile**: PUT sobrescreve. Audit log captura mudanças (via trigger em subjects), mas UI não mostra histórico visualmente — pode ser feature F6.
+- **Histórico de profile implementado (TODO#8, 2026-05-11)**: `GET /aesthetic/profile/:id/history` filtra `audit_log` por `entity_type='subjects'` + `changed_fields @> ARRAY['aesthetic_profile']`. Retorna lista cronológica com `actor_email`, `aesthetic_profile_before/after`. Frontend: painel expansível "Ver histórico de mudanças" no `aesthetic-profile-form` com `diffSummary()` que humaniza campos alterados.
 
 ## Custos
 

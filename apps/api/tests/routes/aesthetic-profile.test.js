@@ -21,7 +21,29 @@ const FULL_PROFILE = {
   updated_at: '2026-05-11T00:00:00.000Z',
 };
 
-async function buildApp({ role = 'admin', module: mod = 'estetica', mockRows = null, mockUpdateRows = null } = {}) {
+// Histórico de audit_log para uso nos mocks de history
+const HISTORY_ROWS = [
+  {
+    id: 'a1',
+    action: 'update',
+    actor_user_id: 'u1',
+    actor_channel: 'ui',
+    changed_fields: ['aesthetic_profile'],
+    created_at: '2026-05-11T10:00:00.000Z',
+    aesthetic_profile_after: { height_cm: 165, weight_kg: 65 },
+    aesthetic_profile_before: { height_cm: 165, weight_kg: 62 },
+    actor_email: 'profissional@clinica.com',
+  },
+];
+
+async function buildApp({
+  role = 'admin',
+  module: mod = 'estetica',
+  mockRows = null,
+  mockUpdateRows = null,
+  mockHistorySubjectRows = null,
+  mockHistoryRows = null,
+} = {}) {
   const app = Fastify({ logger: false });
   app.decorate('authenticate', async (req) => {
     req.user = { user_id: 'u1', tenant_id: 't1', role, module: mod };
@@ -39,6 +61,16 @@ async function buildApp({ role = 'admin', module: mod = 'estetica', mockRows = n
         // default: subject found — echo back the profile we received
         const profileArg = JSON.parse(params[0]);
         return { rows: [{ id: params[1], aesthetic_profile: profileArg }] };
+      }
+      // History endpoint: subject existence check
+      if (/SELECT id FROM subjects WHERE id/i.test(sql)) {
+        if (mockHistorySubjectRows !== null) return { rows: mockHistorySubjectRows };
+        return { rows: [{ id: params[0] }] };
+      }
+      // History endpoint: audit_log query
+      if (/FROM audit_log a/i.test(sql)) {
+        if (mockHistoryRows !== null) return { rows: mockHistoryRows };
+        return { rows: HISTORY_ROWS };
       }
       return { rows: [] };
     }),
@@ -218,5 +250,56 @@ describe('PUT /aesthetic/profile/:subject_id', () => {
       payload: { sex: 'F' },
     });
     expect(res.statusCode).toBe(403);
+  });
+});
+
+// ─── GET /aesthetic/profile/:subject_id/history ───────────────────────────────
+
+describe('GET /aesthetic/profile/:subject_id/history', () => {
+  test('200 retorna items quando subject pertence ao tenant', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/aesthetic/profile/sub1/history',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.items).toBeInstanceOf(Array);
+    expect(body.items.length).toBeGreaterThan(0);
+    expect(body.items[0].action).toBe('update');
+    expect(body.items[0].actor_email).toBe('profissional@clinica.com');
+    expect(body.items[0].aesthetic_profile_after).toBeDefined();
+    expect(body.items[0].aesthetic_profile_before).toBeDefined();
+  });
+
+  test('404 quando subject não pertence ao tenant (ou não existe)', async () => {
+    const app = await buildApp({ mockHistorySubjectRows: [] });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/aesthetic/profile/no-exist/history',
+    });
+    expect(res.statusCode).toBe(404);
+    expect(JSON.parse(res.body).error).toMatch(/não encontrado/i);
+  });
+
+  test('403 quando module !== estetica', async () => {
+    const app = await buildApp({ module: 'human' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/aesthetic/profile/sub1/history',
+    });
+    expect(res.statusCode).toBe(403);
+    expect(JSON.parse(res.body).error).toMatch(/estetica/i);
+  });
+
+  test('200 retorna lista vazia quando sem entradas no audit_log para aesthetic_profile', async () => {
+    const app = await buildApp({ mockHistoryRows: [] });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/aesthetic/profile/sub1/history',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.items).toEqual([]);
   });
 });

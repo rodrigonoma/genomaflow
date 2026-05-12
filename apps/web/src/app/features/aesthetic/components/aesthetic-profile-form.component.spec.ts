@@ -20,6 +20,7 @@ import { AestheticProfileFormComponent } from './aesthetic-profile-form.componen
 import {
   AestheticProfileService,
   ProfileResponse,
+  ProfileHistoryEntry,
 } from '../services/aesthetic-profile.service';
 
 // ---------------------------------------------------------------------------
@@ -61,6 +62,7 @@ describe('AestheticProfileFormComponent', () => {
     mockSvc = {
       get: jest.fn(),
       update: jest.fn(),
+      history: jest.fn(),
     };
 
     await TestBed.configureTestingModule({
@@ -238,4 +240,69 @@ describe('AestheticProfileFormComponent', () => {
     comp.toggleDietary('vegan');
     expect(comp.formProfile().dietary_restrictions).not.toContain('vegan');
   }));
+
+  // -------------------------------------------------------------------------
+  // Test 8: toggleHistory chama service.history quando abre
+  // -------------------------------------------------------------------------
+  it('toggleHistory chama service.history ao abrir e popula signal history', fakeAsync(() => {
+    mockSvc.get!.mockReturnValue(of(makeResponse()));
+
+    const historyItems: ProfileHistoryEntry[] = [
+      {
+        id: 'h1',
+        action: 'update',
+        actor_user_id: 'u1',
+        actor_channel: 'ui',
+        actor_email: 'pro@clinic.com',
+        changed_fields: ['aesthetic_profile'],
+        created_at: '2026-05-11T10:00:00.000Z',
+        aesthetic_profile_before: { weight_kg: 62 },
+        aesthetic_profile_after: { weight_kg: 65 },
+      },
+    ];
+    mockSvc.history!.mockReturnValue(of({ items: historyItems }));
+
+    const fixture = createFixture();
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+
+    // History panel starts hidden
+    expect(comp.showHistory()).toBe(false);
+
+    // Open history
+    comp.toggleHistory();
+    tick();
+    fixture.detectChanges();
+
+    expect(mockSvc.history).toHaveBeenCalledWith('subject-001');
+    expect(comp.showHistory()).toBe(true);
+    expect(comp.history().length).toBe(1);
+    expect(comp.history()[0].actor_email).toBe('pro@clinic.com');
+
+    // Close history
+    comp.toggleHistory();
+    expect(comp.showHistory()).toBe(false);
+  }));
+
+  // -------------------------------------------------------------------------
+  // Test 9: diffSummary produz lista de campos mudados entre dois perfis
+  // -------------------------------------------------------------------------
+  it('diffSummary retorna lista de campos alterados entre dois snapshots do perfil', () => {
+    const fixture = createFixture();
+    // We only need the component instance — no ngOnInit needed for pure method test
+    const comp = fixture.componentInstance;
+
+    const before = { weight_kg: 62, activity_level: 'light' as const };
+    const after  = { weight_kg: 67, activity_level: 'moderate' as const };
+
+    const diffs = comp.diffSummary(before, after);
+
+    expect(diffs.some((d) => d.includes('Peso (kg)'))).toBe(true);
+    expect(diffs.some((d) => d.includes('62') && d.includes('67'))).toBe(true);
+    expect(diffs.some((d) => d.includes('Nível de atividade'))).toBe(true);
+    expect(diffs.some((d) => d.includes('light') && d.includes('moderate'))).toBe(true);
+  });
 });

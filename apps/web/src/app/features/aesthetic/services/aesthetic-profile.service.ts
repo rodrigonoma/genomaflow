@@ -27,6 +27,18 @@ export interface ProfileResponse {
   computed: ComputedNutrition | null;
 }
 
+export interface ProfileHistoryEntry {
+  id: string;
+  action: 'insert' | 'update' | 'delete';
+  actor_user_id: string | null;
+  actor_channel: string | null;
+  actor_email: string | null;
+  changed_fields: string[] | null;
+  created_at: string;
+  aesthetic_profile_before: AestheticProfile | null;
+  aesthetic_profile_after: AestheticProfile | null;
+}
+
 export const ACTIVITY_LEVELS = [
   { value: 'sedentary', label: 'Sedentário (< 1h/sem)' },
   { value: 'light', label: 'Leve (1-3h/sem)' },
@@ -64,5 +76,12 @@ export class AestheticProfileService {
 
   update(subjectId: string, profile: AestheticProfile): Observable<ProfileResponse> {
     return this.http.put<ProfileResponse>(`${this.base}/${subjectId}`, profile);
+  }
+
+  history(subjectId: string, limit = 20): Observable<{ items: ProfileHistoryEntry[] }> {
+    return this.http.get<{ items: ProfileHistoryEntry[] }>(
+      `${this.base}/${subjectId}/history`,
+      { params: { limit: String(limit) } }
+    );
   }
 }
