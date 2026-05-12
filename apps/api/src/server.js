@@ -2,7 +2,14 @@ require('dotenv').config();
 const Fastify = require('fastify');
 
 // maxParamLength: 500 — default Fastify é 100, mas JWT do video/join/:token tem ~290 chars
-const app = Fastify({ logger: true, trustProxy: true, maxParamLength: 500 });
+// pluginTimeout: 30s (default 10s) — boot frio no CI integration (sem cache de
+// node_modules + Postgres aquecendo) ultrapassava 10s. Prod usa muito menos.
+const app = Fastify({
+  logger: true,
+  trustProxy: true,
+  maxParamLength: 500,
+  pluginTimeout: 30_000,
+});
 
 // Raw body parser — necessário pra validação de signature do webhook Stripe.
 // Default Fastify parseia JSON automaticamente, mas Stripe valida sobre o
