@@ -98,6 +98,62 @@ module.exports = async function (fastify) {
     });
   });
 
+  // POST /aesthetic/photos/preview-blur — retorna buffer com auto-crop aplicado, sem persistir no DB ou S3
+  fastify.post('/photos/preview-blur', {
+    preHandler: [fastify.authenticate, requireEsteticaModule],
+    config: { rateLimit: { max: 20, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
+    const parts = request.parts();
+    const fields = {};
+    let fileBuf, fileMime;
+    for await (const part of parts) {
+      if (part.type === 'file') {
+        if (!ALLOWED_MIME.has(part.mimetype)) {
+          return reply.status(400).send({ error: 'Formato não suportado. Use JPEG ou PNG.' });
+        }
+        fileMime = part.mimetype;
+        const chunks = [];
+        for await (const c of part.file) chunks.push(c);
+        fileBuf = Buffer.concat(chunks);
+        if (fileBuf.length > MAX_BYTES) {
+          return reply.status(400).send({ error: 'Arquivo maior que 5MB.' });
+        }
+      } else {
+        fields[part.fieldname] = part.value;
+      }
+    }
+
+    const { subject_id } = fields;
+    if (!subject_id) return reply.status(400).send({ error: 'subject_id obrigatório' });
+    if (!fileBuf) return reply.status(400).send({ error: 'Arquivo obrigatório' });
+
+    // Consent gate — mesma lógica do upload real: exige consent reforçado
+    const consent = await getConsent(fastify.pg, request.user.tenant_id, subject_id);
+    const reinforced = consent && Array.isArray(consent.reinforced_regions) ? consent.reinforced_regions : [];
+    if (!consent || reinforced.length === 0) {
+      return reply.status(403).send({
+        error: 'CONSENT_REINFORCED_MISSING',
+        message: 'Preview de foto sensível exige consentimento reforçado registrado previamente.',
+      });
+    }
+
+    // Executa auto-crop — não persiste em lugar nenhum
+    let result;
+    try {
+      result = await autoCropSensitive({ buffer: fileBuf, mime: fileMime });
+    } catch (e) {
+      request.log.error({ err: e }, 'preview-blur: autoCropSensitive threw');
+      return reply.status(500).send({ error: 'PREVIEW_FAILED', message: e.message });
+    }
+
+    reply
+      .header('Content-Type', fileMime)
+      .header('Content-Disposition', 'inline')
+      .header('X-Auto-Crop-Applied', String(result.applied || 0))
+      .header('X-Auto-Crop-Regions', String(Array.isArray(result.regions) ? result.regions.length : 0))
+      .send(result.buffer);
+  });
+
   // GET /aesthetic/photos/:id/url (signed)
   fastify.get('/photos/:id/url', {
     preHandler: [fastify.authenticate, requireEsteticaModule],

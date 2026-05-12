@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import {
@@ -38,6 +38,22 @@ export class AestheticFacialService {
 
   uploadPhoto(formData: FormData): Observable<AestheticPhoto> {
     return this.http.post<AestheticPhoto>(`${this.base}/photos`, formData);
+  }
+
+  /**
+   * Chama POST /aesthetic/photos/preview-blur.
+   * Retorna a resposta completa (headers + blob) para que o chamador
+   * possa ler X-Auto-Crop-Applied e X-Auto-Crop-Regions.
+   * NÃO persiste nada no banco nem no S3.
+   */
+  previewBlur(file: File, subjectId: string): Observable<HttpResponse<Blob>> {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('subject_id', subjectId);
+    return this.http.post(`${this.base}/photos/preview-blur`, fd, {
+      observe: 'response',
+      responseType: 'blob',
+    });
   }
 
   getPhotoUrl(photoId: string): Observable<PhotoUrlResponse> {

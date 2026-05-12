@@ -226,6 +226,92 @@ describe('POST /aesthetic/photos — auto-crop (F5)', () => {
   });
 });
 
+describe('POST /aesthetic/photos/preview-blur (TODO#5)', () => {
+  beforeEach(() => {
+    mockAutoCropSensitive.mockReset();
+    mockGetConsent.mockReset();
+    // Limpa chamadas acumuladas de outros describes na suíte
+    const { uploadPhoto } = require('../../src/services/aesthetic-s3');
+    uploadPhoto.mockClear();
+  });
+
+  test('400 — sem subject_id', async () => {
+    const app = await buildApp();
+    const boundary = 'prevBnd1';
+    const payload = buildMultipart(boundary,
+      {},
+      { name: 'file', filename: 'photo.jpg', contentType: 'image/jpeg', content: 'fakejpgbytes' }
+    );
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos/preview-blur',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/subject_id/);
+  });
+
+  test('400 — sem arquivo', async () => {
+    const app = await buildApp();
+    const boundary = 'prevBnd2';
+    const payload = buildMultipart(boundary, { subject_id: 'sub1' }, null);
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos/preview-blur',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Arquivo/);
+  });
+
+  test('403 CONSENT_REINFORCED_MISSING — sem consent reforçado', async () => {
+    mockGetConsent.mockResolvedValue(null);
+    const app = await buildApp();
+    const boundary = 'prevBnd3';
+    const payload = buildMultipart(boundary,
+      { subject_id: 'sub1' },
+      { name: 'file', filename: 'photo.jpg', contentType: 'image/jpeg', content: 'fakejpgbytes' }
+    );
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos/preview-blur',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(JSON.parse(res.body).error).toBe('CONSENT_REINFORCED_MISSING');
+  });
+
+  test('200 sucesso — retorna buffer blurred com headers X-Auto-Crop-Applied e X-Auto-Crop-Regions, SEM persistir', async () => {
+    mockGetConsent.mockResolvedValue({ id: 'c1', reinforced_regions: ['breast'] });
+    mockAutoCropSensitive.mockResolvedValue({
+      buffer: Buffer.from('FAKE_BLURRED_IMAGE'),
+      applied: 2,
+      regions: [{ type: 'nipple', x: 0.1, y: 0.1, w: 0.1, h: 0.1 }, { type: 'areolar', x: 0.2, y: 0.2, w: 0.1, h: 0.1 }],
+    });
+
+    const app = await buildApp();
+    const boundary = 'prevBnd4';
+    const payload = buildMultipart(boundary,
+      { subject_id: 'sub1' },
+      { name: 'file', filename: 'photo.jpg', contentType: 'image/jpeg', content: 'fakejpgbytes' }
+    );
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos/preview-blur',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/image\/jpeg/);
+    expect(res.headers['x-auto-crop-applied']).toBe('2');
+    expect(res.headers['x-auto-crop-regions']).toBe('2');
+    // Body deve ser o buffer retornado (não vazio)
+    expect(Buffer.from(res.rawPayload).length).toBeGreaterThan(0);
+    // Confirma que NÃO foi ao S3 nem ao DB
+    const { uploadPhoto } = require('../../src/services/aesthetic-s3');
+    expect(uploadPhoto).not.toHaveBeenCalled();
+  });
+});
+
 describe('POST /aesthetic/photos — reinforced consent gate (F5.2)', () => {
   beforeEach(() => {
     mockAutoCropSensitive.mockReset();

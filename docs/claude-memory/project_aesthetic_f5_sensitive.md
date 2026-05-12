@@ -66,11 +66,11 @@ Hardening LGPD/CFM para fotos de regiões anatomicamente sensíveis (mama, glút
 
 ## Tests
 
-- API: +27 (auto-crop) +5 (photos consent gate F5.2) +3 (analyses consent gate F5.2) = 35 novos. Total 759-764 verdes.
+- API: +27 (auto-crop) +5 (photos consent gate F5.2) +3 (analyses consent gate F5.2) +4 (preview-blur TODO#5) = 39 novos. Total 819 (799 pass + 20 skip) verdes.
 - Worker: +19 (purge) = 19 novos. Total 147 verdes.
-- Web: +9 (consent-modal reinforced) +2 (state machine F5.4) = 11 novos. Total 140 verdes.
+- Web: +9 (consent-modal reinforced) +2 (state machine F5.4) +4 (auto-crop-preview-modal TODO#5) = 15 novos. Total 182 (179 pass + 3 skip preexistentes) verdes.
 
-**~65 testes novos, 0 regressões.**
+**~73 testes novos, 0 regressões.**
 
 ## Multi-módulo zero quebra
 
@@ -79,10 +79,22 @@ Hardening LGPD/CFM para fotos de regiões anatomicamente sensíveis (mama, glút
 - Frontend state machine vive em features/aesthetic/* — human/vet não impactados.
 - Purge job opera APENAS em aesthetic_photos — outras tabelas (exams, etc.) não tocadas.
 
+## Preview auto-blur antes do upload (TODO#5 — entregue 2026-05-11)
+
+Endpoint `POST /aesthetic/photos/preview-blur`: recebe foto + subject_id, executa `autoCropSensitive`, retorna buffer blurred como `image/jpeg` com headers `X-Auto-Crop-Applied: N` e `X-Auto-Crop-Regions: N`. **Não persiste em S3 nem DB.** Mesma gate de consent reforçado do upload real (403 `CONSENT_REINFORCED_MISSING` se ausente). Rate limit 20/h (vs 60/h do upload).
+
+Frontend `AutoCropPreviewModalComponent`: modal standalone Angular 18 OnPush. Exibe lado a lado original vs blurred. Badge "N regiões borradas". 3 ações:
+- "Aceitar e enviar com blur" → `{ confirmed: true, autoCrop: true }`
+- "Enviar SEM blur (já está pronto)" → `{ confirmed: true, autoCrop: false }`
+- "Cancelar" → `{ confirmed: false }`
+
+Disclaimer: "Auto-blur é assistido por IA e pode falhar. Revise a imagem antes de enviar."
+
+`PhotoUploaderComponent` ganhou inputs `isSensitive` e `previewBlurEnabled`. Quando ambos true, abre o modal antes do upload; passa `is_sensitive=true` + `auto_crop=false` se usuário escolheu sem blur.
+
 ## Limitações honestas
 
-- **Sonnet Vision auto-crop não é 100% confiável** — pode ter falso-negativo (mamilo passa sem blur) ou falso-positivo (mancha confundida com mamilo). UI deve mostrar preview antes/depois pro profissional revisar. Não implementado na F5 — pode ser F6 (slider antes/depois).
-- **Não há modo de "rever auto-crop manualmente"** antes do upload S3 — uma vez aplicado, é o que está armazenado. Profissional pode `auto_crop=false` se quiser cropar manualmente fora do sistema.
+- **Sonnet Vision auto-crop não é 100% confiável** — pode ter falso-negativo (mamilo passa sem blur) ou falso-positivo (mancha confundida com mamilo). O modal de preview (TODO#5) mitiga isso — profissional vê o resultado antes de confirmar.
 - **Purge 1 ano é hardcoded** em `RETENTION_DAYS`. Se LGPD/CFM mudar a regra ou clínica precisar reter mais (pesquisa científica com TCLE diferente), exige migration + config. Não implementado.
 - **forceRun não está exposto** via endpoint — só código. Operacional via SSH + script. Aceitável para now.
 - **audit_log do soft delete** captura mudança automaticamente, mas não há "actor channel" especial pra purge job. v_actor_channel = 'ui' (default). Pode ser refinado para 'system' (worker channel) — não implementado.

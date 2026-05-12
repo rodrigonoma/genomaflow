@@ -20,10 +20,18 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatDialog } from '@angular/material/dialog';
+import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { PhotoValidatorService } from '../services/photo-validator.service';
 import { AestheticFacialService } from '../services/aesthetic-facial.service';
+import {
+  AutoCropPreviewModalComponent,
+  AutoCropPreviewModalData,
+  AutoCropPreviewModalResult,
+} from './auto-crop-preview-modal.component';
 
 // ---------------------------------------------------------------------------
 // Inline message constants (MVP — small enough to keep here)
@@ -58,7 +66,7 @@ export interface FileEntry {
 @Component({
   selector: 'app-photo-uploader',
   standalone: true,
-  imports: [CommonModule, MatButtonModule, MatProgressBarModule],
+  imports: [CommonModule, MatButtonModule, MatCheckboxModule, MatProgressBarModule, FormsModule],
   styles: [`
     :host { display: block; }
 
@@ -162,6 +170,7 @@ export class PhotoUploaderComponent {
 
   private readonly validator = inject(PhotoValidatorService);
   private readonly facialService = inject(AestheticFacialService);
+  private readonly dialog = inject(MatDialog);
 
   // ---------------------------------------------------------------------------
   // Inputs
@@ -178,6 +187,19 @@ export class PhotoUploaderComponent {
    * PhotoQualityGuideComponent.
    */
   @Input() files = signal<File[]>([]);
+
+  /**
+   * Quando true, o upload será feito com is_sensitive=true no backend.
+   * Se previewBlurEnabled também for true, abre o preview antes do envio.
+   */
+  @Input() isSensitive = false;
+
+  /**
+   * Quando true E isSensitive=true, exibe o modal de preview auto-blur antes
+   * de cada upload sensível. O usuário pode aceitar com blur, sem blur, ou cancelar.
+   * Default: false (opt-in explícito).
+   */
+  @Input() previewBlurEnabled = false;
 
   // ---------------------------------------------------------------------------
   // Outputs
@@ -258,6 +280,32 @@ export class PhotoUploaderComponent {
         blob = file;
       }
 
+      // --- Preview blur (opt-in: isSensitive + previewBlurEnabled) ---
+      let autoCrop: boolean | undefined;
+      if (this.isSensitive && this.previewBlurEnabled) {
+        this._updateEntry(i, 'validating', 'Aguardando confirmação do preview de blur…');
+        let previewResult: AutoCropPreviewModalResult | undefined;
+        try {
+          previewResult = await firstValueFrom(
+            this.dialog.open<AutoCropPreviewModalComponent, AutoCropPreviewModalData, AutoCropPreviewModalResult>(
+              AutoCropPreviewModalComponent,
+              { data: { originalFile: file, subjectId: this.subjectId }, width: '720px', maxWidth: '95vw' },
+            ).afterClosed(),
+          );
+        } catch {
+          // Dialog closed unexpectedly — treat as cancel
+        }
+
+        if (!previewResult || !previewResult.confirmed) {
+          this._addMessage(MSG.cancelled, 'info');
+          this._updateEntry(i, 'error', 'Cancelado pelo usuário');
+          this.progress.set(Math.round(((i + 1) / total) * 100));
+          continue;
+        }
+
+        autoCrop = previewResult.autoCrop;
+      }
+
       // --- Upload ---
       this._updateEntry(i, 'uploading', MSG.uploading(file.name));
 
@@ -265,6 +313,14 @@ export class PhotoUploaderComponent {
       formData.append('file', blob, file.name);
       formData.append('subject_id', this.subjectId);
       formData.append('photo_type', this.photoType);
+
+      if (this.isSensitive) {
+        formData.append('is_sensitive', 'true');
+        // autoCrop is only set when previewBlurEnabled; undefined means default (true for sensitive)
+        if (autoCrop === false) {
+          formData.append('auto_crop', 'false');
+        }
+      }
 
       try {
         const photo = await firstValueFrom(this.facialService.uploadPhoto(formData));
