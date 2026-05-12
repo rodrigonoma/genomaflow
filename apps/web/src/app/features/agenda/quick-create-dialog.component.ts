@@ -33,6 +33,10 @@ interface SubjectModel {
 export interface QuickCreateDialogData {
   start_at: string;          // ISO
   default_duration_minutes: number;
+  /** Optional pre-population (e.g. from analysis-result "Agendar agora") */
+  preset_appointment_type?: string;
+  preset_subject_id?: string;
+  preset_notes?: string;
 }
 
 export type QuickCreateDialogResult = { created: true; subject_name?: string } | null;
@@ -206,9 +210,24 @@ export class QuickCreateDialogComponent {
   constructor() {
     // Pré-carrega subjects pra autocomplete (mesma lógica do quick-search global)
     this.http.get<SubjectModel[]>(`${environment.apiUrl}/patients`).subscribe({
-      next: list => this.allSubjects.set(list || []),
+      next: list => {
+        this.allSubjects.set(list || []);
+        // Apply pre-selected subject from preset (e.g. from analysis-result)
+        if (this.data.preset_subject_id) {
+          const found = (list || []).find(s => s.id === this.data.preset_subject_id);
+          if (found) { this.onSelectSubject(found); }
+        }
+      },
       error: () => {},
     });
+
+    // Apply preset appointment type and notes if provided
+    if (this.data.preset_appointment_type) {
+      this.appointmentType = this.data.preset_appointment_type as AppointmentType;
+    }
+    if (this.data.preset_notes) {
+      this.notes = this.data.preset_notes;
+    }
   }
 
   setMode(m: 'appointment' | 'block') {

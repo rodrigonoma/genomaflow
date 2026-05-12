@@ -20,14 +20,15 @@ interface EventGroup {
 }
 
 const EVENT_META: Record<string, { icon: string; color: string; label: string }> = {
-  registered:         { icon: 'person_add',    color: '#22c55e', label: 'Cadastro' },
-  exam:               { icon: 'biotech',        color: '#3b82f6', label: 'Exame' },
-  ai_analysis:        { icon: 'psychology',     color: '#8b5cf6', label: 'Análise IA' },
-  appointment:        { icon: 'calendar_today', color: '#f59e0b', label: 'Agendamento' },
-  video_consultation: { icon: 'videocam',       color: '#06b6d4', label: 'Teleconsulta' },
-  encounter:          { icon: 'description',    color: '#94a3b8', label: 'Prontuário' },
-  prescription:       { icon: 'medication',     color: '#f97316', label: 'Prescrição' },
-  followup:           { icon: 'notifications',  color: '#64748b', label: 'Follow-up' },
+  registered:                    { icon: 'person_add',              color: '#22c55e', label: 'Cadastro' },
+  exam:                          { icon: 'biotech',                 color: '#3b82f6', label: 'Exame' },
+  ai_analysis:                   { icon: 'psychology',              color: '#8b5cf6', label: 'Análise IA' },
+  appointment:                   { icon: 'calendar_today',          color: '#f59e0b', label: 'Agendamento' },
+  video_consultation:            { icon: 'videocam',                color: '#06b6d4', label: 'Teleconsulta' },
+  encounter:                     { icon: 'description',             color: '#94a3b8', label: 'Prontuário' },
+  prescription:                  { icon: 'medication',              color: '#f97316', label: 'Prescrição' },
+  followup:                      { icon: 'notifications',           color: '#64748b', label: 'Follow-up' },
+  aesthetic_analysis_completed:  { icon: 'face_retouching_natural', color: '#ec4899', label: 'Análise estética' },
 };
 
 const ALL_FILTERS = Object.keys(EVENT_META);
@@ -226,7 +227,11 @@ export class PatientTimelineComponent implements OnInit {
       case 'encounter':          return p['chief_complaint']
         ? `Prontuário: ${(p['chief_complaint'] as string).slice(0, 60)}` : 'Prontuário';
       case 'prescription':       return `Prescrição (${p['item_count'] ?? 0} item${(p['item_count'] ?? 0) !== 1 ? 's' : ''})`;
-      case 'followup':           return 'Follow-up enviado';
+      case 'followup':                      return 'Follow-up enviado';
+      case 'aesthetic_analysis_completed': {
+        const analysisType = p['analysis_type'] ?? 'estética';
+        return `Análise ${analysisType} concluída`;
+      }
       default:                   return ev.event_type;
     }
   }
@@ -243,6 +248,11 @@ export class PatientTimelineComponent implements OnInit {
       case 'appointment':  return p['status'] ?? '';
       case 'encounter':    return p['source'] === 'video_ai' ? 'Gerado por IA' : 'Manual';
       case 'followup':     return `${p['notification_type'] ?? ''} · ${p['channel'] ?? ''}`;
+      case 'aesthetic_analysis_completed': {
+        const type = p['analysis_type'] || 'estética';
+        const photoCount = p['photo_count'] || 0;
+        return `Análise ${type} concluída · ${photoCount} foto${photoCount === 1 ? '' : 's'}`;
+      }
       default:             return '';
     }
   }

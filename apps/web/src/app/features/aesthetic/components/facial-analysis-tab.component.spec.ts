@@ -20,6 +20,7 @@ import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { of, throwError, Subject } from 'rxjs';
 
 import { FacialAnalysisTabComponent } from './facial-analysis-tab.component';
@@ -81,7 +82,7 @@ describe('FacialAnalysisTabComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [FacialAnalysisTabComponent, NoopAnimationsModule],
+      imports: [FacialAnalysisTabComponent, NoopAnimationsModule, HttpClientTestingModule, MatDialogModule],
       providers: [
         { provide: AestheticFacialService, useValue: mockFacialService },
         {
@@ -397,7 +398,7 @@ describe('FacialAnalysisTabComponent — F5 reinforced consent gate', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [FacialAnalysisTabComponent, NoopAnimationsModule],
+      imports: [FacialAnalysisTabComponent, NoopAnimationsModule, HttpClientTestingModule, MatDialogModule],
       providers: [
         { provide: AestheticFacialService, useValue: mockFacialService },
         {

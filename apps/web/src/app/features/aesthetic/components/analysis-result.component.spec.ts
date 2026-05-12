@@ -14,6 +14,8 @@
 import '@angular/compiler';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
+import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { AnalysisResultComponent } from './analysis-result.component';
 import { PhotoOverlayService } from '../services/photo-overlay.service';
 import { AestheticAnalysisDetail } from '../models/analysis.model';
@@ -103,16 +105,27 @@ function createFixture(analysis: AestheticAnalysisDetail): ComponentFixture<Anal
 // ---------------------------------------------------------------------------
 
 describe('AnalysisResultComponent', () => {
+  let httpMock: HttpTestingController;
+  let dialogSpy: jest.SpyInstance;
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
     await TestBed.configureTestingModule({
-      imports: [AnalysisResultComponent],
+      imports: [AnalysisResultComponent, HttpClientTestingModule, MatDialogModule],
       providers: [
         { provide: PhotoOverlayService, useValue: mockOverlayService },
       ],
       schemas: [NO_ERRORS_SCHEMA],  // ignora app-photo-overlay e app-layer-toolbar
     }).compileComponents();
+
+    httpMock = TestBed.inject(HttpTestingController);
+    const dialog = TestBed.inject(MatDialog);
+    dialogSpy = jest.spyOn(dialog, 'open').mockReturnValue({ afterClosed: () => ({ subscribe: () => {} }) } as any);
+  });
+
+  afterEach(() => {
+    httpMock.verify();
   });
 
   // -------------------------------------------------------------------------
@@ -308,5 +321,61 @@ describe('AnalysisResultComponent', () => {
     const comp = fixture.componentInstance;
 
     expect(comp.hasLowConfidence()).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // F6.5: onScheduleTreatment abre MatDialog (F6 agenda wire)
+  // -------------------------------------------------------------------------
+  it('onScheduleTreatment abre MatDialog com preset_appointment_type procedimento_estetico', () => {
+    const analysis = makeAnalysis();
+    const fixture = createFixture(analysis);
+    const comp = fixture.componentInstance;
+
+    const item = {
+      treatment_name: 'Peeling Químico',
+      indication_text: 'Para manchas',
+      sessions_recommended: 3,
+      interval_days: 21,
+      urgency: 'medium',
+      expected_outcome: 'Melhora de tom',
+      treatment_id: 'treat-001',
+    };
+
+    comp.onScheduleTreatment(item);
+
+    expect(dialogSpy).toHaveBeenCalledTimes(1);
+    const callArgs = dialogSpy.mock.calls[0];
+    // callArgs[1] is the config object with data
+    const data = callArgs[1]?.data;
+    expect(data?.preset_appointment_type).toBe('procedimento_estetico');
+    expect(data?.preset_notes).toContain('Peeling Químico');
+    expect(data?.preset_notes).toContain('analysis-001');
+  });
+
+  // -------------------------------------------------------------------------
+  // F6.5: downloadPdf chama HttpClient.get com responseType blob
+  // -------------------------------------------------------------------------
+  it('downloadPdf chama HttpClient.get com responseType blob para o analysis.id correto', () => {
+    const analysis = makeAnalysis();
+    const fixture = createFixture(analysis);
+    const comp = fixture.componentInstance;
+
+    // Spy on document.body.appendChild to prevent actual DOM manipulation
+    const appendSpy = jest.spyOn(document.body, 'appendChild').mockImplementation((node: any) => node);
+    const removeSpy = jest.spyOn(document.body, 'removeChild').mockImplementation((node: any) => node);
+
+    comp.downloadPdf();
+
+    const req = httpMock.expectOne(r =>
+      r.url.includes('/aesthetic/analyses/analysis-001/export.pdf') &&
+      r.responseType === 'blob'
+    );
+    expect(req.request.method).toBe('GET');
+
+    // Flush with a dummy blob
+    req.flush(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
+
+    appendSpy.mockRestore();
+    removeSpy.mockRestore();
   });
 });

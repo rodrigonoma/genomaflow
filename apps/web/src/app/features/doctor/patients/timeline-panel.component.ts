@@ -202,6 +202,11 @@ const SEX_LABELS: Record<string, string> = {
     }
     .items-table tr:last-child td { border-bottom:none; }
 
+    /* Aesthetic analysis */
+    .metric-list { margin: 0.25rem 0 0.75rem 1rem; padding: 0; list-style: disc; font-size: 0.9rem; }
+    .metric-list li { margin-bottom: 0.2rem; color: #c5c4d6; }
+    .open-detail-btn { margin-top: 0.75rem; }
+
     /* Followup body preview */
     .msg-preview {
       background:#0d1525; border:1px solid rgba(70,69,84,.2);
@@ -705,6 +710,31 @@ const SEX_LABELS: Record<string, string> = {
               }
             }
 
+            <!-- ── ANÁLISE ESTÉTICA ───────────────────────── -->
+            @case ('aesthetic_analysis_completed') {
+              <div class="field">
+                <div class="field-label">Tipo de análise</div>
+                <div class="field-value">{{ event.payload['analysis_type'] }}</div>
+              </div>
+              <div class="field">
+                <div class="field-label">Fotos analisadas</div>
+                <div class="field-value">{{ event.payload['photo_count'] || 0 }}</div>
+              </div>
+              @if (event.payload['top_metrics']?.length) {
+                <hr class="section-divider" />
+                <div class="field-label">Principais métricas</div>
+                <ul class="metric-list">
+                  @for (m of event.payload['top_metrics']; track m.name) {
+                    <li><strong>{{ m.name }}:</strong> {{ m.score }}/100</li>
+                  }
+                </ul>
+              }
+              <button mat-flat-button color="primary" class="open-detail-btn"
+                      (click)="openAesthetic(event.payload['id'])">
+                Ver análise completa
+              </button>
+            }
+
           }
         </div>
       }
@@ -817,8 +847,17 @@ export class TimelinePanelComponent implements OnChanges, OnDestroy {
       registered: 'Cadastro', exam: 'Exame', ai_analysis: 'Análise IA',
       appointment: 'Agendamento', video_consultation: 'Teleconsulta',
       encounter: 'Prontuário', prescription: 'Prescrição', followup: 'Follow-up',
+      aesthetic_analysis_completed: 'Análise Estética',
     };
     return map[this.event.event_type] ?? this.event.event_type;
+  }
+
+  openAesthetic(analysisId: string) {
+    // TODO: deep-link to aesthetic analysis detail page once route is defined.
+    // For now, close the panel — the analysis list on the patient profile is the
+    // natural landing point.
+    console.log('[timeline-panel] openAesthetic stub', analysisId);
+    this.close.emit();
   }
 
   navigate(path: string) {

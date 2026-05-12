@@ -22,10 +22,15 @@ import {
   OnInit,
   Output,
   computed,
+  inject,
   output,
   signal,
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatDialog } from '@angular/material/dialog';
 import { PhotoOverlayComponent } from './photo-overlay.component';
 import { LayerToolbarComponent, MetricSummary } from './layer-toolbar.component';
 import { TreatmentProtocolCardsComponent } from './treatment-protocol-cards.component';
@@ -35,6 +40,12 @@ import {
   MetricData,
 } from '../models/analysis.model';
 import { PhotoOverlayService } from '../services/photo-overlay.service';
+import {
+  QuickCreateDialogComponent,
+  QuickCreateDialogData,
+  QuickCreateDialogResult,
+} from '../../agenda/quick-create-dialog.component';
+import { environment } from '../../../../environments/environment';
 
 // ---------------------------------------------------------------------------
 // Treatment protocol sub-type (parsed from recommendations JSON)
@@ -83,7 +94,7 @@ export interface LifestyleRecommendations {
 @Component({
   selector: 'app-analysis-result',
   standalone: true,
-  imports: [DatePipe, PhotoOverlayComponent, LayerToolbarComponent, TreatmentProtocolCardsComponent],
+  imports: [DatePipe, MatButtonModule, MatIconModule, PhotoOverlayComponent, LayerToolbarComponent, TreatmentProtocolCardsComponent],
   styles: [`
     :host { display: block; }
 
@@ -127,6 +138,12 @@ export interface LifestyleRecommendations {
     .status-processing { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
     .status-error   { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
 
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
     .btn-compare {
       font-family: 'Inter', sans-serif;
       font-size: 13px;
@@ -139,6 +156,13 @@ export interface LifestyleRecommendations {
       white-space: nowrap;
     }
     .btn-compare:hover { background: rgba(192, 193, 255, 0.16); }
+    .download-pdf-btn {
+      font-size: 13px;
+      color: #94a3b8;
+      border-color: rgba(148, 163, 184, 0.3);
+      white-space: nowrap;
+    }
+    .download-pdf-btn:hover { color: #dae2fd; border-color: rgba(218, 226, 253, 0.4); }
 
     /* ---- Score banner ---- */
     .score-banner {
@@ -391,9 +415,15 @@ export interface LifestyleRecommendations {
           Análise {{ analysisTypeLabel }} · {{ analysis.created_at | date:'dd/MM/yyyy HH:mm' }}
           <span class="status-badge status-{{ analysis.status }}">{{ analysis.status }}</span>
         </h3>
-        <button class="btn-compare" (click)="compareRequested.emit(analysis.id)">
-          Comparar análises
-        </button>
+        <div class="header-actions">
+          <button mat-stroked-button class="download-pdf-btn" (click)="downloadPdf()"
+                  data-testid="download-pdf-btn">
+            <mat-icon>picture_as_pdf</mat-icon> Baixar PDF
+          </button>
+          <button class="btn-compare" (click)="compareRequested.emit(analysis.id)">
+            Comparar análises
+          </button>
+        </div>
       </header>
 
       <!-- ================================================================ -->
@@ -682,11 +712,6 @@ export class AnalysisResultComponent implements OnInit {
   // Helpers
   // -------------------------------------------------------------------------
 
-  /** Bubbles up o evento de agendamento do sub-componente para o pai (F6). */
-  onScheduleTreatment(item: TreatmentProtocolItem): void {
-    this.scheduleTreatment.emit(item);
-  }
-
   /** Verifica se alguma métrica tem confidence === 'low'. */
   hasLowConfidence(): boolean {
     const metrics = this.analysis?.metrics;
@@ -717,8 +742,61 @@ export class AnalysisResultComponent implements OnInit {
   }
 
   // -------------------------------------------------------------------------
+  // Handlers
+  // -------------------------------------------------------------------------
+
+  /** Opens the quick-create-dialog pre-populated with procedimento_estetico data. */
+  onScheduleTreatment(item: TreatmentProtocolItem): void {
+    this.scheduleTreatment.emit(item); // keep event for parent listeners
+
+    const analysisId = this.analysis?.id;
+    const notesText =
+      `Procedimento sugerido: ${item.treatment_name}` +
+      (item.treatment_id ? ` (id: ${item.treatment_id})` : '') +
+      (analysisId ? ` · Análise: ${analysisId}` : '');
+
+    const dialogData: QuickCreateDialogData = {
+      start_at: new Date().toISOString(),
+      default_duration_minutes: 60,
+      preset_appointment_type: 'procedimento_estetico',
+      preset_subject_id: this.analysis?.subject_id ?? undefined,
+      preset_notes: notesText,
+    };
+
+    this.dialog.open<QuickCreateDialogComponent, QuickCreateDialogData, QuickCreateDialogResult>(
+      QuickCreateDialogComponent,
+      { panelClass: 'dark-dialog', autoFocus: false, data: dialogData, width: '560px' },
+    );
+  }
+
+  /** Triggers a browser download of the analysis PDF via blob response. */
+  downloadPdf(): void {
+    const id = this.analysis?.id;
+    if (!id) return;
+    this.http.get(`${environment.apiUrl}/aesthetic/analyses/${id}/export.pdf`, {
+      responseType: 'blob',
+    }).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `analise-${id}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      },
+      error: (err) => {
+        console.error('[analysis-result] pdf download failed', err);
+      },
+    });
+  }
+
+  // -------------------------------------------------------------------------
   // DI
   // -------------------------------------------------------------------------
 
   private readonly overlayService = new PhotoOverlayService();
+  private readonly http = inject(HttpClient);
+  private readonly dialog = inject(MatDialog);
 }
