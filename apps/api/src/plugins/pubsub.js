@@ -45,6 +45,7 @@ module.exports = fp(async function (fastify) {
     'appointment:event:*',
     'subject:upserted:*',
     'video:event:*',
+    'aesthetic:event:*',  // worker publica kind=analysis_done/analysis_failed
     (err) => {
       if (err) fastify.log.error('Redis psubscribe error:', err);
     }
@@ -84,6 +85,11 @@ module.exports = fp(async function (fastify) {
       // Video consultation events: file_shared (paciente envia arquivo na sala),
       // etc. Mensagem JSON já traz 'type' e payload.
       tenantId = channel.replace('video:event:', '');
+      payload = JSON.parse(message);
+    } else if (channel.startsWith('aesthetic:event:')) {
+      // Aesthetic analysis lifecycle: kind=analysis_done|analysis_failed.
+      // Frontend ws.service.ts trata 'kind' diretamente; encaminha o payload bruto.
+      tenantId = channel.replace('aesthetic:event:', '');
       payload = JSON.parse(message);
     } else {
       return;
