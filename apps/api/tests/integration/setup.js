@@ -69,8 +69,13 @@ async function runMigrations() {
 async function seedAestheticTenant() {
   if (pool.ending) pool = makePool();
 
-  // Limpa state anterior
-  await pool.query(`DELETE FROM tenants WHERE name = 'Integration Test Estetica'`);
+  // Limpa state anterior (sem disparar audit_trigger_fn — mesmo motivo do teardown)
+  await pool.query(`SET session_replication_role = replica`);
+  try {
+    await pool.query(`DELETE FROM tenants WHERE name = 'Integration Test Estetica'`);
+  } finally {
+    await pool.query(`SET session_replication_role = origin`).catch(() => {});
+  }
 
   const { rows: [tenant] } = await pool.query(
     `INSERT INTO tenants (name, type, module, active)
@@ -100,7 +105,16 @@ async function seedAestheticTenant() {
 }
 
 async function teardownAestheticTenant() {
-  await pool.query(`DELETE FROM tenants WHERE name = 'Integration Test Estetica'`);
+  // Desabilita user triggers no escopo desta connection.
+  // Caso contrário: DELETE FROM tenants → CASCADE deleta subjects → audit_trigger_fn
+  // INSERT INTO audit_log (tenant_id=X) → FK violation (tenant X sendo deletado).
+  // Em prod ninguém faz DELETE de tenant — só ocorre em teardown de teste.
+  await pool.query(`SET session_replication_role = replica`);
+  try {
+    await pool.query(`DELETE FROM tenants WHERE name = 'Integration Test Estetica'`);
+  } finally {
+    await pool.query(`SET session_replication_role = origin`).catch(() => {});
+  }
 }
 
 async function closePool() {
