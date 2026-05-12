@@ -102,7 +102,7 @@ Todos os caracteres PT-BR acentuados rendem corretamente no PDF:
 ## TODOs / Futuro
 
 - ~~**Timeline deep-link**: `openAesthetic(id)` em timeline-panel é stub (console.log). Router navigate + lazy load do componente analysis-result quando deep-link existir.~~ **CONCLUÍDO (TODO#2, 2026-05-11)**
-- **PDF preview no frontend**: hoje download direto. Poderia abrir em modal iframe.
+- ~~**PDF preview no frontend**: hoje download direto. Poderia abrir em modal iframe.~~ **CONCLUÍDO (TODO#6, 2026-05-11)**
 - **Encounter sugestão automática**: ao criar encounter sem related_id mas com aesthetic_analyses recente, sugerir vínculo (UX).
 - ~~**Treatment "Agendar X sessões"**: hoje agenda 1 procedimento — poderia gerar series de N appointments espaçados pelo interval_days do catálogo.~~ **CONCLUÍDO (TODO#4, 2026-05-11)**
 
@@ -169,3 +169,23 @@ Branch: `feat/aesthetic-todo-04-series-scheduling`
 **Contagem total:** +15 API + +13 web = 28 novos testes, 0 regressões.
 
 **Plataforma aesthetic está completa e production-ready.**
+
+## TODO#6 — PDF preview em modal iframe (entregue 2026-05-11)
+
+Branch: `feat/aesthetic-todo-06-pdf-preview-modal`
+
+**Arquitetura:** `PdfPreviewModalComponent` standalone OnPush (`pdf-preview-modal.component.ts`).
+- Injeta `HttpClient` e `DomSanitizer` diretamente na modal.
+- Ao abrir, faz GET `…/aesthetic/analyses/:id/export.pdf` com `responseType: 'blob'`.
+- `URL.createObjectURL(blob)` → `sanitizer.bypassSecurityTrustResourceUrl(url)` → `[src]` do `<iframe class="pdf-frame">` (min-height 70vh).
+- Botão "Baixar" no header: `URL createObjectURL` já foi feito — apenas cria anchor + `a.download` + `document.body.appendChild/removeChild` (mesmo padrão do antigo `downloadPdf()`).
+- `ngOnDestroy`: `URL.revokeObjectURL(pdfUrl())` para evitar memory leak.
+- Estados: `loading` (Gerando PDF…), `error` (fallback para mensagem da API), ready (iframe visível).
+
+**`analysis-result.component.ts`:**
+- `downloadPdf()` removido → `openPdfPreview()` substitui.
+- `openPdfPreview()` chama `this.dialog.open(PdfPreviewModalComponent, { data: { analysisId: id }, width: '900px', maxWidth: '95vw' })`.
+- Botão no template: label mudou de "Baixar PDF" → "Visualizar PDF".
+- `HttpClient` e `environment` removidos dos imports (delegados à modal).
+
+**Tests:** +5 em `pdf-preview-modal.component.spec.ts` (iframe carrega, error path, anchor download, revokeObjectURL no destroy, filename customizado). 1 test em `analysis-result.component.spec.ts` atualizado: `downloadPdf calls HttpClient` → `openPdfPreview abre MatDialog com PdfPreviewModalComponent`. +1 test extra: sem id não abre dialog. Total 26 verdes nos dois specs. 185 verdes no full suite, 0 regressões.

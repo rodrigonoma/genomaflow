@@ -418,29 +418,31 @@ describe('AnalysisResultComponent', () => {
   });
 
   // -------------------------------------------------------------------------
-  // F6.5: downloadPdf chama HttpClient.get com responseType blob
+  // TODO#6: openPdfPreview abre PdfPreviewModalComponent com analysisId correto
   // -------------------------------------------------------------------------
-  it('downloadPdf chama HttpClient.get com responseType blob para o analysis.id correto', () => {
+  it('openPdfPreview abre MatDialog com PdfPreviewModalComponent e data.analysisId correto', () => {
     const analysis = makeAnalysis();
     const fixture = createFixture(analysis);
     const comp = fixture.componentInstance;
 
-    // Spy on document.body.appendChild to prevent actual DOM manipulation
-    const appendSpy = jest.spyOn(document.body, 'appendChild').mockImplementation((node: any) => node);
-    const removeSpy = jest.spyOn(document.body, 'removeChild').mockImplementation((node: any) => node);
+    comp.openPdfPreview();
 
-    comp.downloadPdf();
+    expect(dialogSpy).toHaveBeenCalledTimes(1);
+    const [ComponentClass, config] = dialogSpy.mock.calls[0];
+    // Dynamic import: verify component class name is correct
+    expect(ComponentClass.name).toBe('PdfPreviewModalComponent');
+    expect(config?.data?.analysisId).toBe('analysis-001');
+    expect(config?.width).toBe('900px');
+    expect(config?.maxWidth).toBe('95vw');
+  });
 
-    const req = httpMock.expectOne(r =>
-      r.url.includes('/aesthetic/analyses/analysis-001/export.pdf') &&
-      r.responseType === 'blob'
-    );
-    expect(req.request.method).toBe('GET');
+  it('openPdfPreview não abre dialog quando analysis.id é undefined', () => {
+    const analysis = makeAnalysis({ id: undefined as any });
+    const fixture = createFixture(analysis);
+    const comp = fixture.componentInstance;
 
-    // Flush with a dummy blob
-    req.flush(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
+    comp.openPdfPreview();
 
-    appendSpy.mockRestore();
-    removeSpy.mockRestore();
+    expect(dialogSpy).not.toHaveBeenCalled();
   });
 });

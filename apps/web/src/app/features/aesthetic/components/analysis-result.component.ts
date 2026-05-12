@@ -27,7 +27,6 @@ import {
   signal,
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDialog } from '@angular/material/dialog';
@@ -45,7 +44,7 @@ import {
   QuickCreateDialogData,
   QuickCreateDialogResult,
 } from '../../agenda/quick-create-dialog.component';
-import { environment } from '../../../../environments/environment';
+import { PdfPreviewModalComponent } from './pdf-preview-modal.component';
 
 // ---------------------------------------------------------------------------
 // Treatment protocol sub-type (parsed from recommendations JSON)
@@ -416,9 +415,9 @@ export interface LifestyleRecommendations {
           <span class="status-badge status-{{ analysis.status }}">{{ analysis.status }}</span>
         </h3>
         <div class="header-actions">
-          <button mat-stroked-button class="download-pdf-btn" (click)="downloadPdf()"
+          <button mat-stroked-button class="download-pdf-btn" (click)="openPdfPreview()"
                   data-testid="download-pdf-btn">
-            <mat-icon>picture_as_pdf</mat-icon> Baixar PDF
+            <mat-icon>picture_as_pdf</mat-icon> Visualizar PDF
           </button>
           <button class="btn-compare" (click)="compareRequested.emit(analysis.id)">
             Comparar análises
@@ -772,26 +771,15 @@ export class AnalysisResultComponent implements OnInit {
     );
   }
 
-  /** Triggers a browser download of the analysis PDF via blob response. */
-  downloadPdf(): void {
+  /** Opens a modal preview of the analysis PDF (TODO#6).
+   *  The modal handles the HTTP fetch, iframe display and local download. */
+  openPdfPreview(): void {
     const id = this.analysis?.id;
     if (!id) return;
-    this.http.get(`${environment.apiUrl}/aesthetic/analyses/${id}/export.pdf`, {
-      responseType: 'blob',
-    }).subscribe({
-      next: (blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `analise-${id}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      },
-      error: (err) => {
-        console.error('[analysis-result] pdf download failed', err);
-      },
+    this.dialog.open(PdfPreviewModalComponent, {
+      data: { analysisId: id },
+      width: '900px',
+      maxWidth: '95vw',
     });
   }
 
@@ -800,6 +788,5 @@ export class AnalysisResultComponent implements OnInit {
   // -------------------------------------------------------------------------
 
   private readonly overlayService = new PhotoOverlayService();
-  private readonly http = inject(HttpClient);
   private readonly dialog = inject(MatDialog);
 }
