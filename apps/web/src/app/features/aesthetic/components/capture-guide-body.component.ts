@@ -36,6 +36,7 @@ import {
 } from '../services/capture-validator.service';
 import { MediaPipeLoaderService } from '../services/mediapipe-loader.service';
 import { AestheticFacialService } from '../services/aesthetic-facial.service';
+import { humanizeError, waitForVideoDimensions } from '../services/capture-error-handling';
 
 interface CapturedPhoto {
   pose: BodyPose;
@@ -384,14 +385,9 @@ export class CaptureGuideBodyComponent implements OnInit, OnDestroy {
 
   private async _snapshotJpeg(): Promise<Blob> {
     const video = this.videoRef.nativeElement;
-
-    // Aguarda video ter dimensões reais (iOS Safari pode reportar 0)
-    const t0 = Date.now();
-    while ((!video.videoWidth || !video.videoHeight) && Date.now() - t0 < 2000) {
-      await new Promise(r => setTimeout(r, 100));
-    }
-    const w = video.videoWidth || 720;
-    const h = video.videoHeight || 1280;
+    // iOS Safari pode reportar videoWidth=0 nos primeiros frames; aguarda
+    // até 2s. Fallback 720x1280 (aspect ratio corporal portrait).
+    const { width: w, height: h } = await waitForVideoDimensions(video, 2000, 720, 1280);
 
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
@@ -446,26 +442,6 @@ export class CaptureGuideBodyComponent implements OnInit, OnDestroy {
   }
 
   private _humanizeError(e: unknown): string {
-    console.error('[CaptureGuideBody] erro:', e);
-    if (e instanceof Error) return e.message;
-    if (typeof e === 'string') return e;
-    if (typeof e === 'object' && e !== null) {
-      const obj = e as Record<string, unknown>;
-      const inner = obj['error'] as Record<string, unknown> | undefined;
-      if (inner && typeof inner === 'object') {
-        if (typeof inner['message'] === 'string') return inner['message'] as string;
-        if (typeof inner['error'] === 'string') return String(inner['error']);
-      }
-      if (typeof obj['status'] === 'number' && obj['status'] === 0) {
-        return 'Sem conexão com o servidor. Verifique sua internet e tente novamente.';
-      }
-      if (typeof obj['status'] === 'number' && (obj['status'] as number) >= 400) {
-        const text = (typeof obj['statusText'] === 'string' && obj['statusText']) || 'erro';
-        return `Erro ${obj['status']}: ${text}`;
-      }
-      if (typeof obj['message'] === 'string') return obj['message'] as string;
-      if (typeof obj['name'] === 'string') return `${obj['name']}: ${String(obj['message'] ?? 'sem detalhes')}`;
-    }
-    return 'Erro inesperado. Veja o console do navegador para mais detalhes.';
+    return humanizeError(e, '[CaptureGuideBody]');
   }
 }

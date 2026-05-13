@@ -38,6 +38,7 @@ import {
 } from '../services/capture-validator.service';
 import { MediaPipeLoaderService } from '../services/mediapipe-loader.service';
 import { AestheticFacialService } from '../services/aesthetic-facial.service';
+import { humanizeError, waitForVideoDimensions } from '../services/capture-error-handling';
 
 interface CapturedPhoto {
   pose: FacialPose;
@@ -423,14 +424,9 @@ export class CaptureGuideFacialComponent implements OnInit, OnDestroy {
   private async _snapshotJpeg(): Promise<Blob> {
     const video = this.videoRef.nativeElement;
 
-    // Aguarda video ter dimensões — iOS Safari pode reportar 0 nos primeiros
-    // frames mesmo com readyState >= 2. Tenta até 2s antes de desistir.
-    const t0 = Date.now();
-    while ((!video.videoWidth || !video.videoHeight) && Date.now() - t0 < 2000) {
-      await new Promise(r => setTimeout(r, 100));
-    }
-    const w = video.videoWidth || 640;
-    const h = video.videoHeight || 480;
+    // iOS Safari pode reportar videoWidth=0 nos primeiros frames mesmo com
+    // readyState >= 2. Helper aguarda até 2s antes de cair em fallback.
+    const { width: w, height: h } = await waitForVideoDimensions(video, 2000, 640, 480);
 
     const c = document.createElement('canvas');
     c.width = w;
@@ -487,37 +483,6 @@ export class CaptureGuideFacialComponent implements OnInit, OnDestroy {
   }
 
   private _humanizeError(e: unknown): string {
-    // Sempre loga no console pra debug em mobile (sem stacktrace visível).
-    // Quem testar via remote debugging vai ver o erro real.
-    console.error('[CaptureGuide] erro:', e);
-
-    if (e instanceof Error) return e.message;
-
-    if (typeof e === 'string') return e;
-
-    if (typeof e === 'object' && e !== null) {
-      const obj = e as Record<string, unknown>;
-
-      // HttpErrorResponse do Angular HttpClient: prioriza .error.message do backend
-      const inner = obj['error'] as Record<string, unknown> | undefined;
-      if (inner && typeof inner === 'object') {
-        if (typeof inner['message'] === 'string') return inner['message'] as string;
-        if (typeof inner['error'] === 'string') return String(inner['error']);
-      }
-
-      // Network error: HttpErrorResponse com .status = 0 + .message genérico
-      if (typeof obj['status'] === 'number' && obj['status'] === 0) {
-        return 'Sem conexão com o servidor. Verifique sua internet e tente novamente.';
-      }
-      if (typeof obj['status'] === 'number' && (obj['status'] as number) >= 400) {
-        const text = (typeof obj['statusText'] === 'string' && obj['statusText']) || 'erro';
-        return `Erro ${obj['status']}: ${text}`;
-      }
-
-      if (typeof obj['message'] === 'string') return obj['message'] as string;
-      if (typeof obj['name'] === 'string') return `${obj['name']}: ${String(obj['message'] ?? 'sem detalhes')}`;
-    }
-
-    return 'Erro inesperado. Veja o console do navegador para mais detalhes.';
+    return humanizeError(e, '[CaptureGuideFacial]');
   }
 }
