@@ -2,18 +2,58 @@
 
 const { withTenant } = require('../db/tenant');
 
-async function createPending(pg, { tenantId, subjectId, userId, analysisType, photoIds, baselineId, creditsCharged }) {
+async function createPending(pg, {
+  tenantId, subjectId, userId, analysisType, photoIds,
+  baselineId, creditsCharged,
+  // V2 tier (default standard preserva F1-F6)
+  sessionId, tier,
+}) {
+  const finalTier = tier === 'advanced' ? 'advanced' : 'standard';
   return withTenant(pg, tenantId, async (client) => {
     const { rows } = await client.query(
       `INSERT INTO aesthetic_analyses
          (tenant_id, subject_id, user_id, analysis_type, photo_ids,
-          status, baseline_analysis_id, credits_charged)
-       VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7)
-       RETURNING id`,
-      [tenantId, subjectId, userId, analysisType, photoIds, baselineId || null, creditsCharged]
+          status, baseline_analysis_id, credits_charged,
+          session_id, tier)
+       VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8, $9)
+       RETURNING id, tier, session_id`,
+      [
+        tenantId, subjectId, userId, analysisType, photoIds,
+        baselineId || null, creditsCharged,
+        sessionId || null, finalTier,
+      ]
     );
     return rows[0];
   }, { userId, channel: 'ui' });
+}
+
+/**
+ * V2: validar que todas as photos pertencem à mesma session, têm pose e
+ * landmarks. Usado em pre-flight de POST /aesthetic/analyses tier=advanced.
+ *
+ * Returns:
+ *   { ok: true }                              tudo válido
+ *   { ok: false, error: 'PHOTOS_NOT_FOUND' }  alguma photo não existe ou foi apagada
+ *   { ok: false, error: 'PHOTOS_INCOMPLETE_FOR_ADVANCED' } falta pose/landmarks ou session_id diverge
+ */
+async function validatePhotosForAdvanced(pg, tenantId, photoIds, sessionId) {
+  const { rows } = await pg.query(
+    `SELECT id, pose, landmarks, session_id
+       FROM aesthetic_photos
+      WHERE id = ANY($1::uuid[])
+        AND tenant_id = $2
+        AND deleted_at IS NULL`,
+    [photoIds, tenantId]
+  );
+  if (rows.length !== photoIds.length) {
+    return { ok: false, error: 'PHOTOS_NOT_FOUND' };
+  }
+  for (const r of rows) {
+    if (!r.pose || !r.landmarks || r.session_id !== sessionId) {
+      return { ok: false, error: 'PHOTOS_INCOMPLETE_FOR_ADVANCED' };
+    }
+  }
+  return { ok: true };
 }
 
 async function validatePhotosOwnership(pg, tenantId, photoIds) {
@@ -96,6 +136,7 @@ function computeDeltas(baselineMetrics, currentMetrics) {
 
 module.exports = {
   createPending, validatePhotosOwnership,
+  validatePhotosForAdvanced,
   listForSubject, getDetail, softDelete,
   getMetricsOnly, computeDeltas,
 };

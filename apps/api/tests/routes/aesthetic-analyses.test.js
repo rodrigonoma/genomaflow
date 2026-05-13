@@ -12,7 +12,13 @@ jest.mock('../../src/services/aesthetic-pdf-export', () => ({
   buildAnalysisPDF: jest.fn(async () => Buffer.from('%PDF-1.4 mock-pdf-content')),
 }));
 
-async function buildApp({ balance = 100, hasConsent = true, photosOk = true, role = 'admin', module = 'estetica', consentRow = null } = {}) {
+async function buildApp({
+  balance = 100, hasConsent = true, photosOk = true,
+  role = 'admin', module = 'estetica', consentRow = null,
+  // V2 advanced tier mocks
+  advancedPhotosComplete = true,
+  advancedPhotosSessionId = 'sess-1',
+} = {}) {
   const app = Fastify({ logger: false });
   app.decorate('authenticate', async (req) => {
     req.user = { user_id: 'u1', tenant_id: 't1', role, module, professional_type: 'medico' };
@@ -25,15 +31,28 @@ async function buildApp({ balance = 100, hasConsent = true, photosOk = true, rol
       if (/COALESCE\(SUM\(amount\)/i.test(sql)) return { rows: [{ balance: String(balance) }] };
       if (/SELECT .* FROM aesthetic_consent/i.test(sql)) {
         if (!hasConsent) return { rows: [] };
-        // If caller provided a custom consent row, use it; otherwise default (no reinforced_regions)
         const row = consentRow !== null ? consentRow : { id: 'c1', created_at: '2026-05-11T00:00:00Z', reinforced_regions: [] };
         return { rows: [row] };
+      }
+      // validatePhotosForAdvanced (V2) — distinguir pelo SELECT incluir pose
+      if (/SELECT id, pose, landmarks, session_id\s+FROM aesthetic_photos/i.test(sql)) {
+        if (!photosOk) return { rows: [] };
+        return {
+          rows: params[0].map((id) => ({
+            id,
+            pose: advancedPhotosComplete ? 'frontal' : null,
+            landmarks: advancedPhotosComplete ? { type: 'face' } : null,
+            session_id: advancedPhotosSessionId,
+          })),
+        };
       }
       if (/SELECT id FROM aesthetic_photos/i.test(sql)) {
         if (!photosOk) return { rows: [] };
         return { rows: params[0].map((id) => ({ id })) };
       }
-      if (/INSERT INTO aesthetic_analyses/i.test(sql)) return { rows: [{ id: 'a-new' }] };
+      if (/INSERT INTO aesthetic_analyses/i.test(sql)) {
+        return { rows: [{ id: 'a-new', tier: params[8] || 'standard', session_id: params[7] }] };
+      }
       if (/INSERT INTO credit_ledger/i.test(sql)) return { rows: [{ id: 'cl1' }] };
       return { rows: [] };
     }),
@@ -154,6 +173,206 @@ describe('POST /aesthetic/analyses', () => {
       payload: { analysis_type: 'facial', subject_id: 'sub1', photo_ids: ['p1'] },
     });
     expect(res.statusCode).toBe(201);
+  });
+
+  // -------------------------------------------------------------------------
+  // V2 tier-aware — standard backward compat + advanced new path
+  // -------------------------------------------------------------------------
+
+  test('V2: tier=standard explícito mantém custo 5 + kind aesthetic_facial_analysis', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses',
+      payload: {
+        analysis_type: 'facial', subject_id: 'sub1', photo_ids: ['p1','p2'],
+        tier: 'standard',
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.tier).toBe('standard');
+    expect(body.credits_charged).toBe(5);
+    const debit = app._queries.find(q => /INSERT INTO credit_ledger/.test(q.sql));
+    expect(debit.params[1]).toBe(-5);
+    expect(debit.params[2]).toBe('aesthetic_facial_analysis');
+  });
+
+  test('V2: payload sem tier defaults para standard (backward compat)', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses',
+      payload: { analysis_type: 'facial', subject_id: 'sub1', photo_ids: ['p1'] },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(JSON.parse(res.body).tier).toBe('standard');
+  });
+
+  test('V2: tier=advanced facial com 5 fotos válidas → 201 + custo 10 + kind *_advanced', async () => {
+    const app = await buildApp({
+      consentRow: { id: 'c1', created_at: '2026-05-11', reinforced_regions: [] },
+    });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses',
+      payload: {
+        analysis_type: 'facial', subject_id: 'sub1',
+        photo_ids: ['p1','p2','p3','p4','p5'],
+        tier: 'advanced',
+        session_id: 'sess-1',
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.tier).toBe('advanced');
+    expect(body.credits_charged).toBe(10);
+    expect(body.session_id).toBe('sess-1');
+    const debit = app._queries.find(q => /INSERT INTO credit_ledger/.test(q.sql));
+    expect(debit.params[1]).toBe(-10);
+    expect(debit.params[2]).toBe('aesthetic_facial_analysis_advanced');
+  });
+
+  test('V2: tier=advanced sem session_id → 400 SESSION_REQUIRED', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses',
+      payload: {
+        analysis_type: 'facial', subject_id: 'sub1',
+        photo_ids: ['p1','p2','p3','p4','p5'],
+        tier: 'advanced',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('SESSION_REQUIRED');
+  });
+
+  test('V2: tier=advanced facial com 3 fotos → 400 PHOTO_COUNT_MISMATCH', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses',
+      payload: {
+        analysis_type: 'facial', subject_id: 'sub1',
+        photo_ids: ['p1','p2','p3'],
+        tier: 'advanced',
+        session_id: 'sess-1',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe('PHOTO_COUNT_MISMATCH');
+    expect(body.expected).toBe(5);
+    expect(body.received).toBe(3);
+  });
+
+  test('V2: tier=advanced body_measurements com 4 fotos → 201', async () => {
+    const app = await buildApp({
+      consentRow: { id: 'c1', created_at: '2026-05-11', reinforced_regions: [] },
+    });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses',
+      payload: {
+        analysis_type: 'full_body', subject_id: 'sub1',
+        photo_ids: ['p1','p2','p3','p4'],
+        tier: 'advanced',
+        session_id: 'sess-1',
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(JSON.parse(res.body).tier).toBe('advanced');
+  });
+
+  test('V2: tier=advanced photo sem pose/landmarks → 400 PHOTOS_INCOMPLETE_FOR_ADVANCED', async () => {
+    const app = await buildApp({ advancedPhotosComplete: false });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses',
+      payload: {
+        analysis_type: 'facial', subject_id: 'sub1',
+        photo_ids: ['p1','p2','p3','p4','p5'],
+        tier: 'advanced',
+        session_id: 'sess-1',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('PHOTOS_INCOMPLETE_FOR_ADVANCED');
+  });
+
+  test('V2: tier=advanced photo de outra session → 400 PHOTOS_INCOMPLETE_FOR_ADVANCED', async () => {
+    const app = await buildApp({ advancedPhotosSessionId: 'sess-OTHER' });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses',
+      payload: {
+        analysis_type: 'facial', subject_id: 'sub1',
+        photo_ids: ['p1','p2','p3','p4','p5'],
+        tier: 'advanced',
+        session_id: 'sess-1',  // não bate com sess-OTHER do mock
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('PHOTOS_INCOMPLETE_FOR_ADVANCED');
+  });
+
+  test('V2: tier=standard com 4+ fotos → 400 PHOTO_COUNT_OUT_OF_RANGE', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses',
+      payload: {
+        analysis_type: 'facial', subject_id: 'sub1',
+        photo_ids: ['p1','p2','p3','p4'],
+        tier: 'standard',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('PHOTO_COUNT_OUT_OF_RANGE');
+  });
+
+  test('V2: env override AESTHETIC_FACIAL_COST_ADVANCED=15 → cobra 15', async () => {
+    const original = process.env.AESTHETIC_FACIAL_COST_ADVANCED;
+    process.env.AESTHETIC_FACIAL_COST_ADVANCED = '15';
+    try {
+      // Re-require pra pegar novo valor da env (route lê no module load)
+      jest.resetModules();
+      jest.mock('../../src/queues/aesthetic-analysis-queue', () => ({
+        enqueue: jest.fn(async () => 'job-123'),
+      }));
+      jest.mock('../../src/services/aesthetic-pdf-export', () => ({
+        buildAnalysisPDF: jest.fn(async () => Buffer.from('%PDF')),
+      }));
+      // Build fresh app reusando mesmo factory pattern via fresh require
+      const Fastify2 = require('fastify');
+      const app = Fastify2({ logger: false });
+      app.decorate('authenticate', async (req) => {
+        req.user = { user_id: 'u1', tenant_id: 't1', role: 'admin', module: 'estetica', professional_type: 'medico' };
+      });
+      app.decorate('pg', {
+        connect: jest.fn(async () => app.pg),
+        query: jest.fn(async (sql, params) => {
+          if (/COALESCE\(SUM\(amount\)/i.test(sql)) return { rows: [{ balance: '100' }] };
+          if (/SELECT .* FROM aesthetic_consent/i.test(sql)) return { rows: [{ id: 'c1', reinforced_regions: [] }] };
+          if (/SELECT id, pose, landmarks, session_id\s+FROM aesthetic_photos/i.test(sql)) {
+            return { rows: params[0].map(id => ({ id, pose: 'frontal', landmarks: {type:'face'}, session_id: 'sess-1' })) };
+          }
+          if (/SELECT id FROM aesthetic_photos/i.test(sql)) return { rows: params[0].map(id => ({ id })) };
+          if (/INSERT INTO aesthetic_analyses/i.test(sql)) return { rows: [{ id: 'a-new', tier: 'advanced' }] };
+          if (/INSERT INTO credit_ledger/i.test(sql)) return { rows: [{ id: 'cl1' }] };
+          return { rows: [] };
+        }),
+        release: jest.fn(),
+      });
+      app.register(require('../../src/routes/aesthetic-analyses'), { prefix: '/api/aesthetic' });
+
+      const res = await app.inject({
+        method: 'POST', url: '/api/aesthetic/analyses',
+        payload: {
+          analysis_type: 'facial', subject_id: 'sub1',
+          photo_ids: ['p1','p2','p3','p4','p5'],
+          tier: 'advanced', session_id: 'sess-1',
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(JSON.parse(res.body).credits_charged).toBe(15);
+    } finally {
+      if (original === undefined) delete process.env.AESTHETIC_FACIAL_COST_ADVANCED;
+      else process.env.AESTHETIC_FACIAL_COST_ADVANCED = original;
+      jest.resetModules();
+    }
   });
 });
 

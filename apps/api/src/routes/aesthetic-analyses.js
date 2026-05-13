@@ -4,17 +4,39 @@ const { requireEsteticaModule } = require('../middleware/aesthetic-module-gate')
 const { VALID_ANALYSIS_TYPES, SENSITIVE_REGIONS } = require('../constants/aesthetic-metrics');
 const { getBalance, debit } = require('../services/aesthetic-credits');
 const { getConsent } = require('../services/aesthetic-consent');
-const { createPending, validatePhotosOwnership, listForSubject, getDetail, softDelete, getMetricsOnly, computeDeltas } = require('../services/aesthetic-analyses');
+const {
+  createPending, validatePhotosOwnership, validatePhotosForAdvanced,
+  listForSubject, getDetail, softDelete,
+  getMetricsOnly, computeDeltas,
+} = require('../services/aesthetic-analyses');
 const { enqueue } = require('../queues/aesthetic-analysis-queue');
 const { buildAnalysisPDF } = require('../services/aesthetic-pdf-export');
 
-const COST_BY_TYPE = {
-  facial: Number(process.env.AESTHETIC_FACIAL_COST || 5),
-  body_measurements: Number(process.env.AESTHETIC_BODY_COST || 5),
+// Custo tier-aware. Standard preserva F1-F6 (5cr default). Advanced é 2x
+// (10cr default) — captura guiada + landmarks + 10 métricas geométricas.
+// Configurável via env: AESTHETIC_*_COST + AESTHETIC_*_COST_ADVANCED.
+const COST_TABLE = {
+  facial: {
+    standard: Number(process.env.AESTHETIC_FACIAL_COST || 5),
+    advanced: Number(process.env.AESTHETIC_FACIAL_COST_ADVANCED || 10),
+  },
+  body_measurements: {
+    standard: Number(process.env.AESTHETIC_BODY_COST || 5),
+    advanced: Number(process.env.AESTHETIC_BODY_COST_ADVANCED || 10),
+  },
 };
 
-function costFor(analysisType) {
-  return COST_BY_TYPE[analysisType] ?? 5;
+function costFor(analysisType, tier = 'standard') {
+  const row = COST_TABLE[analysisType];
+  if (!row) return 5;
+  return row[tier] ?? row.standard ?? 5;
+}
+
+// Quantidade de fotos esperada por tier+analysis_type
+function expectedPhotoCount(analysisType, tier) {
+  if (tier !== 'advanced') return null;  // standard: 1-3 (range, não exato)
+  if (analysisType === 'facial') return 5;
+  return 4;  // todos demais analysis_types corporais em advanced = 4 fotos
 }
 
 module.exports = async function (fastify) {
@@ -22,15 +44,47 @@ module.exports = async function (fastify) {
     preHandler: [fastify.authenticate, requireEsteticaModule],
     config: { rateLimit: { max: 30, timeWindow: '1 hour' } },
   }, async (request, reply) => {
-    const { analysis_type, subject_id, photo_ids, baseline_id } = request.body || {};
+    const {
+      analysis_type, subject_id, photo_ids, baseline_id,
+      session_id, tier: rawTier,
+    } = request.body || {};
+
+    // Normalize tier — default standard; unknown values caem em standard
+    const tier = rawTier === 'advanced' ? 'advanced' : 'standard';
 
     // Validação básica
     if (!VALID_ANALYSIS_TYPES.includes(analysis_type)) {
       return reply.status(400).send({ error: `analysis_type deve ser um de: ${VALID_ANALYSIS_TYPES.join(', ')}` });
     }
     if (!subject_id) return reply.status(400).send({ error: 'subject_id obrigatório' });
-    if (!Array.isArray(photo_ids) || photo_ids.length < 1 || photo_ids.length > 3) {
-      return reply.status(400).send({ error: 'photo_ids deve ter 1 a 3 elementos' });
+    if (!Array.isArray(photo_ids) || photo_ids.length < 1) {
+      return reply.status(400).send({ error: 'photo_ids obrigatório (array com 1+ elementos)' });
+    }
+
+    // Tier-specific validações
+    if (tier === 'standard') {
+      if (photo_ids.length > 3) {
+        return reply.status(400).send({
+          error: 'PHOTO_COUNT_OUT_OF_RANGE',
+          message: 'tier=standard aceita 1 a 3 fotos. Para mais fotos use tier=advanced.',
+        });
+      }
+    } else {
+      // advanced
+      if (!session_id) {
+        return reply.status(400).send({
+          error: 'SESSION_REQUIRED',
+          message: 'tier=advanced exige session_id obrigatório.',
+        });
+      }
+      const expected = expectedPhotoCount(analysis_type, tier);
+      if (expected != null && photo_ids.length !== expected) {
+        return reply.status(400).send({
+          error: 'PHOTO_COUNT_MISMATCH',
+          message: `tier=advanced para ${analysis_type} exige exatamente ${expected} fotos (recebeu ${photo_ids.length}).`,
+          expected, received: photo_ids.length,
+        });
+      }
     }
 
     const tenantId = request.user.tenant_id;
@@ -39,6 +93,20 @@ module.exports = async function (fastify) {
     // Pre-flight 1: photos do tenant?
     const ownOk = await validatePhotosOwnership(fastify.pg, tenantId, photo_ids);
     if (!ownOk) return reply.status(400).send({ error: 'Uma ou mais photos não pertencem ao tenant ou foram apagadas' });
+
+    // Pre-flight 1b: tier=advanced exige todas as fotos com pose + landmarks
+    // pertencentes à mesma session_id passada
+    if (tier === 'advanced') {
+      const adv = await validatePhotosForAdvanced(fastify.pg, tenantId, photo_ids, session_id);
+      if (!adv.ok) {
+        return reply.status(400).send({
+          error: adv.error,
+          message: adv.error === 'PHOTOS_NOT_FOUND'
+            ? 'Alguma foto não foi encontrada.'
+            : 'Em tier=advanced, todas as fotos devem ter pose, landmarks e pertencer à session_id passada.',
+        });
+      }
+    }
 
     // Pre-flight 2: consent confirmado?
     const consent = await getConsent(fastify.pg, tenantId, subject_id);
@@ -62,8 +130,8 @@ module.exports = async function (fastify) {
       }
     }
 
-    // Pre-flight 3: créditos suficientes?
-    const cost = costFor(analysis_type);
+    // Pre-flight 3: créditos suficientes? (tier-aware cost)
+    const cost = costFor(analysis_type, tier);
     const balance = await getBalance(fastify.pg, tenantId);
     if (balance < cost) {
       return reply.status(402).send({
@@ -71,23 +139,31 @@ module.exports = async function (fastify) {
         message: `Análise custa ${cost} créditos. Saldo atual: ${balance}.`,
         current: balance,
         required: cost,
+        tier,
       });
     }
 
-    // Cria registro pending
+    // Cria registro pending (com tier + session_id)
     const analysis = await createPending(fastify.pg, {
       tenantId, subjectId: subject_id, userId,
       analysisType: analysis_type, photoIds: photo_ids,
       baselineId: baseline_id, creditsCharged: cost,
+      sessionId: session_id || null,
+      tier,
     });
 
-    // Debita créditos (idempotente via ref_id)
+    // Debita créditos com kind tier-aware
+    const kind = tier === 'advanced'
+      ? `aesthetic_${analysis_type}_analysis_advanced`
+      : `aesthetic_${analysis_type}_analysis`;
     await debit(fastify.pg, {
-      tenantId, amount: cost, kind: `aesthetic_${analysis_type}_analysis`,
-      description: `Análise ${analysis_type} IA`, refId: analysis.id, userId,
+      tenantId, amount: cost, kind,
+      description: `Análise ${analysis_type} IA (${tier})`,
+      refId: analysis.id, userId,
     });
 
-    // Enqueue worker job
+    // Enqueue worker job — passa tier pro processor decidir se roda
+    // o agente de landmarks-metrics (V2-E)
     await enqueue({
       analysis_id: analysis.id,
       tenant_id: tenantId,
@@ -95,6 +171,8 @@ module.exports = async function (fastify) {
       analysis_type, photo_ids,
       baseline_analysis_id: baseline_id,
       professional_type: request.user.professional_type,
+      tier,
+      session_id: session_id || null,
     });
 
     // Retorna `id` (consistente com AestheticAnalysisDetail do frontend) +
@@ -106,6 +184,8 @@ module.exports = async function (fastify) {
       analysis_id: analysis.id,
       status: 'pending',
       credits_charged: cost,
+      tier,
+      session_id: session_id || null,
     });
   });
 
