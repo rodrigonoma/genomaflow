@@ -7,12 +7,14 @@ const { indexSubject, indexAggregates } = require('./rag/indexer');
 const { startScheduler } = require('./notifications/scheduler');
 const { processAestheticAnalysis } = require('./processors/aesthetic-analysis');
 const { processDepthGeneration } = require('./processors/aesthetic-depth');
+const { processTrelloQA } = require('./processors/trello-qa');
 
 const connection      = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
 const subscriber      = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
 const videoConn       = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
 const aestheticConn   = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
 const depthConn       = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+const trelloQAConn    = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
 
 const worker = new Worker('exam-processing', async (job) => {
   console.log(`[worker] Processing job ${job.id}: exam ${job.data.exam_id}`);
@@ -66,6 +68,19 @@ const depthWorker = new Worker('aesthetic-depth', async (job) => {
 depthWorker.on('completed', (job) => console.log(`[aesthetic-depth-worker] Job ${job.id} completed`));
 depthWorker.on('failed',    (job, err) => console.error(`[aesthetic-depth-worker] Job ${job.id} failed: ${err.message}`));
 
+const trelloQAWorker = new Worker('trello-qa', async (job) => {
+  console.log(`[trello-qa-worker] Job ${job.id} event=${job.data.event} card=${job.data.card_short_id}`);
+  await processTrelloQA({ data: job.data });
+}, {
+  connection: trelloQAConn,
+  concurrency: 1,
+  removeOnComplete: { age: 3600 },
+  removeOnFail: { age: 86400 },
+});
+
+trelloQAWorker.on('completed', (job) => console.log(`[trello-qa-worker] Job ${job.id} completed`));
+trelloQAWorker.on('failed', (job, err) => console.error(`[trello-qa-worker] Job ${job.id} failed: ${err.message}`));
+
 subscriber.psubscribe('subject:upserted:*', 'billing:updated:*', (err) => {
   if (err) console.error('[worker] Subscribe error:', err.message);
 });
@@ -106,11 +121,13 @@ async function shutdown(signal) {
     videoWorker.close(),
     aestheticWorker.close(),
     depthWorker.close(),
+    trelloQAWorker.close(),
     subscriber.quit(),
     connection.quit(),
     videoConn.quit(),
     aestheticConn.quit(),
     depthConn.quit(),
+    trelloQAConn.quit(),
   ]);
   const failures = results.filter(r => r.status === 'rejected');
   if (failures.length) {
@@ -123,4 +140,4 @@ async function shutdown(signal) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
 
-console.log('[worker] Listening for exam-processing, video-transcription, aesthetic-analysis, aesthetic-depth jobs and index events...');
+console.log('[worker] Listening for exam-processing, video-transcription, aesthetic-analysis, aesthetic-depth, trello-qa jobs and index events...');
