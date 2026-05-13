@@ -23,6 +23,16 @@ function clampScore(n) {
   return Math.max(0, Math.min(100, Math.round(x)));
 }
 
+// Contrato de saída espelha apps/web/.../models/analysis.model.ts (Region union):
+//   bbox:     { type, x, y, width, height }
+//   polyline: { type, points: [{x,y},...] }
+//   polygon:  { type, points: [{x,y},...] }
+//   line:     { type, x1, y1, x2, y2 }
+//   point:    { type, x, y }
+// Tolerante na entrada (LLM pode devolver w/h ou width/height; tuplas ou objetos;
+// from/to ou x1/y1/x2/y2). Strict na saída. Mismatch causou bug 2026-05-12:
+// markers nunca renderizavam no overlay porque template lia .width/.height e o
+// worker gravava .w/.h.
 function sanitizeRegion(r) {
   if (!r || !VALID_REGION_TYPES.has(r.type)) return null;
   const out = { type: r.type };
@@ -30,25 +40,43 @@ function sanitizeRegion(r) {
 
   switch (r.type) {
     case 'bbox': {
-      const x = clamp01(r.x), y = clamp01(r.y), w = clamp01(r.w), h = clamp01(r.h);
-      if ([x, y, w, h].some(v => v === null)) return null;
-      return { ...out, x, y, w, h };
+      const x = clamp01(r.x);
+      const y = clamp01(r.y);
+      const width  = clamp01(r.width  != null ? r.width  : r.w);
+      const height = clamp01(r.height != null ? r.height : r.h);
+      if ([x, y, width, height].some(v => v === null)) return null;
+      return { ...out, x, y, width, height };
     }
     case 'polyline':
     case 'polygon': {
       if (!Array.isArray(r.points)) return null;
       const points = r.points.slice(0, MAX_POINTS)
-        .map(p => Array.isArray(p) && p.length === 2 ? [clamp01(p[0]), clamp01(p[1])] : null)
-        .filter(p => p !== null && p[0] !== null && p[1] !== null);
+        .map(p => {
+          if (Array.isArray(p) && p.length === 2) {
+            const x = clamp01(p[0]), y = clamp01(p[1]);
+            return (x !== null && y !== null) ? { x, y } : null;
+          }
+          if (p && typeof p === 'object') {
+            const x = clamp01(p.x), y = clamp01(p.y);
+            return (x !== null && y !== null) ? { x, y } : null;
+          }
+          return null;
+        })
+        .filter(Boolean);
       if (points.length < 2) return null;
       return { ...out, points };
     }
     case 'line': {
-      if (!Array.isArray(r.from) || !Array.isArray(r.to)) return null;
-      const from = [clamp01(r.from[0]), clamp01(r.from[1])];
-      const to = [clamp01(r.to[0]), clamp01(r.to[1])];
-      if (from.some(v => v === null) || to.some(v => v === null)) return null;
-      return { ...out, from, to };
+      let x1, y1, x2, y2;
+      if (Array.isArray(r.from) && Array.isArray(r.to)) {
+        x1 = clamp01(r.from[0]); y1 = clamp01(r.from[1]);
+        x2 = clamp01(r.to[0]);   y2 = clamp01(r.to[1]);
+      } else {
+        x1 = clamp01(r.x1); y1 = clamp01(r.y1);
+        x2 = clamp01(r.x2); y2 = clamp01(r.y2);
+      }
+      if ([x1, y1, x2, y2].some(v => v === null)) return null;
+      return { ...out, x1, y1, x2, y2 };
     }
     case 'point': {
       const x = clamp01(r.x), y = clamp01(r.y);
@@ -95,9 +123,14 @@ Para cada métrica, retorne também:
 - score (0-100)
 - confidence: "high" | "medium" | "low"
 - regions: lista de áreas afetadas com coordenadas normalizadas 0-1.
-  Tipos suportados: bbox {type:"bbox",x,y,w,h}, polyline {type:"polyline",points:[[x,y],...]},
-  polygon {type:"polygon",points:[[x,y],...]}, line {type:"line",from:[x,y],to:[x,y]},
-  point {type:"point",x,y}. Use o tipo mais apropriado.
+  Tipos suportados (use exatamente esses formatos):
+    bbox     {"type":"bbox","x":0..1,"y":0..1,"width":0..1,"height":0..1}
+    polyline {"type":"polyline","points":[{"x":0..1,"y":0..1},...]}
+    polygon  {"type":"polygon","points":[{"x":0..1,"y":0..1},...]}
+    line     {"type":"line","x1":0..1,"y1":0..1,"x2":0..1,"y2":0..1}
+    point    {"type":"point","x":0..1,"y":0..1}
+  Use o tipo mais apropriado e prefira bbox/point para marcar localizações pontuais.
+  Forneça pelo menos 1 região por métrica quando o sinal for visualmente identificável.
 - label (opcional, até 100 chars): descrição da região (ex: "ruga periorbital esquerda")
 
 Marque confidence="low" em métricas que dependem de medição precisa 2D (ex: simetria).

@@ -25,31 +25,52 @@ function clampScore(n) {
   return Math.max(0, Math.min(100, Math.round(x)));
 }
 
+// Saída espelha apps/web/.../models/analysis.model.ts (Region union).
+// Tolerante na entrada, strict na saída. Ver comentário em aesthetic-facial.js
+// e regressão 2026-05-12 (markers SVG nunca renderizavam).
 function sanitizeRegion(r) {
   if (!r || !VALID_REGION_TYPES.has(r.type)) return null;
   const out = { type: r.type };
   if (typeof r.label === 'string') out.label = r.label.slice(0, MAX_LABEL_LENGTH);
   switch (r.type) {
     case 'bbox': {
-      const x = clamp01(r.x), y = clamp01(r.y), w = clamp01(r.w), h = clamp01(r.h);
-      if ([x,y,w,h].some(v => v === null)) return null;
-      return { ...out, x, y, w, h };
+      const x = clamp01(r.x);
+      const y = clamp01(r.y);
+      const width  = clamp01(r.width  != null ? r.width  : r.w);
+      const height = clamp01(r.height != null ? r.height : r.h);
+      if ([x, y, width, height].some(v => v === null)) return null;
+      return { ...out, x, y, width, height };
     }
     case 'polyline':
     case 'polygon': {
       if (!Array.isArray(r.points)) return null;
       const points = r.points.slice(0, MAX_POINTS_PER_REGION)
-        .map(p => Array.isArray(p) && p.length === 2 ? [clamp01(p[0]), clamp01(p[1])] : null)
-        .filter(p => p !== null && p[0] !== null && p[1] !== null);
+        .map(p => {
+          if (Array.isArray(p) && p.length === 2) {
+            const x = clamp01(p[0]), y = clamp01(p[1]);
+            return (x !== null && y !== null) ? { x, y } : null;
+          }
+          if (p && typeof p === 'object') {
+            const x = clamp01(p.x), y = clamp01(p.y);
+            return (x !== null && y !== null) ? { x, y } : null;
+          }
+          return null;
+        })
+        .filter(Boolean);
       if (points.length < 2) return null;
       return { ...out, points };
     }
     case 'line': {
-      if (!Array.isArray(r.from) || !Array.isArray(r.to)) return null;
-      const from = [clamp01(r.from[0]), clamp01(r.from[1])];
-      const to = [clamp01(r.to[0]), clamp01(r.to[1])];
-      if (from.some(v => v === null) || to.some(v => v === null)) return null;
-      return { ...out, from, to };
+      let x1, y1, x2, y2;
+      if (Array.isArray(r.from) && Array.isArray(r.to)) {
+        x1 = clamp01(r.from[0]); y1 = clamp01(r.from[1]);
+        x2 = clamp01(r.to[0]);   y2 = clamp01(r.to[1]);
+      } else {
+        x1 = clamp01(r.x1); y1 = clamp01(r.y1);
+        x2 = clamp01(r.x2); y2 = clamp01(r.y2);
+      }
+      if ([x1, y1, x2, y2].some(v => v === null)) return null;
+      return { ...out, x1, y1, x2, y2 };
     }
     case 'point': {
       const x = clamp01(r.x), y = clamp01(r.y);
@@ -105,7 +126,12 @@ Para cada métrica, retorne:
 - confidence: "high" | "medium" | "low" — use "low" pra estimativas de área que dependem de medição precisa 2D (culote, volume_aparente, projecao_glutea, etc.)
 - regions: lista de áreas afetadas com coordenadas normalizadas 0-1.
   Use polygon pra áreas orgânicas (culote, abdomen flácido, celulite), bbox pra lesões discretas (estrias localizadas), point pra pontos de referência.
-  Format: { "type": "polygon", "points": [[x,y],...], "label": "área culote esquerdo" }
+  Formatos exatos:
+    bbox     {"type":"bbox","x":0..1,"y":0..1,"width":0..1,"height":0..1}
+    polyline {"type":"polyline","points":[{"x":0..1,"y":0..1},...]}
+    polygon  {"type":"polygon","points":[{"x":0..1,"y":0..1},...],"label":"..."}
+    line     {"type":"line","x1":0..1,"y1":0..1,"x2":0..1,"y2":0..1}
+    point    {"type":"point","x":0..1,"y":0..1}
 - label opcional (até 100 chars).
 
 IMPORTANTE — estimativas corporais 2D:

@@ -77,6 +77,59 @@ describe('analyzeFacial', () => {
     })).rejects.toMatchObject({ code: 'NO_FACE_DETECTED' });
   });
 
+  // ---------------------------------------------------------------------------
+  // REGRESSION GUARD — bug 2026-05-12
+  // Contrato Region do worker DEVE bater o shape em apps/web/.../analysis.model.ts.
+  // Mismatch (worker grava w/h, tuplas, from/to; frontend lê width/height, {x,y},
+  // x1/y1/x2/y2) fez os marcadores SVG nunca aparecerem no overlay.
+  // ---------------------------------------------------------------------------
+  test('output shape: bbox usa width/height (NÃO w/h)', () => {
+    const dirty = {
+      rugas: { score: 50, regions: [
+        { type: 'bbox', x: 0.1, y: 0.2, w: 0.3, h: 0.4 },
+        { type: 'bbox', x: 0.1, y: 0.2, width: 0.5, height: 0.6 },
+      ]},
+    };
+    const clean = sanitizeMetrics(dirty, 'facial');
+    const [a, b] = clean.rugas.regions;
+    expect(a).toEqual({ type: 'bbox', x: 0.1, y: 0.2, width: 0.3, height: 0.4 });
+    expect(b).toEqual({ type: 'bbox', x: 0.1, y: 0.2, width: 0.5, height: 0.6 });
+    expect(a).not.toHaveProperty('w');
+    expect(a).not.toHaveProperty('h');
+  });
+
+  test('output shape: polyline/polygon usa points como {x,y} (NÃO tuplas)', () => {
+    const dirty = {
+      rugas: { score: 50, regions: [
+        { type: 'polyline', points: [[0.1, 0.2], [0.3, 0.4]] },
+        { type: 'polygon', points: [{ x: 0.5, y: 0.6 }, { x: 0.7, y: 0.8 }] },
+      ]},
+    };
+    const clean = sanitizeMetrics(dirty, 'facial');
+    expect(clean.rugas.regions[0]).toEqual({
+      type: 'polyline',
+      points: [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }],
+    });
+    expect(clean.rugas.regions[1]).toEqual({
+      type: 'polygon',
+      points: [{ x: 0.5, y: 0.6 }, { x: 0.7, y: 0.8 }],
+    });
+  });
+
+  test('output shape: line usa x1/y1/x2/y2 (NÃO from/to)', () => {
+    const dirty = {
+      rugas: { score: 50, regions: [
+        { type: 'line', from: [0.1, 0.2], to: [0.3, 0.4] },
+        { type: 'line', x1: 0.5, y1: 0.6, x2: 0.7, y2: 0.8 },
+      ]},
+    };
+    const clean = sanitizeMetrics(dirty, 'facial');
+    expect(clean.rugas.regions[0]).toEqual({ type: 'line', x1: 0.1, y1: 0.2, x2: 0.3, y2: 0.4 });
+    expect(clean.rugas.regions[1]).toEqual({ type: 'line', x1: 0.5, y1: 0.6, x2: 0.7, y2: 0.8 });
+    expect(clean.rugas.regions[0]).not.toHaveProperty('from');
+    expect(clean.rugas.regions[0]).not.toHaveProperty('to');
+  });
+
   test('BAD_LLM_OUTPUT em JSON inválido', async () => {
     mockCreate.mockResolvedValueOnce({
       content: [{ text: 'isso não é json' }],
