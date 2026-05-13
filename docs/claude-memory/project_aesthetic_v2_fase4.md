@@ -89,16 +89,31 @@ Fechamento da plataforma aesthetic V2. Spec: `docs/superpowers/specs/2026-05-13-
 | F4-D6 | Z-API sendDocument complementa sendText existente |
 | F4-D7 | aesthetic_analysis_shares audit trail completo |
 
-## ⚠️ Configuração necessária em produção
+## Configuração em produção
 
-**ENV vars WhatsApp** na task definition ECS (sem isso, canal whatsapp falha mas email continua):
-- `ZAPI_INSTANCE_ID`
-- `ZAPI_TOKEN`
-- `ZAPI_CLIENT_TOKEN`
+**ENV vars WhatsApp** JÁ estão configuradas via SSM Parameter Store
+na task definition ECS (campo `secrets`, não `environment`):
+- `ZAPI_INSTANCE_ID` ← `/genomaflow/prod/zapi-instance-id`
+- `ZAPI_TOKEN` ← `/genomaflow/prod/zapi-token`
+- `ZAPI_CLIENT_TOKEN` ← `/genomaflow/prod/zapi-client-token`
 
-ZAPI_MOCK=1 já está disponível pra dev sem credenciais reais.
+Z-API integrado e operacional desde a Fase 3 PMS expansion. F4 reusa.
+ZAPI_MOCK=1 disponível pra dev sem credenciais reais.
 
 **IAM** `aesthetic-patient-pdf/*` aplicado via cdk deploy.
+
+## Verificação pós-deploy (auditoria)
+
+```bash
+# Confirma que secrets Z-API estão presentes na task def atual
+aws ecs describe-task-definition \
+  --task-definition genomaflowecsApiTaskB4B8C714 \
+  --query 'taskDefinition.containerDefinitions[0].secrets[?contains(name,`ZAPI`)]'
+```
+
+Importante: secrets vivem em `containerDefinitions[].secrets` (SSM
+referenciado), NÃO em `environment[]`. Auditoria de configuração tem
+que checar AMBOS os arrays.
 
 ## Tests
 
