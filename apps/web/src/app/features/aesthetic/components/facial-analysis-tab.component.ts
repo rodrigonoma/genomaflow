@@ -46,6 +46,7 @@ import { AnalysisResultComponent } from './analysis-result.component';
 import { AnalysisListComponent } from './analysis-list.component';
 import { ComparisonViewComponent } from './comparison-view.component';
 import { TierSelectorComponent, AnalysisTier } from './tier-selector.component';
+import { CaptureGuideFacialComponent } from './capture-guide-facial.component';
 
 // ---------------------------------------------------------------------------
 // Step type
@@ -82,6 +83,7 @@ export type Step =
     AnalysisListComponent,
     ComparisonViewComponent,
     TierSelectorComponent,
+    CaptureGuideFacialComponent,
   ],
   styles: [`
     :host { display: block; }
@@ -213,18 +215,21 @@ export type Step =
       }
 
       <!-- ================================================================ -->
-      <!-- CAPTURE — V2 advanced wizard guiado (lazy module)                 -->
+      <!-- CAPTURE — V2 advanced wizard guiado                               -->
       <!-- ================================================================ -->
-      @if (step() === 'capture') {
-        <div data-testid="capture-placeholder" class="processing-wrap">
+      @if (step() === 'capture' && currentSessionId()) {
+        <app-capture-guide-facial
+          data-testid="capture-guide"
+          [subjectId]="subject().id"
+          [sessionId]="currentSessionId()!"
+          (complete)="onCaptureComplete($event)"
+          (cancel)="step.set('idle')">
+        </app-capture-guide-facial>
+      }
+      @if (step() === 'capture' && !currentSessionId()) {
+        <div data-testid="capture-session-loading" class="processing-wrap">
           <div class="spinner"></div>
-          <span class="processing-text">
-            Carregando captura guiada...
-            <br><small style="font-size:11px;color:#7c7b8f">
-              Aguarde enquanto o MediaPipe Web é inicializado (~10s na primeira vez).
-            </small>
-          </span>
-          <!-- Componente <app-capture-guide-facial> será conectado em V2-C step C5 -->
+          <span class="processing-text">Preparando sessão de captura...</span>
         </div>
       }
 
@@ -500,8 +505,12 @@ export class FacialAnalysisTabComponent implements OnInit, OnChanges {
             this._openConsentModal([this.selectedRegion()]);
             return;
           }
-          // All good → V2: tier=advanced abre captura guiada; standard segue guide normal.
-          this.step.set(this.selectedTier() === 'advanced' ? 'capture' : 'guide');
+          // V2: tier=advanced abre captura guiada; standard segue guide normal.
+          if (this.selectedTier() === 'advanced') {
+            this._startAdvancedCapture();
+          } else {
+            this.step.set('guide');
+          }
         } else {
           // No valid consent → open modal; mark reinforced if sensitive
           this._openConsentModal(this._pickedRegionIsSensitive() ? [this.selectedRegion()] : undefined);
@@ -547,6 +556,36 @@ export class FacialAnalysisTabComponent implements OnInit, OnChanges {
       return;
     }
     setTimeout(() => this._tryStartUpload(files, attempt + 1), 25);
+  }
+
+  /**
+   * V2 advanced: cria aesthetic_session (POST /aesthetic/sessions),
+   * guarda o ID em currentSessionId e abre o step 'capture' que renderiza
+   * o <app-capture-guide-facial>.
+   */
+  private _startAdvancedCapture(): void {
+    this.step.set('capture');
+    this.svc.createSession({
+      subject_id: this.subject().id,
+      session_type: 'facial_analysis',
+    }).subscribe({
+      next: (sess) => this.currentSessionId.set(sess.id),
+      error: (err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'Erro ao criar sessão de captura.';
+        this.error.set(msg);
+        this.step.set('idle');
+      },
+    });
+  }
+
+  /**
+   * V2: captura guiada concluída (5 fotos enviadas com pose + landmarks).
+   * Avança direto pra criação da análise (tier=advanced) — pula o step
+   * 'upload' que é exclusivo do fluxo standard.
+   */
+  onCaptureComplete(event: { photoIds: string[]; sessionId: string }): void {
+    this.currentSessionId.set(event.sessionId);
+    this.onUploadComplete(event.photoIds);
   }
 
   /** Upload complete → create analysis → go to processing. */
@@ -627,8 +666,12 @@ export class FacialAnalysisTabComponent implements OnInit, OnChanges {
 
     ref.afterClosed().subscribe((confirmed: boolean | undefined) => {
       if (confirmed === true) {
-        // V2: tier=advanced abre captura guiada após consent
-        this.step.set(this.selectedTier() === 'advanced' ? 'capture' : 'guide');
+        // V2: tier=advanced cria session + abre captura guiada após consent
+        if (this.selectedTier() === 'advanced') {
+          this._startAdvancedCapture();
+        } else {
+          this.step.set('guide');
+        }
       } else {
         this.step.set('idle');
       }
