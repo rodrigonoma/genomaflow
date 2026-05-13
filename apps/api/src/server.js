@@ -107,6 +107,7 @@ app.register((fastify, _opts, done) => {
   fastify.register(require('./routes/aesthetic-treatments'), { prefix: '/aesthetic' });
   fastify.register(require('./routes/aesthetic-profile'),    { prefix: '/aesthetic' });
   fastify.register(require('./routes/aesthetic-sessions'),   { prefix: '/aesthetic' });
+  fastify.register(require('./routes/aesthetic-depth'),      { prefix: '/aesthetic' });
   fastify.register(require('./routes/webhooks/stripe'),   { prefix: '' });
   fastify.register(require('./routes/webhooks/ses'),      { prefix: '/webhooks' });
   done();
