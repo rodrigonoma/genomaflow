@@ -219,6 +219,15 @@ export class EcsStack extends cdk.Stack {
       resources: ['arn:aws:s3:::genomaflow-uploads-prod/aesthetic-depth/*'],
     }));
 
+    // S3 — PDF paciente (V2 Fase 4 Relatório paciente). API faz PutObject
+    // cacheado em POST /aesthetic/analyses/:id/share + GetObject (signed URL
+    // 7d) pra link Bài no email/WhatsApp. Sem este prefix, share falha
+    // com AccessDenied silencioso.
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['s3:PutObject', 's3:GetObject', 's3:DeleteObject'],
+      resources: ['arn:aws:s3:::genomaflow-uploads-prod/aesthetic-patient-pdf/*'],
+    }));
+
     // ── ECS Cluster ──
     const cluster = new ecs.Cluster(this, 'Cluster', {
       vpc,
