@@ -106,8 +106,9 @@ async function softDelete(pg, analysisId, tenantId, userId) {
 }
 
 async function getMetricsOnly(pg, analysisId, tenantId) {
+  // tier incluído pra compare endpoint exigir mesmo tier baseline↔current (V2 D12).
   const { rows } = await pg.query(
-    `SELECT id, metrics FROM aesthetic_analyses
+    `SELECT id, metrics, tier FROM aesthetic_analyses
      WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL AND status = 'done'`,
     [analysisId, tenantId]
   );

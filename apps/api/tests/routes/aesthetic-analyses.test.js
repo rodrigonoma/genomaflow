@@ -429,12 +429,12 @@ describe('DELETE /aesthetic/analyses/:id', () => {
 });
 
 describe('POST /aesthetic/analyses/:id/compare', () => {
-  test('computa delta matemático entre baseline e atual', async () => {
+  test('computa delta matemático entre baseline e atual (mesmo tier standard)', async () => {
     const app = await buildApp();
     app.pg.query.mockImplementation(async (sql, params) => {
-      if (/SELECT id, metrics FROM aesthetic_analyses/i.test(sql)) {
-        if (params[0] === 'baseline') return { rows: [{ id: 'baseline', metrics: { rugas: { score: 70 }, firmeza: { score: 60 } } }] };
-        if (params[0] === 'current') return { rows: [{ id: 'current', metrics: { rugas: { score: 50 }, firmeza: { score: 80 } } }] };
+      if (/SELECT id, metrics, tier FROM aesthetic_analyses/i.test(sql)) {
+        if (params[0] === 'baseline') return { rows: [{ id: 'baseline', tier: 'standard', metrics: { rugas: { score: 70 }, firmeza: { score: 60 } } }] };
+        if (params[0] === 'current') return { rows: [{ id: 'current', tier: 'standard', metrics: { rugas: { score: 50 }, firmeza: { score: 80 } } }] };
         return { rows: [] };
       }
       return { rows: [] };
@@ -448,6 +448,67 @@ describe('POST /aesthetic/analyses/:id/compare', () => {
     expect(body.deltas.rugas).toBe(-20);
     expect(body.deltas.firmeza).toBe(+20);
     expect(body.overall_change).toBeDefined();
+    expect(body.tier).toBe('standard');
+  });
+
+  // V2 D12 — tier-gate
+  test('V2: baseline=standard + current=advanced → 400 TIER_MISMATCH', async () => {
+    const app = await buildApp();
+    app.pg.query.mockImplementation(async (sql, params) => {
+      if (/SELECT id, metrics, tier FROM aesthetic_analyses/i.test(sql)) {
+        if (params[0] === 'baseline') return { rows: [{ id: 'baseline', tier: 'standard', metrics: {} }] };
+        if (params[0] === 'current') return { rows: [{ id: 'current', tier: 'advanced', metrics: {} }] };
+        return { rows: [] };
+      }
+      return { rows: [] };
+    });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses/current/compare',
+      payload: { baseline_id: 'baseline' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe('TIER_MISMATCH');
+    expect(body.baseline_tier).toBe('standard');
+    expect(body.current_tier).toBe('advanced');
+  });
+
+  test('V2: baseline=advanced + current=standard → 400 TIER_MISMATCH', async () => {
+    const app = await buildApp();
+    app.pg.query.mockImplementation(async (sql, params) => {
+      if (/SELECT id, metrics, tier FROM aesthetic_analyses/i.test(sql)) {
+        if (params[0] === 'baseline') return { rows: [{ id: 'baseline', tier: 'advanced', metrics: {} }] };
+        if (params[0] === 'current') return { rows: [{ id: 'current', tier: 'standard', metrics: {} }] };
+        return { rows: [] };
+      }
+      return { rows: [] };
+    });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses/current/compare',
+      payload: { baseline_id: 'baseline' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('TIER_MISMATCH');
+  });
+
+  test('V2: ambos advanced → 200 + tier=advanced no response', async () => {
+    const app = await buildApp();
+    app.pg.query.mockImplementation(async (sql, params) => {
+      if (/SELECT id, metrics, tier FROM aesthetic_analyses/i.test(sql)) {
+        if (params[0] === 'baseline') return { rows: [{ id: 'baseline', tier: 'advanced', metrics: { symmetry_horizontal: { score: 80 } } }] };
+        if (params[0] === 'current') return { rows: [{ id: 'current', tier: 'advanced', metrics: { symmetry_horizontal: { score: 88 } } }] };
+        return { rows: [] };
+      }
+      return { rows: [] };
+    });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses/current/compare',
+      payload: { baseline_id: 'baseline' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.tier).toBe('advanced');
+    expect(body.deltas.symmetry_horizontal).toBe(+8);
   });
 });
 

@@ -241,10 +241,22 @@ module.exports = async function (fastify) {
     if (!baseline || !current) {
       return reply.status(404).send({ error: 'Análise (baseline ou atual) não encontrada ou ainda não concluída' });
     }
+    // V2 D12: tier-gated compare. Métricas geométricas (mediapipe) só
+    // existem em advanced; comparar standard vs advanced gera deltas
+    // semanticamente quebrados.
+    if (baseline.tier !== current.tier) {
+      return reply.status(400).send({
+        error: 'TIER_MISMATCH',
+        message: 'Compare exige análises do mesmo tier. Métricas geométricas existem apenas em tier=advanced.',
+        baseline_tier: baseline.tier,
+        current_tier: current.tier,
+      });
+    }
     const result = computeDeltas(baseline.metrics, current.metrics);
     return reply.send({
       baseline_id: baseline.id,
       current_id: current.id,
+      tier: current.tier,
       deltas: result.deltas,
       overall_change: result.overall_change,
     });
