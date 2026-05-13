@@ -6,11 +6,13 @@ const { processVideoTranscription } = require('./video/transcription');
 const { indexSubject, indexAggregates } = require('./rag/indexer');
 const { startScheduler } = require('./notifications/scheduler');
 const { processAestheticAnalysis } = require('./processors/aesthetic-analysis');
+const { processDepthGeneration } = require('./processors/aesthetic-depth');
 
-const connection    = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
-const subscriber    = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
-const videoConn     = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
-const aestheticConn = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+const connection      = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+const subscriber      = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+const videoConn       = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+const aestheticConn   = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+const depthConn       = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
 
 const worker = new Worker('exam-processing', async (job) => {
   console.log(`[worker] Processing job ${job.id}: exam ${job.data.exam_id}`);
@@ -51,6 +53,19 @@ const aestheticWorker = new Worker('aesthetic-analysis', async (job) => {
 aestheticWorker.on('completed', (job) => console.log(`[aesthetic-worker] Job ${job.id} completed`));
 aestheticWorker.on('failed',    (job, err) => console.error(`[aesthetic-worker] Job ${job.id} failed: ${err.message}`));
 
+// V2 Fase 3: depth model generation (Pseudo-3D MVP)
+const depthWorker = new Worker('aesthetic-depth', async (job) => {
+  console.log(`[aesthetic-depth-worker] Job ${job.id}: depth ${job.data.depth_id} analysis ${job.data.analysis_id}`);
+  await processDepthGeneration({ data: job.data });
+}, {
+  connection: depthConn,
+  concurrency: 1,                 // depth é caro (CPU-bound), 1 por vez
+  removeOnComplete: { age: 3600 },
+  removeOnFail:     { age: 86400 },
+});
+depthWorker.on('completed', (job) => console.log(`[aesthetic-depth-worker] Job ${job.id} completed`));
+depthWorker.on('failed',    (job, err) => console.error(`[aesthetic-depth-worker] Job ${job.id} failed: ${err.message}`));
+
 subscriber.psubscribe('subject:upserted:*', 'billing:updated:*', (err) => {
   if (err) console.error('[worker] Subscribe error:', err.message);
 });
@@ -90,10 +105,12 @@ async function shutdown(signal) {
     worker.close(),
     videoWorker.close(),
     aestheticWorker.close(),
+    depthWorker.close(),
     subscriber.quit(),
     connection.quit(),
     videoConn.quit(),
     aestheticConn.quit(),
+    depthConn.quit(),
   ]);
   const failures = results.filter(r => r.status === 'rejected');
   if (failures.length) {
@@ -106,4 +123,4 @@ async function shutdown(signal) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
 
-console.log('[worker] Listening for exam-processing, video-transcription, aesthetic-analysis jobs and index events...');
+console.log('[worker] Listening for exam-processing, video-transcription, aesthetic-analysis, aesthetic-depth jobs and index events...');
