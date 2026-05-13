@@ -57,32 +57,37 @@ async function _request(path, opts = {}) {
 }
 
 async function getCard(cardId) {
-  return await _request(`/cards/${cardId}?fields=id,idShort,name,desc,idBoard,idList,labels`);
+  const id = encodeURIComponent(cardId);
+  return await _request(`/cards/${id}?fields=id,idShort,name,desc,idBoard,idList,labels`);
 }
 
 async function getCardComments(cardId) {
-  return await _request(`/cards/${cardId}/actions?filter=commentCard&limit=50`);
+  const id = encodeURIComponent(cardId);
+  return await _request(`/cards/${id}/actions?filter=commentCard&limit=50`);
 }
 
 async function addComment(cardId, text) {
+  const id = encodeURIComponent(cardId);
   const truncated = text.length > COMMENT_MAX_LENGTH
     ? text.slice(0, COMMENT_MAX_LENGTH - 100) + '\n\n... [truncado]'
     : text;
-  return await _request(`/cards/${cardId}/actions/comments`, {
+  return await _request(`/cards/${id}/actions/comments`, {
     method: 'POST',
     body: JSON.stringify({ text: truncated }),
   });
 }
 
 async function addLabel(cardId, labelId) {
-  return await _request(`/cards/${cardId}/idLabels`, {
+  const id = encodeURIComponent(cardId);
+  return await _request(`/cards/${id}/idLabels`, {
     method: 'POST',
     body: JSON.stringify({ value: labelId }),
   });
 }
 
 async function listBoardLabels(boardId) {
-  return await _request(`/boards/${boardId}/labels`);
+  const id = encodeURIComponent(boardId);
+  return await _request(`/boards/${id}/labels`);
 }
 
 module.exports = {
