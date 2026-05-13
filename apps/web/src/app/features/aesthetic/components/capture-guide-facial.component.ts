@@ -378,30 +378,43 @@ export class CaptureGuideFacialComponent implements OnInit, OnDestroy {
   private _loop(landmarker: import('@mediapipe/tasks-vision').FaceLandmarker): void {
     if (this.destroyed) return;
 
-    const video = this.videoRef.nativeElement;
-    const canvas = this.previewRef.nativeElement;
-    const ctx = canvas.getContext('2d');
+    try {
+      const video = this.videoRef.nativeElement;
+      const canvas = this.previewRef.nativeElement;
+      const ctx = canvas.getContext('2d');
 
-    if (video.readyState >= 2 && ctx) {
-      // Snapshot do frame atual no canvas pra Laplacian/histogram
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Aguarda video ter dimensões reais (iOS Safari demora pra reportar)
+      if (video.readyState >= 2 && ctx && video.videoWidth > 0 && video.videoHeight > 0) {
+        // Snapshot do frame atual no canvas pra Laplacian/histogram
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const tsMs = performance.now();
-      const result = this.mediaLoader.detectFaceForVideo(landmarker, video, tsMs);
+        const tsMs = performance.now();
+        const result = this.mediaLoader.detectFaceForVideo(landmarker, video, tsMs);
 
-      const lm = result.faceLandmarks?.[0];
-      if (lm && lm.length === 468) {
-        // MediaPipe NormalizedLandmark is {x,y,z}; we copy pra evitar mutação
-        const pts = lm.map(p => ({ x: p.x, y: p.y, z: p.z ?? 0 }));
-        this.lastLandmarks = pts;
-        const pose = this.currentPose();
-        if (pose) {
-          this.lastValidation.set(this.validator.validateFace(pts, canvas, pose));
+        const lm = result.faceLandmarks?.[0];
+        if (lm && lm.length === 468) {
+          const pts = lm.map(p => ({ x: p.x, y: p.y, z: p.z ?? 0 }));
+          this.lastLandmarks = pts;
+          const pose = this.currentPose();
+          if (pose) {
+            this.lastValidation.set(this.validator.validateFace(pts, canvas, pose));
+          }
+        } else {
+          this.lastLandmarks = undefined;
+          this.lastValidation.set(null);
         }
-      } else {
-        this.lastLandmarks = undefined;
-        this.lastValidation.set(null);
       }
+    } catch (loopErr) {
+      // MediaPipe pode lançar em devices que não suportam WebGL/WASM
+      // direito (ex: Safari iOS antigo). Loga + para o loop pra evitar
+      // spam de error no console. Frontend continua usável via "Pular
+      // validação".
+      console.error('[CaptureGuide] loop falhou — desativando detecção:', loopErr);
+      this.error.set(
+        'Detecção facial indisponível neste dispositivo. ' +
+        'Use "Pular validação" pra capturar manualmente.',
+      );
+      return;
     }
 
     this.rafId = requestAnimationFrame(() => this._loop(landmarker));
@@ -409,14 +422,37 @@ export class CaptureGuideFacialComponent implements OnInit, OnDestroy {
 
   private async _snapshotJpeg(): Promise<Blob> {
     const video = this.videoRef.nativeElement;
+
+    // Aguarda video ter dimensões — iOS Safari pode reportar 0 nos primeiros
+    // frames mesmo com readyState >= 2. Tenta até 2s antes de desistir.
+    const t0 = Date.now();
+    while ((!video.videoWidth || !video.videoHeight) && Date.now() - t0 < 2000) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    const w = video.videoWidth || 640;
+    const h = video.videoHeight || 480;
+
     const c = document.createElement('canvas');
-    c.width = video.videoWidth || 640;
-    c.height = video.videoHeight || 480;
+    c.width = w;
+    c.height = h;
     const ctx = c.getContext('2d');
     if (!ctx) throw new Error('Falha ao criar canvas de snapshot.');
-    ctx.drawImage(video, 0, 0, c.width, c.height);
+    try {
+      ctx.drawImage(video, 0, 0, w, h);
+    } catch (drawErr) {
+      throw new Error(`drawImage falhou: ${drawErr instanceof Error ? drawErr.message : 'erro'}`);
+    }
+
     return await new Promise<Blob>((resolve, reject) => {
-      c.toBlob(b => b ? resolve(b) : reject(new Error('toBlob falhou')), 'image/jpeg', 0.92);
+      try {
+        c.toBlob(
+          (b) => b ? resolve(b) : reject(new Error('toBlob retornou null (canvas pode estar vazio)')),
+          'image/jpeg',
+          0.92,
+        );
+      } catch (tbErr) {
+        reject(new Error(`toBlob throw: ${tbErr instanceof Error ? tbErr.message : 'erro'}`));
+      }
     });
   }
 
@@ -451,10 +487,37 @@ export class CaptureGuideFacialComponent implements OnInit, OnDestroy {
   }
 
   private _humanizeError(e: unknown): string {
+    // Sempre loga no console pra debug em mobile (sem stacktrace visível).
+    // Quem testar via remote debugging vai ver o erro real.
+    console.error('[CaptureGuide] erro:', e);
+
     if (e instanceof Error) return e.message;
-    if (typeof e === 'object' && e && 'error' in e) {
-      return String((e as { error: { message?: string } }).error?.message || 'Erro de upload.');
+
+    if (typeof e === 'string') return e;
+
+    if (typeof e === 'object' && e !== null) {
+      const obj = e as Record<string, unknown>;
+
+      // HttpErrorResponse do Angular HttpClient: prioriza .error.message do backend
+      const inner = obj['error'] as Record<string, unknown> | undefined;
+      if (inner && typeof inner === 'object') {
+        if (typeof inner['message'] === 'string') return inner['message'] as string;
+        if (typeof inner['error'] === 'string') return String(inner['error']);
+      }
+
+      // Network error: HttpErrorResponse com .status = 0 + .message genérico
+      if (typeof obj['status'] === 'number' && obj['status'] === 0) {
+        return 'Sem conexão com o servidor. Verifique sua internet e tente novamente.';
+      }
+      if (typeof obj['status'] === 'number' && (obj['status'] as number) >= 400) {
+        const text = (typeof obj['statusText'] === 'string' && obj['statusText']) || 'erro';
+        return `Erro ${obj['status']}: ${text}`;
+      }
+
+      if (typeof obj['message'] === 'string') return obj['message'] as string;
+      if (typeof obj['name'] === 'string') return `${obj['name']}: ${String(obj['message'] ?? 'sem detalhes')}`;
     }
-    return 'Erro inesperado.';
+
+    return 'Erro inesperado. Veja o console do navegador para mais detalhes.';
   }
 }

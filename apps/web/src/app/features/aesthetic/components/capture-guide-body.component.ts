@@ -345,29 +345,38 @@ export class CaptureGuideBodyComponent implements OnInit, OnDestroy {
   private _loop(landmarker: import('@mediapipe/tasks-vision').PoseLandmarker): void {
     if (this.destroyed) return;
 
-    const video = this.videoRef.nativeElement;
-    const canvas = this.previewRef.nativeElement;
-    const ctx = canvas.getContext('2d');
+    try {
+      const video = this.videoRef.nativeElement;
+      const canvas = this.previewRef.nativeElement;
+      const ctx = canvas.getContext('2d');
 
-    if (video.readyState >= 2 && ctx) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const tsMs = performance.now();
-      const result = this.mediaLoader.detectPoseForVideo(landmarker, video, tsMs);
-      const lm = result.landmarks?.[0];
-      if (lm && lm.length === 33) {
-        const pts: PosePoint[] = lm.map(p => ({
-          x: p.x, y: p.y, z: p.z ?? 0,
-          visibility: (p as { visibility?: number }).visibility,
-        }));
-        this.lastLandmarks = pts;
-        const pose = this.currentPose();
-        if (pose) {
-          this.lastValidation.set(this.validator.validateBody(pts, canvas, pose));
+      if (video.readyState >= 2 && ctx && video.videoWidth > 0 && video.videoHeight > 0) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const tsMs = performance.now();
+        const result = this.mediaLoader.detectPoseForVideo(landmarker, video, tsMs);
+        const lm = result.landmarks?.[0];
+        if (lm && lm.length === 33) {
+          const pts: PosePoint[] = lm.map(p => ({
+            x: p.x, y: p.y, z: p.z ?? 0,
+            visibility: (p as { visibility?: number }).visibility,
+          }));
+          this.lastLandmarks = pts;
+          const pose = this.currentPose();
+          if (pose) {
+            this.lastValidation.set(this.validator.validateBody(pts, canvas, pose));
+          }
+        } else {
+          this.lastLandmarks = undefined;
+          this.lastValidation.set(null);
         }
-      } else {
-        this.lastLandmarks = undefined;
-        this.lastValidation.set(null);
       }
+    } catch (loopErr) {
+      console.error('[CaptureGuideBody] loop falhou — desativando detecção:', loopErr);
+      this.error.set(
+        'Detecção corporal indisponível neste dispositivo. ' +
+        'Use "Pular validação" pra capturar manualmente.',
+      );
+      return;
     }
 
     this.rafId = requestAnimationFrame(() => this._loop(landmarker));
@@ -375,14 +384,34 @@ export class CaptureGuideBodyComponent implements OnInit, OnDestroy {
 
   private async _snapshotJpeg(): Promise<Blob> {
     const video = this.videoRef.nativeElement;
+
+    // Aguarda video ter dimensões reais (iOS Safari pode reportar 0)
+    const t0 = Date.now();
+    while ((!video.videoWidth || !video.videoHeight) && Date.now() - t0 < 2000) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    const w = video.videoWidth || 720;
+    const h = video.videoHeight || 1280;
+
     const c = document.createElement('canvas');
-    c.width = video.videoWidth || 720;
-    c.height = video.videoHeight || 1280;
+    c.width = w; c.height = h;
     const ctx = c.getContext('2d');
     if (!ctx) throw new Error('Falha ao criar canvas de snapshot.');
-    ctx.drawImage(video, 0, 0, c.width, c.height);
+    try {
+      ctx.drawImage(video, 0, 0, w, h);
+    } catch (drawErr) {
+      throw new Error(`drawImage falhou: ${drawErr instanceof Error ? drawErr.message : 'erro'}`);
+    }
     return await new Promise<Blob>((resolve, reject) => {
-      c.toBlob(b => b ? resolve(b) : reject(new Error('toBlob falhou')), 'image/jpeg', 0.92);
+      try {
+        c.toBlob(
+          b => b ? resolve(b) : reject(new Error('toBlob retornou null (canvas pode estar vazio)')),
+          'image/jpeg',
+          0.92,
+        );
+      } catch (tbErr) {
+        reject(new Error(`toBlob throw: ${tbErr instanceof Error ? tbErr.message : 'erro'}`));
+      }
     });
   }
 
@@ -417,10 +446,26 @@ export class CaptureGuideBodyComponent implements OnInit, OnDestroy {
   }
 
   private _humanizeError(e: unknown): string {
+    console.error('[CaptureGuideBody] erro:', e);
     if (e instanceof Error) return e.message;
-    if (typeof e === 'object' && e && 'error' in e) {
-      return String((e as { error: { message?: string } }).error?.message || 'Erro de upload.');
+    if (typeof e === 'string') return e;
+    if (typeof e === 'object' && e !== null) {
+      const obj = e as Record<string, unknown>;
+      const inner = obj['error'] as Record<string, unknown> | undefined;
+      if (inner && typeof inner === 'object') {
+        if (typeof inner['message'] === 'string') return inner['message'] as string;
+        if (typeof inner['error'] === 'string') return String(inner['error']);
+      }
+      if (typeof obj['status'] === 'number' && obj['status'] === 0) {
+        return 'Sem conexão com o servidor. Verifique sua internet e tente novamente.';
+      }
+      if (typeof obj['status'] === 'number' && (obj['status'] as number) >= 400) {
+        const text = (typeof obj['statusText'] === 'string' && obj['statusText']) || 'erro';
+        return `Erro ${obj['status']}: ${text}`;
+      }
+      if (typeof obj['message'] === 'string') return obj['message'] as string;
+      if (typeof obj['name'] === 'string') return `${obj['name']}: ${String(obj['message'] ?? 'sem detalhes')}`;
     }
-    return 'Erro inesperado.';
+    return 'Erro inesperado. Veja o console do navegador para mais detalhes.';
   }
 }
