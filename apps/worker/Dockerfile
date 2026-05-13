@@ -27,6 +27,17 @@ RUN mkdir -p /app/models && \
 ARG CACHEBUST
 COPY apps/worker/src ./src
 
+# Trello QA Agent (T9 processor): worker processor faz cross-app require de
+# apps/api/src/services/{trello-fix-attempts,trello-client}.js via paths
+# relativos `../../../api/src/services/...`. O build context é o repo root,
+# mas o Dockerfile precisa COPIAR esses arquivos pro lugar onde o require
+# espera (/app/api/src/services/). Sem esse COPY, container crasha no module
+# load do processor antes mesmo de escrever a primeira linha de log.
+# Tech debt: idealmente esses services moveriam pra apps/shared ou seriam
+# duplicados em apps/worker/src/services/ (sem coupling cross-app).
+COPY apps/api/src/services/trello-fix-attempts.js /app/api/src/services/trello-fix-attempts.js
+COPY apps/api/src/services/trello-client.js /app/api/src/services/trello-client.js
+
 # Docs e premissas — baked into image pra reindexação do Copilot em prod
 COPY docs /app/docs
 COPY CLAUDE.md /app/CLAUDE.md
