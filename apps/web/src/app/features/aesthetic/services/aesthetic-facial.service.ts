@@ -164,6 +164,10 @@ export interface DepthModelResponse {
   glb_url?: string;
   texture_url?: string;
   metadata?: Record<string, unknown>;
+  /** V2 Fase 3.2-A: URLs assinadas por pose (frontal/profile_L/R/45_L/R). */
+  poses_depth_urls?: Record<string, string>;
+  /** V2 Fase 3.2-A: textura (foto) por pose. */
+  poses_texture_urls?: Record<string, string>;
   error_code?: string;
   error_message?: string;
   created_at?: string;

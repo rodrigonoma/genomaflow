@@ -356,6 +356,37 @@ export interface LifestyleRecommendations {
       font-size: 0.92rem;
     }
     .tier-badge-banner .badge-icon { font-size: 1.1rem; }
+    /* V2 Fase 3.2-A: pose switcher (5 vistas) */
+    .depth-pose-switcher {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 0.5rem 0;
+    }
+    .pose-switcher-label {
+      font-size: 11px;
+      color: #9b9aad;
+      text-transform: uppercase;
+    }
+    .pose-pill {
+      padding: 0.3rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid rgba(192, 193, 255, 0.25);
+      background: rgba(192, 193, 255, 0.06);
+      color: #dae2fd;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .pose-pill:hover { border-color: #c0c1ff; }
+    .pose-pill-active {
+      background: linear-gradient(90deg, #f59e0b, #ec4899);
+      border-color: #f59e0b;
+      color: #ffffff;
+      font-weight: 600;
+    }
+
     /* V2 Fase 3: depth 3D actions */
     .depth-3d-actions {
       display: flex;
@@ -624,6 +655,23 @@ export interface LifestyleRecommendations {
         </div>
 
         @if (showDepthViewer() && depthStatus() === 'done' && depthUrl() && depthTextureUrl()) {
+          <!-- V2 Fase 3.2-A: dropdown vista quando multi-view (5 poses) -->
+          @if (availablePoses().length > 1) {
+            <div class="depth-pose-switcher" data-testid="depth-pose-switcher">
+              <span class="pose-switcher-label">Vista:</span>
+              @for (pose of availablePoses(); track pose) {
+                <button
+                  type="button"
+                  class="pose-pill"
+                  [class.pose-pill-active]="selectedPose() === pose"
+                  [attr.data-pose]="pose"
+                  (click)="onPoseChange(pose)">
+                  {{ poseLabel(pose) }}
+                </button>
+              }
+            </div>
+          }
+
           <app-depth-viewer
             data-testid="depth-viewer-instance"
             [depthUrl]="depthUrl()!"
@@ -1056,6 +1104,38 @@ export class AnalysisResultComponent implements OnInit, AfterViewInit {
   readonly depthError = signal<string | null>(null);
   readonly showDepthViewer = signal(false);
 
+  /** V2 Fase 3.2-A: maps pose → URL pra dropdown trocar vista. */
+  readonly depthPoseUrls = signal<Record<string, string> | null>(null);
+  readonly textureposeUrls = signal<Record<string, string> | null>(null);
+  readonly selectedPose = signal<string>('frontal');
+
+  readonly availablePoses = computed<string[]>(() => {
+    const m = this.depthPoseUrls();
+    if (!m) return [];
+    // Ordem canônica
+    const order = ['frontal', 'profile_left', 'profile_right', '45_left', '45_right'];
+    return order.filter(p => p in m);
+  });
+
+  poseLabel(pose: string): string {
+    const map: Record<string, string> = {
+      frontal: 'Frontal',
+      profile_left: 'Perfil Esquerdo',
+      profile_right: 'Perfil Direito',
+      '45_left': '45° Esquerdo',
+      '45_right': '45° Direito',
+    };
+    return map[pose] ?? pose;
+  }
+
+  onPoseChange(pose: string): void {
+    this.selectedPose.set(pose);
+    const dMap = this.depthPoseUrls();
+    const tMap = this.textureposeUrls();
+    if (dMap && dMap[pose]) this.depthUrl.set(dMap[pose]);
+    if (tMap && tMap[pose]) this.depthTextureUrl.set(tMap[pose]);
+  }
+
   ngAfterViewInit(): void {
     // Verificar se depth já foi gerado (idempotente)
     if (!this.analysis?.id || this.analysis.tier !== 'advanced' || this.analysis.status !== 'done') {
@@ -1119,9 +1199,22 @@ export class AnalysisResultComponent implements OnInit, AfterViewInit {
   private _applyDepthResponse(resp: DepthModelResponse): void {
     this.depthStatus.set(resp.status);
     if (resp.status === 'done') {
-      this.depthUrl.set(resp.depth_url || null);
-      this.depthTextureUrl.set(resp.texture_url || null);
-      this.showDepthViewer.set(true);  // auto-open quando completa
+      // V2 Fase 3.2-A: priorizar maps por pose se presentes; fallback pra
+      // URLs simples (compat com F3.1 single-frontal)
+      if (resp.poses_depth_urls && resp.poses_texture_urls) {
+        this.depthPoseUrls.set(resp.poses_depth_urls);
+        this.textureposeUrls.set(resp.poses_texture_urls);
+        const initial = resp.poses_depth_urls['frontal'] || Object.values(resp.poses_depth_urls)[0];
+        const initialTex = resp.poses_texture_urls['frontal'] || Object.values(resp.poses_texture_urls)[0];
+        this.depthUrl.set(initial || null);
+        this.depthTextureUrl.set(initialTex || null);
+        this.selectedPose.set('frontal');
+      } else {
+        // F3.1 backward compat
+        this.depthUrl.set(resp.depth_url || null);
+        this.depthTextureUrl.set(resp.texture_url || null);
+      }
+      this.showDepthViewer.set(true);
     } else if (resp.status === 'error') {
       this.depthError.set(resp.error_code || 'Erro desconhecido');
     }

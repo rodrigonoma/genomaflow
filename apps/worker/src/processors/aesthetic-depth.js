@@ -94,48 +94,78 @@ async function processDepthGeneration({ pool, data } = {}) {
     stage = 'mark_processing';
     await markProcessing(client, depth_id);
 
-    // Fetch frontal photo (advanced tier exige pose='frontal' garantido)
-    stage = 'fetch_frontal_photo';
+    // V2 Fase 3.2-A: Fetch TODAS as fotos com pose declarada da análise
+    // (advanced sempre tem 5 facial: frontal/profile_L/profile_R/45_L/45_R).
+    // Frontend ganha dropdown pra trocar entre as 5 vistas heightmap.
+    stage = 'fetch_photos';
     const { rows: photos } = await client.query(
       `SELECT p.id, p.s3_key, p.pose
          FROM aesthetic_photos p
          JOIN aesthetic_analyses a ON a.id = $1
         WHERE p.id = ANY(a.photo_ids)
           AND p.tenant_id = $2
-          AND p.pose = 'frontal'
+          AND p.pose IS NOT NULL
           AND p.deleted_at IS NULL
-        LIMIT 1`,
+        ORDER BY
+          CASE p.pose
+            WHEN 'frontal' THEN 0
+            WHEN 'profile_left' THEN 1
+            WHEN 'profile_right' THEN 2
+            WHEN '45_left' THEN 3
+            WHEN '45_right' THEN 4
+            ELSE 99
+          END`,
       [analysis_id, tenant_id]
     );
 
-    if (photos.length === 0) {
+    const frontalPhoto = photos.find(p => p.pose === 'frontal');
+    if (!frontalPhoto) {
       throw Object.assign(new Error('No frontal photo found for analysis'), { code: 'NO_FRONTAL_PHOTO' });
     }
-    const frontalPhoto = photos[0];
 
-    stage = 'download_photo';
-    const photoBuffer = await downloadFile(frontalPhoto.s3_key);
+    // Gera depth pra cada pose presente. Multi-view por enquanto não funde
+    // os depths em mesh — apenas gera N PNGs separados pra UI trocar vista.
+    // F3.2-B vai fazer o mesh GLTF real fundindo os 5 via landmarks.
+    stage = 'generate_depths';
+    const posesDepths = {};      // pose → s3_key
+    const posesTextures = {};    // pose → photo.s3_key
+    const posesProcessingMs = {};
+    let providerVersionFinal;
+    let lastWidth, lastHeight;
 
-    stage = 'generate_depth';
-    const { depthPng, width, height, providerVersion, processingMs } =
-      await generateDepthMap(photoBuffer);
+    for (const photo of photos) {
+      const buf = await downloadFile(photo.s3_key);
+      const r = await generateDepthMap(buf);
+      const poseSafe = photo.pose.replace(/[^a-z0-9_-]/gi, '_');
+      const s3Key = `${S3_DEPTH_PREFIX}/${tenant_id}/${analysis_id}/${poseSafe}.png`;
+      await uploadFile(s3Key, r.depthPng, 'image/png');
+      posesDepths[photo.pose] = s3Key;
+      posesTextures[photo.pose] = photo.s3_key;
+      posesProcessingMs[photo.pose] = r.processingMs;
+      providerVersionFinal = r.providerVersion;
+      lastWidth = r.width;
+      lastHeight = r.height;
+    }
 
-    stage = 'upload_depth';
-    const s3KeyDepth = `${S3_DEPTH_PREFIX}/${tenant_id}/${analysis_id}.png`;
-    // worker s3 helper assinatura: uploadFile(key, buffer, contentType)
-    await uploadFile(s3KeyDepth, depthPng, 'image/png');
+    // Chave canônica do depth da frontal mantida pra backward compat
+    const s3KeyDepth = posesDepths.frontal;
 
     stage = 'mark_done';
     await markDone(client, depth_id, {
       s3KeyDepth,
-      s3KeyGlb: null,                       // F3.1 não gera GLB (vem em F3.2)
-      s3KeyTexture: frontalPhoto.s3_key,    // foto frontal vira textura
-      providerVersion: providerVersion || PROVIDER_VERSION,
+      s3KeyGlb: null,                       // F3.2-B virá com mesh GLTF real
+      s3KeyTexture: frontalPhoto.s3_key,    // foto frontal vira textura default
+      providerVersion: providerVersionFinal || PROVIDER_VERSION,
       metadata: {
         photo_used: frontalPhoto.id,
-        processing_ms: processingMs,
-        depth_resolution: `${width}x${height}`,
+        processing_ms: Object.values(posesProcessingMs).reduce((a, b) => a + b, 0),
+        depth_resolution: `${lastWidth}x${lastHeight}`,
         model_type,
+        // V2 Fase 3.2-A multi-view: maps pra UI trocar vista
+        poses_depths: posesDepths,
+        poses_textures: posesTextures,
+        poses_processing_ms: posesProcessingMs,
+        poses_count: photos.length,
       },
     });
 

@@ -41,6 +41,24 @@ async function buildResponse(fastify, depth, analysis) {
       out.texture_url = await signedUrlFor({ key: depth.s3_key_texture, ttlSeconds: 3600 });
     }
     if (depth.metadata) out.metadata = depth.metadata;
+
+    // V2 Fase 3.2-A: expand maps de poses → URLs assinadas (multi-view)
+    const posesDepths = depth.metadata?.poses_depths;
+    const posesTextures = depth.metadata?.poses_textures;
+    if (posesDepths && typeof posesDepths === 'object') {
+      const out_poses_depth_urls = {};
+      for (const [pose, key] of Object.entries(posesDepths)) {
+        out_poses_depth_urls[pose] = await signedUrlFor({ key, ttlSeconds: 3600 });
+      }
+      out.poses_depth_urls = out_poses_depth_urls;
+    }
+    if (posesTextures && typeof posesTextures === 'object') {
+      const out_poses_texture_urls = {};
+      for (const [pose, key] of Object.entries(posesTextures)) {
+        out_poses_texture_urls[pose] = await signedUrlFor({ key, ttlSeconds: 3600 });
+      }
+      out.poses_texture_urls = out_poses_texture_urls;
+    }
   }
   return out;
 }
