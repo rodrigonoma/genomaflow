@@ -112,6 +112,7 @@ app.register((fastify, _opts, done) => {
   fastify.register(require('./routes/aesthetic-evolution'),  { prefix: '/aesthetic' });
   fastify.register(require('./routes/webhooks/stripe'),   { prefix: '' });
   fastify.register(require('./routes/webhooks/ses'),      { prefix: '/webhooks' });
+  fastify.register(require('./routes/webhooks/trello'),   { prefix: '/webhooks' });
   done();
 }, { prefix: API_PREFIX });
 

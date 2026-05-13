@@ -124,6 +124,22 @@ export class EcsStack extends cdk.Stack {
     const zapiToken        = ssmParam('zapi-token');
     const zapiClientToken  = ssmParam('zapi-client-token');
 
+    // Trello QA Agent — antes do cdk deploy:
+    // aws ssm put-parameter --name /genomaflow/prod/trello-api-key        --value "..."  --type SecureString --overwrite
+    // aws ssm put-parameter --name /genomaflow/prod/trello-api-token      --value "..."  --type SecureString --overwrite
+    // aws ssm put-parameter --name /genomaflow/prod/trello-webhook-secret --value "..."  --type SecureString --overwrite
+    // aws ssm put-parameter --name /genomaflow/prod/trello-board-id       --value "..."  --type SecureString --overwrite
+    // aws ssm put-parameter --name /genomaflow/prod/trello-qa-list-id     --value "..."  --type SecureString --overwrite
+    // aws ssm put-parameter --name /genomaflow/prod/github-bot-token      --value "ghp_..." --type SecureString --overwrite
+    // Webhook receiver (registrar manualmente após deploy):
+    //   https://app.genomaflow.com.br/api/webhooks/trello
+    const trelloApiKey        = ssmParam('trello-api-key');
+    const trelloApiToken      = ssmParam('trello-api-token');
+    const trelloWebhookSecret = ssmParam('trello-webhook-secret');
+    const trelloBoardId       = ssmParam('trello-board-id');
+    const trelloQaListId      = ssmParam('trello-qa-list-id');
+    const githubBotToken      = ssmParam('github-bot-token');
+
     // ── EFS — armazenamento compartilhado para uploads de PDFs ──
     const fileSystem = new efs.FileSystem(this, 'Uploads', {
       vpc,
@@ -265,6 +281,11 @@ export class EcsStack extends cdk.Stack {
       SMTP_SECURE:                  'true',
       SMTP_USER:                    'atendimento@genomaflow.com.br',
       SMTP_FROM_EMAIL:              'atendimento@genomaflow.com.br',
+      // Trello QA Agent — non-secret config (model names + callback URL + repo root)
+      WEBHOOK_CALLBACK_URL:         'https://app.genomaflow.com.br/api/webhooks/trello',
+      TRELLO_TRIAGE_MODEL:          'claude-sonnet-4-6',
+      TRELLO_FIX_MODEL:             'claude-sonnet-4-6',
+      TRELLO_REPO_ROOT:             '/app',
     };
 
     // Senha SMTP do Zoho (App Password gerado em 2026-05-11). Armazenado em
@@ -281,9 +302,15 @@ export class EcsStack extends cdk.Stack {
       OPENAI_API_KEY:        ecs.Secret.fromSsmParameter(openaiKey),
       STRIPE_SECRET_KEY:     ecs.Secret.fromSsmParameter(stripeSecretKey),
       STRIPE_WEBHOOK_SECRET: ecs.Secret.fromSsmParameter(stripeWebhookSecret),
-      ZAPI_INSTANCE_ID:      ecs.Secret.fromSsmParameter(zapiInstanceId),
-      ZAPI_TOKEN:            ecs.Secret.fromSsmParameter(zapiToken),
-      ZAPI_CLIENT_TOKEN:     ecs.Secret.fromSsmParameter(zapiClientToken),
+      ZAPI_INSTANCE_ID:        ecs.Secret.fromSsmParameter(zapiInstanceId),
+      ZAPI_TOKEN:              ecs.Secret.fromSsmParameter(zapiToken),
+      ZAPI_CLIENT_TOKEN:       ecs.Secret.fromSsmParameter(zapiClientToken),
+      TRELLO_API_KEY:          ecs.Secret.fromSsmParameter(trelloApiKey),
+      TRELLO_API_TOKEN:        ecs.Secret.fromSsmParameter(trelloApiToken),
+      TRELLO_WEBHOOK_SECRET:   ecs.Secret.fromSsmParameter(trelloWebhookSecret),
+      TRELLO_BOARD_ID:         ecs.Secret.fromSsmParameter(trelloBoardId),
+      TRELLO_QA_LIST_ID:       ecs.Secret.fromSsmParameter(trelloQaListId),
+      GITHUB_BOT_TOKEN:        ecs.Secret.fromSsmParameter(githubBotToken),
       DB_HOST:               ecs.Secret.fromSecretsManager(rdsSecret, 'host'),
       DB_PORT:               ecs.Secret.fromSecretsManager(rdsSecret, 'port'),
       DB_NAME:               ecs.Secret.fromSecretsManager(rdsSecret, 'dbname'),
