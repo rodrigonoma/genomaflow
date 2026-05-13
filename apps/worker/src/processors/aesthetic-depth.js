@@ -20,6 +20,7 @@ const { Pool } = require('pg');
 const Redis = require('ioredis');
 const { downloadFile, uploadFile } = require('../storage/s3');
 const { generateDepthMap, PROVIDER_VERSION } = require('../lib/depth-anything');
+const { generateFaceMesh3D, PROVIDER_VERSION: MESH_PROVIDER } = require('../lib/face-mesh-3d');
 
 // Worker e API são containers ECS separados — não compartilham filesystem.
 // Funções de UPDATE direto via pg client (mesma estratégia do processor
@@ -97,9 +98,10 @@ async function processDepthGeneration({ pool, data } = {}) {
     // V2 Fase 3.2-A: Fetch TODAS as fotos com pose declarada da análise
     // (advanced sempre tem 5 facial: frontal/profile_L/profile_R/45_L/45_R).
     // Frontend ganha dropdown pra trocar entre as 5 vistas heightmap.
+    // V2 Fase 3.2-B: também fetcha landmarks da frontal pra gerar GLB mesh.
     stage = 'fetch_photos';
     const { rows: photos } = await client.query(
-      `SELECT p.id, p.s3_key, p.pose
+      `SELECT p.id, p.s3_key, p.pose, p.landmarks
          FROM aesthetic_photos p
          JOIN aesthetic_analyses a ON a.id = $1
         WHERE p.id = ANY(a.photo_ids)
@@ -150,22 +152,58 @@ async function processDepthGeneration({ pool, data } = {}) {
     // Chave canônica do depth da frontal mantida pra backward compat
     const s3KeyDepth = posesDepths.frontal;
 
+    // V2 Fase 3.2-B: gerar mesh GLB 3D usando landmarks da frontal + depth.
+    // Falha graciosa: se landmarks não tiverem 468 pontos ou export falhar,
+    // GLB fica null e frontend cai pro heightmap (F3.2-A) sem regredir UX.
+    stage = 'generate_mesh_glb';
+    let s3KeyGlb = null;
+    let meshMetadata = null;
+    try {
+      const lmFrontal = frontalPhoto.landmarks;
+      const lmPoints = lmFrontal?.points;
+      if (Array.isArray(lmPoints) && lmPoints.length >= 100) {
+        const frontalDepthBuf = await downloadFile(posesDepths.frontal);
+        const frontalPhotoBuf = await downloadFile(frontalPhoto.s3_key);
+        const mesh = await generateFaceMesh3D({
+          frontalPhotoJpeg: frontalPhotoBuf,
+          landmarks: lmPoints,
+          depthPng: frontalDepthBuf,
+        });
+        const glbKey = `${S3_DEPTH_PREFIX}/${tenant_id}/${analysis_id}/face.glb`;
+        await uploadFile(glbKey, mesh.glb, 'model/gltf-binary');
+        s3KeyGlb = glbKey;
+        meshMetadata = {
+          mesh_provider_version: mesh.providerVersion,
+          mesh_vertex_count: mesh.vertexCount,
+          mesh_triangle_count: mesh.triangleCount,
+          mesh_processing_ms: mesh.processingMs,
+        };
+        console.log(`[aesthetic-depth][${depth_id}] mesh GLB gerado (${mesh.vertexCount} vértices, ${mesh.triangleCount} triangles, ${mesh.processingMs}ms)`);
+      } else {
+        console.warn(`[aesthetic-depth][${depth_id}] mesh GLB pulado: landmarks da frontal vazios ou insuficientes`);
+      }
+    } catch (meshErr) {
+      console.warn(`[aesthetic-depth][${depth_id}] mesh GLB falhou (continua sem GLB):`, meshErr.message);
+    }
+
     stage = 'mark_done';
     await markDone(client, depth_id, {
       s3KeyDepth,
-      s3KeyGlb: null,                       // F3.2-B virá com mesh GLTF real
+      s3KeyGlb,
       s3KeyTexture: frontalPhoto.s3_key,    // foto frontal vira textura default
       providerVersion: providerVersionFinal || PROVIDER_VERSION,
       metadata: {
         photo_used: frontalPhoto.id,
         processing_ms: Object.values(posesProcessingMs).reduce((a, b) => a + b, 0),
         depth_resolution: `${lastWidth}x${lastHeight}`,
-        model_type,
+        model_type: s3KeyGlb ? 'multiview_fusion' : model_type,
         // V2 Fase 3.2-A multi-view: maps pra UI trocar vista
         poses_depths: posesDepths,
         poses_textures: posesTextures,
         poses_processing_ms: posesProcessingMs,
         poses_count: photos.length,
+        // V2 Fase 3.2-B mesh GLB
+        ...(meshMetadata || {}),
       },
     });
 

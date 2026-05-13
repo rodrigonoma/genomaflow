@@ -356,6 +356,17 @@ export interface LifestyleRecommendations {
       font-size: 0.92rem;
     }
     .tier-badge-banner .badge-icon { font-size: 1.1rem; }
+    /* V2 Fase 3.2-B: hint do modo viewer */
+    .viewer-mode-hint {
+      font-size: 12px;
+      color: #c0c1ff;
+      margin: 0.4rem 0 0.6rem;
+      padding: 0.4rem 0.7rem;
+      background: rgba(34, 211, 238, 0.08);
+      border-left: 3px solid #22d3ee;
+      border-radius: 4px;
+    }
+
     /* V2 Fase 3.2-A: pose switcher (5 vistas) */
     .depth-pose-switcher {
       display: flex;
@@ -654,9 +665,9 @@ export interface LifestyleRecommendations {
           }
         </div>
 
-        @if (showDepthViewer() && depthStatus() === 'done' && depthUrl() && depthTextureUrl()) {
-          <!-- V2 Fase 3.2-A: dropdown vista quando multi-view (5 poses) -->
-          @if (availablePoses().length > 1) {
+        @if (showDepthViewer() && depthStatus() === 'done') {
+          <!-- V2 Fase 3.2-A: dropdown vista (só heightmap mode) -->
+          @if (viewerMode() === 'heightmap' && availablePoses().length > 1) {
             <div class="depth-pose-switcher" data-testid="depth-pose-switcher">
               <span class="pose-switcher-label">Vista:</span>
               @for (pose of availablePoses(); track pose) {
@@ -672,12 +683,27 @@ export interface LifestyleRecommendations {
             </div>
           }
 
-          <app-depth-viewer
-            data-testid="depth-viewer-instance"
-            [depthUrl]="depthUrl()!"
-            [textureUrl]="depthTextureUrl()!"
-            mode="heightmap">
-          </app-depth-viewer>
+          <!-- V2 Fase 3.2-B: indicador de modo (mesh 3D vs heightmap) -->
+          @if (viewerMode() === 'gltf') {
+            <p class="viewer-mode-hint" data-testid="viewer-mode-gltf">
+              🌀 Modelo 3D real — rotação 360° livre · arraste/scroll pra explorar
+            </p>
+          }
+
+          @if (viewerMode() === 'gltf' && glbUrl()) {
+            <app-depth-viewer
+              data-testid="depth-viewer-instance"
+              [glbUrl]="glbUrl()"
+              mode="gltf">
+            </app-depth-viewer>
+          } @else if (depthUrl() && depthTextureUrl()) {
+            <app-depth-viewer
+              data-testid="depth-viewer-instance"
+              [depthUrl]="depthUrl()"
+              [textureUrl]="depthTextureUrl()"
+              mode="heightmap">
+            </app-depth-viewer>
+          }
         }
       }
 
@@ -1104,6 +1130,11 @@ export class AnalysisResultComponent implements OnInit, AfterViewInit {
   readonly depthError = signal<string | null>(null);
   readonly showDepthViewer = signal(false);
 
+  /** V2 Fase 3.2-B: URL do GLB mesh 3D (rotação 360°). */
+  readonly glbUrl = signal<string | null>(null);
+  /** Modo do viewer: 'gltf' quando glbUrl presente; 'heightmap' como fallback. */
+  readonly viewerMode = signal<'heightmap' | 'gltf'>('heightmap');
+
   /** V2 Fase 3.2-A: maps pose → URL pra dropdown trocar vista. */
   readonly depthPoseUrls = signal<Record<string, string> | null>(null);
   readonly textureposeUrls = signal<Record<string, string> | null>(null);
@@ -1199,8 +1230,18 @@ export class AnalysisResultComponent implements OnInit, AfterViewInit {
   private _applyDepthResponse(resp: DepthModelResponse): void {
     this.depthStatus.set(resp.status);
     if (resp.status === 'done') {
-      // V2 Fase 3.2-A: priorizar maps por pose se presentes; fallback pra
-      // URLs simples (compat com F3.1 single-frontal)
+      // V2 Fase 3.2-B: prioriza GLB se presente (mesh real, rotação 360°).
+      // Fallback pra heightmap (F3.1/F3.2-A) se GLB ausente.
+      if (resp.glb_url) {
+        this.glbUrl.set(resp.glb_url);
+        this.viewerMode.set('gltf');
+      } else {
+        this.glbUrl.set(null);
+        this.viewerMode.set('heightmap');
+      }
+
+      // V2 Fase 3.2-A: maps por pose pro heightmap fallback / também usado
+      // em F3.2-B caso usuário queira ver vista heightmap por pose
       if (resp.poses_depth_urls && resp.poses_texture_urls) {
         this.depthPoseUrls.set(resp.poses_depth_urls);
         this.textureposeUrls.set(resp.poses_texture_urls);
@@ -1210,7 +1251,7 @@ export class AnalysisResultComponent implements OnInit, AfterViewInit {
         this.depthTextureUrl.set(initialTex || null);
         this.selectedPose.set('frontal');
       } else {
-        // F3.1 backward compat
+        // F3.1 backward compat single-frontal
         this.depthUrl.set(resp.depth_url || null);
         this.depthTextureUrl.set(resp.texture_url || null);
       }

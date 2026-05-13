@@ -4,14 +4,16 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "jest --runInBand --forceExit",
-    "test:unit": "jest --runInBand --forceExit"
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --runInBand --forceExit",
+    "test:unit": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --runInBand --forceExit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
     "@aws-sdk/client-s3": "^3.1033.0",
+    "@gltf-transform/core": "^4.3.0",
     "bullmq": "^5.7.0",
     "dcmjs": "^0.29.13",
+    "delaunator": "^5.1.0",
     "dotenv": "^16.0.0",
     "firebase-admin": "^13.9.0",
     "ioredis": "^5.3.2",
@@ -23,6 +25,7 @@
     "sharp": "^0.34.5"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "jest": "^29.7.0"
   }
 }
