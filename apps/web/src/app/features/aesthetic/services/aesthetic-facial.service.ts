@@ -131,4 +131,41 @@ export class AestheticFacialService {
       formData,
     );
   }
+
+  // -------------------------------------------------------------------------
+  // V2 Fase 3 — depth model (Pseudo-3D)
+  // -------------------------------------------------------------------------
+
+  /**
+   * POST /aesthetic/analyses/:id/depth — cria depth model + enfileira
+   * worker (idempotente: depth existente em done/pending → retorna direto).
+   */
+  generateDepth(analysisId: string): Observable<DepthModelResponse> {
+    return this.http.post<DepthModelResponse>(
+      `${this.base}/analyses/${analysisId}/depth`,
+      {},
+    );
+  }
+
+  /** GET /aesthetic/analyses/:id/depth — polling fallback. */
+  getDepth(analysisId: string): Observable<DepthModelResponse> {
+    return this.http.get<DepthModelResponse>(
+      `${this.base}/analyses/${analysisId}/depth`,
+    );
+  }
+}
+
+export interface DepthModelResponse {
+  id: string;
+  analysis_id: string;
+  status: 'pending' | 'processing' | 'done' | 'error';
+  model_type: 'heightmap' | 'multiview_fusion';
+  depth_url?: string;
+  glb_url?: string;
+  texture_url?: string;
+  metadata?: Record<string, unknown>;
+  error_code?: string;
+  error_message?: string;
+  created_at?: string;
+  completed_at?: string;
 }

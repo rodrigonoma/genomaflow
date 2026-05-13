@@ -20,6 +20,7 @@ import {
   EventEmitter,
   Input,
   OnInit,
+  AfterViewInit,
   Output,
   computed,
   inject,
@@ -39,6 +40,11 @@ import {
   MetricData,
 } from '../models/analysis.model';
 import { PhotoOverlayService } from '../services/photo-overlay.service';
+import { AestheticFacialService, DepthModelResponse } from '../services/aesthetic-facial.service';
+import { AestheticWsService, AestheticEvent } from '../services/aesthetic-ws.service';
+import { DepthViewerComponent } from './depth-viewer.component';
+import { DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   QuickCreateDialogComponent,
   QuickCreateDialogData,
@@ -93,7 +99,7 @@ export interface LifestyleRecommendations {
 @Component({
   selector: 'app-analysis-result',
   standalone: true,
-  imports: [DatePipe, MatButtonModule, MatIconModule, PhotoOverlayComponent, LayerToolbarComponent, TreatmentProtocolCardsComponent],
+  imports: [DatePipe, MatButtonModule, MatIconModule, PhotoOverlayComponent, LayerToolbarComponent, TreatmentProtocolCardsComponent, DepthViewerComponent],
   styles: [`
     :host { display: block; }
 
@@ -350,6 +356,19 @@ export interface LifestyleRecommendations {
       font-size: 0.92rem;
     }
     .tier-badge-banner .badge-icon { font-size: 1.1rem; }
+    /* V2 Fase 3: depth 3D actions */
+    .depth-3d-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin: 0.75rem 0;
+      flex-wrap: wrap;
+    }
+    .depth-error-inline {
+      color: #ef4444;
+      font-size: 12px;
+    }
+
     .tier-badge-banner .badge-subtext {
       color: #c0c1ff;
       font-size: 0.8rem;
@@ -570,6 +589,48 @@ export interface LifestyleRecommendations {
           <strong>Análise Avançada</strong>
           <span class="badge-subtext">Captura guiada — Vision + 10 métricas geométricas</span>
         </div>
+
+        <!-- V2 Fase 3: Botão Gerar/Visualizar 3D + viewer -->
+        <div class="depth-3d-actions" data-testid="depth-3d-actions">
+          @if (depthStatus() === 'idle' || depthStatus() === 'error') {
+            <button mat-flat-button color="primary"
+                    data-testid="btn-generate-3d"
+                    (click)="onGenerate3D()">
+              🎭 Gerar Modelo 3D
+            </button>
+            @if (depthError()) {
+              <span class="depth-error-inline">⚠ {{ depthError() }}</span>
+            }
+          }
+          @if (depthStatus() === 'pending' || depthStatus() === 'processing') {
+            <button mat-stroked-button disabled data-testid="btn-generating-3d">
+              Gerando 3D... (~30-60s)
+            </button>
+          }
+          @if (depthStatus() === 'done' && !showDepthViewer()) {
+            <button mat-flat-button color="primary"
+                    data-testid="btn-show-3d"
+                    (click)="onGenerate3D()">
+              🎭 Visualizar 3D
+            </button>
+          }
+          @if (depthStatus() === 'done' && showDepthViewer()) {
+            <button mat-stroked-button
+                    data-testid="btn-hide-3d"
+                    (click)="onCloseDepthViewer()">
+              Ocultar 3D
+            </button>
+          }
+        </div>
+
+        @if (showDepthViewer() && depthStatus() === 'done' && depthUrl() && depthTextureUrl()) {
+          <app-depth-viewer
+            data-testid="depth-viewer-instance"
+            [depthUrl]="depthUrl()!"
+            [textureUrl]="depthTextureUrl()!"
+            mode="heightmap">
+          </app-depth-viewer>
+        }
       }
 
       <!-- ================================================================ -->
@@ -761,7 +822,7 @@ export interface LifestyleRecommendations {
     </section>
   `,
 })
-export class AnalysisResultComponent implements OnInit {
+export class AnalysisResultComponent implements OnInit, AfterViewInit {
   // -------------------------------------------------------------------------
   // Inputs
   // -------------------------------------------------------------------------
@@ -981,4 +1042,88 @@ export class AnalysisResultComponent implements OnInit {
 
   private readonly overlayService = new PhotoOverlayService();
   private readonly dialog = inject(MatDialog);
+  private readonly facialSvc = inject(AestheticFacialService);
+  private readonly wsSvc = inject(AestheticWsService);
+  private readonly destroyRef = inject(DestroyRef);
+
+  // -------------------------------------------------------------------------
+  // V2 Fase 3 — Depth model (Pseudo-3D)
+  // -------------------------------------------------------------------------
+
+  readonly depthStatus = signal<'idle' | 'pending' | 'processing' | 'done' | 'error'>('idle');
+  readonly depthUrl = signal<string | null>(null);
+  readonly depthTextureUrl = signal<string | null>(null);
+  readonly depthError = signal<string | null>(null);
+  readonly showDepthViewer = signal(false);
+
+  ngAfterViewInit(): void {
+    // Verificar se depth já foi gerado (idempotente)
+    if (!this.analysis?.id || this.analysis.tier !== 'advanced' || this.analysis.status !== 'done') {
+      return;
+    }
+    this.facialSvc.getDepth(this.analysis.id).subscribe({
+      next: (resp) => this._applyDepthResponse(resp),
+      error: (err: { status?: number }) => {
+        if (err.status !== 404) {
+          // 404 é esperado (depth ainda não gerada); outros erros logam mas não bloqueiam
+          console.warn('[analysis-result] getDepth falhou:', err);
+        }
+      },
+    });
+
+    // Subscribe WS depth_ready / depth_failed
+    this.wsSvc.events$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((event: AestheticEvent) => {
+        if (event.analysis_id !== this.analysis?.id) return;
+        if (event.kind === 'depth_ready' && this.analysis?.id) {
+          // Refetch URLs assinadas
+          this.facialSvc.getDepth(this.analysis.id).subscribe({
+            next: (resp) => this._applyDepthResponse(resp),
+          });
+        } else if (event.kind === 'depth_failed') {
+          this.depthStatus.set('error');
+          this.depthError.set(event.error_code || 'Falha desconhecida');
+        }
+      });
+  }
+
+  /** Click no botão "Gerar 3D" / "Visualizar 3D". */
+  onGenerate3D(): void {
+    if (!this.analysis?.id) return;
+
+    if (this.depthStatus() === 'done') {
+      // Já gerado — só mostra o viewer
+      this.showDepthViewer.set(true);
+      return;
+    }
+
+    this.depthStatus.set('pending');
+    this.depthError.set(null);
+    this.facialSvc.generateDepth(this.analysis.id).subscribe({
+      next: (resp) => this._applyDepthResponse(resp),
+      error: (err: { error?: { error?: string; message?: string }; message?: string }) => {
+        const code = err.error?.error || 'UNKNOWN';
+        this.depthError.set(err.error?.message || err.message || 'Falha ao gerar modelo 3D');
+        this.depthStatus.set('error');
+        console.error('[analysis-result] generateDepth falhou:', code);
+      },
+    });
+  }
+
+  /** Toggle do viewer (esconde sem deletar — render mantém estado). */
+  onCloseDepthViewer(): void {
+    this.showDepthViewer.set(false);
+  }
+
+  private _applyDepthResponse(resp: DepthModelResponse): void {
+    this.depthStatus.set(resp.status);
+    if (resp.status === 'done') {
+      this.depthUrl.set(resp.depth_url || null);
+      this.depthTextureUrl.set(resp.texture_url || null);
+      this.showDepthViewer.set(true);  // auto-open quando completa
+    } else if (resp.status === 'error') {
+      this.depthError.set(resp.error_code || 'Erro desconhecido');
+    }
+  }
 }

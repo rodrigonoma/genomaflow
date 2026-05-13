@@ -16,10 +16,16 @@ import { Subject } from 'rxjs';
 // ---------------------------------------------------------------------------
 
 export interface AestheticEvent {
-  kind: 'analysis_done' | 'analysis_failed';
+  /**
+   * - analysis_done | analysis_failed: V2 Fase 1 — análise concluída
+   * - depth_ready | depth_failed: V2 Fase 3 — modelo 3D pronto/falhou
+   */
+  kind: 'analysis_done' | 'analysis_failed' | 'depth_ready' | 'depth_failed';
   analysis_id: string;
-  subject_id: string;
+  subject_id?: string;
   error_code?: string;
+  /** Presente em depth_ready/depth_failed (V2 Fase 3). */
+  depth_id?: string;
 }
 
 // ---------------------------------------------------------------------------
