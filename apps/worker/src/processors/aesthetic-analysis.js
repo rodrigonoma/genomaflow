@@ -6,6 +6,7 @@ const { downloadFile } = require('../storage/s3');
 const { analyzeFacial } = require('../agents/aesthetic-facial');
 const { analyzeBody } = require('../agents/aesthetic-body');
 const { recommendProtocol } = require('../agents/aesthetic-recommender');
+const { computeLandmarkMetrics } = require('../agents/aesthetic-landmarks-metrics');
 
 const FACIAL_REGIONS = new Set(['facial', 'eyelids', 'neck']);
 const BODY_REGIONS_PROC = new Set(['legs', 'glutes', 'abdomen', 'arms', 'breast', 'full_body']);
@@ -33,7 +34,11 @@ const TERMINAL_REFUND_CODES = new Set(['NO_FACE_DETECTED', 'NO_BODY_DETECTED', '
 
 async function processAestheticAnalysis({ pool, data } = {}) {
   pool = pool || _pool;
-  const { analysis_id, tenant_id, subject_id, user_id, analysis_type, photo_ids, professional_type } = data;
+  const {
+    analysis_id, tenant_id, subject_id, user_id, analysis_type, photo_ids,
+    professional_type,
+    tier, // V2: 'standard' | 'advanced' (default 'standard')
+  } = data;
   const client = await pool.connect();
 
   let stage = 'init';
@@ -48,10 +53,10 @@ async function processAestheticAnalysis({ pool, data } = {}) {
       [analysis_id, tenant_id]
     );
 
-    // Buscar fotos do S3
+    // Buscar fotos do S3 (e landmarks JSONB pra tier=advanced)
     stage = 'fetch_photos';
     const { rows: photos } = await client.query(
-      `SELECT id, s3_key FROM aesthetic_photos
+      `SELECT id, s3_key, pose, landmarks FROM aesthetic_photos
        WHERE id = ANY($1::uuid[]) AND tenant_id = $2`,
       [photo_ids, tenant_id]
     );
@@ -77,6 +82,27 @@ async function processAestheticAnalysis({ pool, data } = {}) {
     const visionResult = agentKind === 'body'
       ? await analyzeBody({ photoBuffers, subject, analysisType: analysis_type })
       : await analyzeFacial({ photoBuffers, subject, analysisType: analysis_type });
+
+    // V2: Call #1b — métricas geométricas de landmarks (somente tier=advanced).
+    // Falha aqui NÃO falha a análise — Vision metrics já é o produto basic.
+    // Apenas omite as 10 métricas geométricas.
+    stage = 'call_1b_landmarks_metrics';
+    let landmarkMetrics = {};
+    if (tier === 'advanced') {
+      try {
+        const result = await computeLandmarkMetrics({
+          photos,
+          analysisType: analysis_type,
+        });
+        landmarkMetrics = result.metrics || {};
+        console.log(`[aesthetic][${analysis_id}] landmark metrics computed: ${Object.keys(landmarkMetrics).length} métricas`);
+      } catch (lmErr) {
+        console.warn(`[aesthetic][${analysis_id}] landmarks-metrics falhou (continuando sem geometria):`, lmErr.message);
+      }
+    }
+
+    // Merge metrics Vision + landmarks (geometria). Source flag separa os dois.
+    const mergedMetrics = { ...visionResult.metrics, ...landmarkMetrics };
 
     // Buscar catálogo de tratamentos (global + tenant, ativos, top 50 por uso recente)
     stage = 'fetch_catalog';
@@ -121,6 +147,8 @@ async function processAestheticAnalysis({ pool, data } = {}) {
     let recResult = { recommendations: null, tokens_input: 0, tokens_output: 0, model: null, error: null };
     try {
       recResult = await recommendProtocol({
+        // Passa só métricas Vision para o recommender — geometria é informativa,
+        // não dirige decisão de tratamento (recommender treinado pra Vision).
         metrics: visionResult.metrics,
         subject,
         professionalType: professional_type,
@@ -149,7 +177,7 @@ async function processAestheticAnalysis({ pool, data } = {}) {
       [
         analysis_id,
         'done',
-        JSON.stringify(visionResult.metrics),
+        JSON.stringify(mergedMetrics), // V2: Vision + landmarks (advanced) ou só Vision (standard)
         JSON.stringify(visionResult.observations || {}),
         JSON.stringify(recResult.recommendations || {}),
         visionResult.model || null,
