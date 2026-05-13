@@ -225,9 +225,16 @@ describe('POST /aesthetic/analyses — credit_ledger.ref_id schema (regression)'
       });
 
     // 500 com 'column "ref_id" of relation "credit_ledger" does not exist'
-    // era o bug. Agora deve ser 201 com analysis_id + status pending.
+    // era o bug. Agora deve ser 201 com id + status pending.
     expect(res.status).toBe(201);
-    expect(res.body.analysis_id).toBeDefined();
+    // Frontend lê `id` (regression guard bug 2026-05-12: backend só retornava
+    // analysis_id, frontend lia analysis.id (undefined) → polling em
+    // /analyses/undefined → 500 a cada 5s)
+    expect(res.body.id).toBeDefined();
+    expect(typeof res.body.id).toBe('string');
+    expect(res.body.id).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(res.body.analysis_id).toBeDefined();  // backward compat
+    expect(res.body.id).toBe(res.body.analysis_id);
     expect(res.body.status).toBe('pending');
     expect(res.body.credits_charged).toBeGreaterThan(0);
   });

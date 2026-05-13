@@ -97,7 +97,12 @@ module.exports = async function (fastify) {
       professional_type: request.user.professional_type,
     });
 
+    // Retorna `id` (consistente com AestheticAnalysisDetail do frontend) +
+    // `analysis_id` (backward compat com consumers antigos). Frontend usa `id`.
+    // Bug 2026-05-12: shape antigo só tinha analysis_id → frontend polling
+    // `/analyses/undefined` com analysis.id (que era undefined).
     return reply.status(201).send({
+      id: analysis.id,
       analysis_id: analysis.id,
       status: 'pending',
       credits_charged: cost,
