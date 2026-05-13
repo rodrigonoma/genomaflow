@@ -133,8 +133,13 @@ describe('FacialAnalysisTabComponent', () => {
     const fixture = createFixture();
     const comp = fixture.componentInstance;
 
-    // startNewAnalysis() now goes to region_pick; then onRegionSelected() triggers consent check
+    // V2 state machine: startNewAnalysis → tier_choice → region_pick → consent_check → guide.
+    // tier=standard preserva fluxo F1-F6 idêntico (vai pra 'guide', não 'capture').
     comp.startNewAnalysis();
+    fixture.detectChanges();
+    expect(comp.step()).toBe('tier_choice');
+
+    comp.onTierSelected('standard');
     fixture.detectChanges();
     expect(comp.step()).toBe('region_pick');
 
@@ -395,14 +400,34 @@ describe('FacialAnalysisTabComponent', () => {
   });
 
   // -------------------------------------------------------------------------
-  // F2 Task 5: region_pick tests
+  // F2 Task 5 + V2 Fase 1: tier_choice + region_pick state transitions
   // -------------------------------------------------------------------------
-  it('Nova análise abre region_pick antes do consent_check', () => {
+  it('Nova análise abre tier_choice (V2) antes de region_pick', () => {
     const fixture = createFixture();
     const comp = fixture.componentInstance;
 
     comp.startNewAnalysis();
+    expect(comp.step()).toBe('tier_choice');
+  });
+
+  it('Tier selecionado (standard) avança pra region_pick', () => {
+    const fixture = createFixture();
+    const comp = fixture.componentInstance;
+
+    comp.startNewAnalysis();
+    comp.onTierSelected('standard');
     expect(comp.step()).toBe('region_pick');
+    expect(comp.selectedTier()).toBe('standard');
+  });
+
+  it('Tier selecionado (advanced) também avança pra region_pick + tier signal preserva', () => {
+    const fixture = createFixture();
+    const comp = fixture.componentInstance;
+
+    comp.startNewAnalysis();
+    comp.onTierSelected('advanced');
+    expect(comp.step()).toBe('region_pick');
+    expect(comp.selectedTier()).toBe('advanced');
   });
 
   it('region selection avança pra consent_check com analysis_type correto', () => {

@@ -31,7 +31,7 @@ async function buildApp(role = 'admin', moduleName = 'estetica') {
           }],
         };
       }
-      if (/SELECT .* FROM aesthetic_sessions/i.test(sql) && /WHERE id = \$1/.test(sql)) {
+      if (/SELECT [\s\S]* FROM aesthetic_sessions/i.test(sql) && /WHERE id = \$1/.test(sql)) {
         // getById
         if (params[0] === 'sess-existing') {
           return { rows: [{
@@ -41,7 +41,7 @@ async function buildApp(role = 'admin', moduleName = 'estetica') {
         }
         return { rows: [] };
       }
-      if (/SELECT .* FROM aesthetic_sessions/i.test(sql)) {
+      if (/SELECT [\s\S]* FROM aesthetic_sessions/i.test(sql)) {
         // list
         return { rows: [
           { id: 'sess-1', session_date: '2026-05-12T10:00:00Z', session_type: 'facial_analysis' },

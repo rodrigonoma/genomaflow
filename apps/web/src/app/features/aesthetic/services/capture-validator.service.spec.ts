@@ -1,6 +1,86 @@
 import { TestBed } from '@angular/core/testing';
 import { CaptureValidatorService, Point3D } from './capture-validator.service';
 
+// ---------------------------------------------------------------------------
+// jsdom não implementa HTMLCanvasElement.getContext('2d') — retorna null.
+// Stub minimalista que mantém um buffer RGBA em memória e implementa apenas
+// o que CaptureValidatorService consome: fillStyle, fillRect, getImageData.
+// ---------------------------------------------------------------------------
+
+function parseColor(s: string): [number, number, number] {
+  if (s.startsWith('#')) {
+    const hex = s.slice(1);
+    if (hex.length === 3) {
+      return [
+        parseInt(hex[0] + hex[0], 16),
+        parseInt(hex[1] + hex[1], 16),
+        parseInt(hex[2] + hex[2], 16),
+      ];
+    }
+    return [
+      parseInt(hex.slice(0, 2), 16),
+      parseInt(hex.slice(2, 4), 16),
+      parseInt(hex.slice(4, 6), 16),
+    ];
+  }
+  return [128, 128, 128];
+}
+
+function installCanvasMock(): void {
+  // @ts-expect-error — sobrescreve protótipo em jsdom
+  HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement) {
+    const canvas = this;
+    // Lazy: buffer só nasce quando getContext é chamado, dimensionado pelo canvas
+    type Internal = { data: Uint8ClampedArray; width: number; height: number; fillStyle: string };
+    const state: Internal = (canvas as unknown as { __state?: Internal }).__state ?? {
+      data: new Uint8ClampedArray(canvas.width * canvas.height * 4),
+      width: canvas.width,
+      height: canvas.height,
+      fillStyle: '#000000',
+    };
+    (canvas as unknown as { __state?: Internal }).__state = state;
+
+    return {
+      get fillStyle() { return state.fillStyle; },
+      set fillStyle(v: string) { state.fillStyle = v; },
+      fillRect(x: number, y: number, w: number, h: number): void {
+        const [r, g, b] = parseColor(state.fillStyle);
+        for (let py = y; py < y + h && py < state.height; py++) {
+          for (let px = x; px < x + w && px < state.width; px++) {
+            const idx = (py * state.width + px) * 4;
+            state.data[idx] = r;
+            state.data[idx + 1] = g;
+            state.data[idx + 2] = b;
+            state.data[idx + 3] = 255;
+          }
+        }
+      },
+      getImageData(x: number, y: number, w: number, h: number) {
+        // Retorna sub-região; pra simplificação, devolve todo o buffer quando
+        // dimensões coincidem (caso usado pelo service).
+        if (x === 0 && y === 0 && w === state.width && h === state.height) {
+          return { data: state.data, width: w, height: h } as ImageData;
+        }
+        const out = new Uint8ClampedArray(w * h * 4);
+        for (let py = 0; py < h; py++) {
+          for (let px = 0; px < w; px++) {
+            const srcIdx = ((py + y) * state.width + (px + x)) * 4;
+            const dstIdx = (py * w + px) * 4;
+            out[dstIdx] = state.data[srcIdx];
+            out[dstIdx + 1] = state.data[srcIdx + 1];
+            out[dstIdx + 2] = state.data[srcIdx + 2];
+            out[dstIdx + 3] = state.data[srcIdx + 3];
+          }
+        }
+        return { data: out, width: w, height: h } as ImageData;
+      },
+      drawImage(): void { /* noop em tests */ },
+    } as unknown as CanvasRenderingContext2D;
+  } as typeof HTMLCanvasElement.prototype.getContext;
+}
+
+installCanvasMock();
+
 function makePts(overrides: Record<number, Partial<Point3D>> = {}): Point3D[] {
   const pts: Point3D[] = Array(468).fill(0).map(() => ({ x: 0.5, y: 0.5, z: 0 }));
   for (const [i, p] of Object.entries(overrides)) {

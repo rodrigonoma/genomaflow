@@ -53,7 +53,7 @@ async function buildApp(role = 'admin', module = 'estetica') {
       if (/UPDATE aesthetic_photos SET deleted_at/i.test(sql)) {
         return { rowCount: 1 };
       }
-      if (/SELECT .* FROM aesthetic_sessions/i.test(sql)) {
+      if (/SELECT [\s\S]* FROM aesthetic_sessions/i.test(sql)) {
         // session_id validation: 'sess-ok' belongs to 'sub1', 'sess-wrong' belongs to 'other'
         if (params[0] === 'sess-ok') {
           return { rows: [{ id: 'sess-ok', tenant_id: 't1', subject_id: 'sub1', session_type: 'facial_analysis' }] };
