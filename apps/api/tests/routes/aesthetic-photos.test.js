@@ -40,7 +40,11 @@ async function buildApp(role = 'admin', module = 'estetica') {
     query: jest.fn(async (sql, params) => {
       queries.push({ sql, params });
       if (/INSERT INTO aesthetic_photos/i.test(sql)) {
-        return { rows: [{ id: 'photo-1', s3_key: params[3], photo_type: params[4], is_sensitive: false, taken_at: new Date().toISOString() }] };
+        return { rows: [{
+          id: 'photo-1', s3_key: params[4], photo_type: params[3],
+          is_sensitive: false, taken_at: new Date().toISOString(),
+          pose: params[7] || null, session_id: params[9] || null,
+        }] };
       }
       if (/SELECT .* FROM aesthetic_photos/i.test(sql)) {
         if (params[0] === 'photo-yes') return { rows: [{ id: 'photo-yes', s3_key: 'aesthetic-photos/t1/sub1/photo-yes.jpg', tenant_id: 't1', deleted_at: null }] };
@@ -48,6 +52,16 @@ async function buildApp(role = 'admin', module = 'estetica') {
       }
       if (/UPDATE aesthetic_photos SET deleted_at/i.test(sql)) {
         return { rowCount: 1 };
+      }
+      if (/SELECT .* FROM aesthetic_sessions/i.test(sql)) {
+        // session_id validation: 'sess-ok' belongs to 'sub1', 'sess-wrong' belongs to 'other'
+        if (params[0] === 'sess-ok') {
+          return { rows: [{ id: 'sess-ok', tenant_id: 't1', subject_id: 'sub1', session_type: 'facial_analysis' }] };
+        }
+        if (params[0] === 'sess-wrong') {
+          return { rows: [{ id: 'sess-wrong', tenant_id: 't1', subject_id: 'other-subject', session_type: 'facial_analysis' }] };
+        }
+        return { rows: [] };
       }
       return { rows: [] };
     }),
@@ -366,5 +380,167 @@ describe('POST /aesthetic/photos — reinforced consent gate (F5.2)', () => {
     expect(mockAutoCropSensitive).toHaveBeenCalledTimes(1);
     const body = JSON.parse(res.body);
     expect(body).toHaveProperty('auto_crop_applied', 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// V2 advanced tier — pose + landmarks + session_id (campos opcionais aditivos)
+// ---------------------------------------------------------------------------
+
+describe('POST /aesthetic/photos — V2 advanced (pose + landmarks + session_id)', () => {
+  const validPoint = { x: 0.5, y: 0.5, z: 0 };
+  const validFaceLandmarks = {
+    type: 'face',
+    provider: 'mediapipe',
+    provider_version: '0.10.16',
+    model: 'face_landmarker_v1',
+    points: Array(468).fill(validPoint),
+    detected_at: '2026-05-12T00:00:00Z',
+  };
+
+  test('upload com pose + landmarks + session_id válidos → 201 + pose echoed', async () => {
+    const app = await buildApp();
+    const boundary = 'b-v2-happy';
+    const payload = buildMultipart(boundary, {
+      subject_id: 'sub1', photo_type: 'facial_front',
+      pose: 'frontal',
+      session_id: 'sess-ok',
+      landmarks: JSON.stringify(validFaceLandmarks),
+    }, { name: 'file', filename: 'a.jpg', contentType: 'image/jpeg', content: 'fake-bytes' });
+
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.pose).toBe('frontal');
+    expect(body.session_id).toBe('sess-ok');
+  });
+
+  test('upload sem pose/landmarks/session_id → 201 (backward compat F1-F6)', async () => {
+    const app = await buildApp();
+    const boundary = 'b-legacy';
+    const payload = buildMultipart(boundary, {
+      subject_id: 'sub1', photo_type: 'facial_front',
+    }, { name: 'file', filename: 'a.jpg', contentType: 'image/jpeg', content: 'fake' });
+
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  test('pose inválida → 400 INVALID_POSE', async () => {
+    const app = await buildApp();
+    const boundary = 'b-bad-pose';
+    const payload = buildMultipart(boundary, {
+      subject_id: 'sub1', photo_type: 'facial_front',
+      pose: 'sideways_diagonal',
+    }, { name: 'file', filename: 'a.jpg', contentType: 'image/jpeg', content: 'fake' });
+
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('INVALID_POSE');
+  });
+
+  test('landmarks com 467 pts → 400 INVALID_LANDMARKS + code POINTS_COUNT_*', async () => {
+    const app = await buildApp();
+    const boundary = 'b-bad-lm';
+    const broken = { ...validFaceLandmarks, points: validFaceLandmarks.points.slice(1) };
+    const payload = buildMultipart(boundary, {
+      subject_id: 'sub1', photo_type: 'facial_front',
+      pose: 'frontal',
+      landmarks: JSON.stringify(broken),
+    }, { name: 'file', filename: 'a.jpg', contentType: 'image/jpeg', content: 'fake' });
+
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe('INVALID_LANDMARKS');
+    expect(body.code).toMatch(/POINTS_COUNT_467/);
+  });
+
+  test('landmarks JSON malformado → 400 INVALID_LANDMARKS_JSON', async () => {
+    const app = await buildApp();
+    const boundary = 'b-bad-json';
+    const payload = buildMultipart(boundary, {
+      subject_id: 'sub1', photo_type: 'facial_front',
+      pose: 'frontal',
+      landmarks: 'not-valid-json{{{',
+    }, { name: 'file', filename: 'a.jpg', contentType: 'image/jpeg', content: 'fake' });
+
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('INVALID_LANDMARKS_JSON');
+  });
+
+  test('session_id inexistente → 400 INVALID_SESSION', async () => {
+    const app = await buildApp();
+    const boundary = 'b-bad-sess';
+    const payload = buildMultipart(boundary, {
+      subject_id: 'sub1', photo_type: 'facial_front',
+      session_id: 'sess-inexistente',
+    }, { name: 'file', filename: 'a.jpg', contentType: 'image/jpeg', content: 'fake' });
+
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('INVALID_SESSION');
+  });
+
+  test('session_id de outro subject → 400 SESSION_SUBJECT_MISMATCH', async () => {
+    const app = await buildApp();
+    const boundary = 'b-sess-wrong';
+    const payload = buildMultipart(boundary, {
+      subject_id: 'sub1', photo_type: 'facial_front',
+      session_id: 'sess-wrong',  // belongs to 'other-subject' in mock
+    }, { name: 'file', filename: 'a.jpg', contentType: 'image/jpeg', content: 'fake' });
+
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('SESSION_SUBJECT_MISMATCH');
+  });
+
+  test('type=face landmarks com pose body_front → 400 TYPE_POSE_MISMATCH', async () => {
+    const app = await buildApp();
+    const boundary = 'b-type-mismatch';
+    const payload = buildMultipart(boundary, {
+      subject_id: 'sub1', photo_type: 'body_front',
+      pose: 'body_front',
+      landmarks: JSON.stringify(validFaceLandmarks),  // type=face mas pose corporal
+    }, { name: 'file', filename: 'a.jpg', contentType: 'image/jpeg', content: 'fake' });
+
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/photos',
+      payload,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe('INVALID_LANDMARKS');
+    expect(body.code).toBe('TYPE_POSE_MISMATCH');
   });
 });

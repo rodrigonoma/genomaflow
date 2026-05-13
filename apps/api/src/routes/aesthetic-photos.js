@@ -6,6 +6,8 @@ const { buildKey, uploadPhoto, signedUrlFor } = require('../services/aesthetic-s
 const { createPhoto, getPhotoForTenant, softDeletePhoto } = require('../services/aesthetic-photos');
 const { autoCropSensitive } = require('../services/aesthetic-auto-crop');
 const { getConsent } = require('../services/aesthetic-consent');
+const { validateLandmarks, isValidPose } = require('../services/aesthetic-landmarks-validate');
+const { getById: getSessionById } = require('../services/aesthetic-sessions');
 
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png']);
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -35,13 +37,49 @@ module.exports = async function (fastify) {
         fields[part.fieldname] = part.value;
       }
     }
-    const { subject_id, photo_type, notes } = fields;
+    const { subject_id, photo_type, notes, pose, session_id, landmarks: landmarksRaw } = fields;
     if (!subject_id || !photo_type) {
       return reply.status(400).send({ error: 'subject_id e photo_type obrigatórios' });
     }
     if (!fileBuf) {
       return reply.status(400).send({ error: 'Arquivo obrigatório no campo "file"' });
     }
+
+    // ─── V2 advanced tier: pose + landmarks + session_id (todos opcionais) ───
+    let parsedLandmarks = null;
+    if (pose) {
+      if (!isValidPose(pose)) {
+        return reply.status(400).send({ error: 'INVALID_POSE', message: `pose='${pose}' não está na whitelist` });
+      }
+    }
+    if (landmarksRaw) {
+      try {
+        parsedLandmarks = typeof landmarksRaw === 'string' ? JSON.parse(landmarksRaw) : landmarksRaw;
+      } catch (e) {
+        return reply.status(400).send({ error: 'INVALID_LANDMARKS_JSON', message: 'landmarks deve ser JSON válido' });
+      }
+      const { valid, error } = validateLandmarks(parsedLandmarks, pose);
+      if (!valid) {
+        return reply.status(400).send({ error: 'INVALID_LANDMARKS', code: error });
+      }
+    }
+    if (session_id) {
+      // Session deve existir, ser do mesmo tenant + mesmo subject
+      const sess = await getSessionById(fastify.pg, {
+        tenantId: request.user.tenant_id,
+        sessionId: session_id,
+      });
+      if (!sess) {
+        return reply.status(400).send({ error: 'INVALID_SESSION', message: 'session_id não encontrada' });
+      }
+      if (sess.subject_id !== subject_id) {
+        return reply.status(400).send({
+          error: 'SESSION_SUBJECT_MISMATCH',
+          message: 'session_id pertence a outro subject',
+        });
+      }
+    }
+    // ─── fim V2 ───────────────────────────────────────────────────────────────
 
     // Parse is_sensitive + auto_crop from multipart fields
     const isSensitiveField = fields.is_sensitive === 'true' || fields.is_sensitive === '1';
@@ -90,11 +128,17 @@ module.exports = async function (fastify) {
       s3Key: key,
       notes: notes ? String(notes).slice(0, 1000) : null,
       isSensitive: isSensitiveField,
+      // V2 advanced tier (null pra fluxo F1-F6)
+      pose: pose || null,
+      landmarks: parsedLandmarks,
+      sessionId: session_id || null,
     });
     return reply.status(201).send({
       id: photo.id, s3_key: photo.s3_key, photo_type: photo.photo_type,
       is_sensitive: photo.is_sensitive, taken_at: photo.taken_at,
       auto_crop_applied: autoCropApplied,
+      pose: photo.pose,
+      session_id: photo.session_id,
     });
   });
 
