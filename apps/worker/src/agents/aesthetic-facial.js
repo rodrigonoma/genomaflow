@@ -37,6 +37,10 @@ function sanitizeRegion(r) {
   if (!r || !VALID_REGION_TYPES.has(r.type)) return null;
   const out = { type: r.type };
   if (typeof r.label === 'string') out.label = r.label.slice(0, MAX_LABEL);
+  // V2 Fase 2: severity opcional (0-100, 100=grave). Heatmap granular.
+  if (typeof r.severity === 'number' && Number.isFinite(r.severity)) {
+    out.severity = Math.max(0, Math.min(100, Math.round(r.severity)));
+  }
 
   switch (r.type) {
     case 'bbox': {
@@ -131,6 +135,11 @@ Para cada métrica, retorne também:
     point    {"type":"point","x":0..1,"y":0..1}
   Use o tipo mais apropriado e prefira bbox/point para marcar localizações pontuais.
   Forneça pelo menos 1 região por métrica quando o sinal for visualmente identificável.
+
+  Para cada região, OPCIONALMENTE inclua "severity" (0-100): grau de SEVERIDADE
+  do problema NESTA região específica. 100 = problema severo/intenso localizado;
+  50 = moderado; 0 = praticamente sem manifestação (mas você está marcando
+  porque é referência anatômica). Use só quando puder julgar com confiança alta.
 - label (opcional, até 100 chars): descrição da região (ex: "ruga periorbital esquerda")
 
 Marque confidence="low" em métricas que dependem de medição precisa 2D (ex: simetria).

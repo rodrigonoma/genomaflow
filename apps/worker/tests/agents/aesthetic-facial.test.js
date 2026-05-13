@@ -78,6 +78,57 @@ describe('analyzeFacial', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // V2 Fase 2: Region.severity opcional
+  // ---------------------------------------------------------------------------
+  test('V2-F2: severity 0-100 preservada quando válida', () => {
+    const dirty = { rugas: { score: 50, regions: [
+      { type: 'bbox', x: 0.1, y: 0.1, width: 0.2, height: 0.2, severity: 75 },
+    ]}};
+    const clean = sanitizeMetrics(dirty, 'facial');
+    expect(clean.rugas.regions[0].severity).toBe(75);
+  });
+
+  test('V2-F2: severity ausente → não aparece no output (sem default)', () => {
+    const dirty = { rugas: { score: 50, regions: [
+      { type: 'bbox', x: 0.1, y: 0.1, width: 0.2, height: 0.2 },
+    ]}};
+    const clean = sanitizeMetrics(dirty, 'facial');
+    expect(clean.rugas.regions[0]).not.toHaveProperty('severity');
+  });
+
+  test('V2-F2: severity 150 → clamp em 100', () => {
+    const dirty = { rugas: { score: 50, regions: [
+      { type: 'bbox', x: 0.1, y: 0.1, width: 0.2, height: 0.2, severity: 150 },
+    ]}};
+    const clean = sanitizeMetrics(dirty, 'facial');
+    expect(clean.rugas.regions[0].severity).toBe(100);
+  });
+
+  test('V2-F2: severity -10 → clamp em 0', () => {
+    const dirty = { rugas: { score: 50, regions: [
+      { type: 'bbox', x: 0.1, y: 0.1, width: 0.2, height: 0.2, severity: -10 },
+    ]}};
+    const clean = sanitizeMetrics(dirty, 'facial');
+    expect(clean.rugas.regions[0].severity).toBe(0);
+  });
+
+  test('V2-F2: severity não-numérica descartada (não vira NaN)', () => {
+    const dirty = { rugas: { score: 50, regions: [
+      { type: 'bbox', x: 0.1, y: 0.1, width: 0.2, height: 0.2, severity: 'high' },
+    ]}};
+    const clean = sanitizeMetrics(dirty, 'facial');
+    expect(clean.rugas.regions[0]).not.toHaveProperty('severity');
+  });
+
+  test('V2-F2: severity arredonda fracionária', () => {
+    const dirty = { rugas: { score: 50, regions: [
+      { type: 'bbox', x: 0.1, y: 0.1, width: 0.2, height: 0.2, severity: 67.6 },
+    ]}};
+    const clean = sanitizeMetrics(dirty, 'facial');
+    expect(clean.rugas.regions[0].severity).toBe(68);
+  });
+
+  // ---------------------------------------------------------------------------
   // REGRESSION GUARD — bug 2026-05-12
   // Contrato Region do worker DEVE bater o shape em apps/web/.../analysis.model.ts.
   // Mismatch (worker grava w/h, tuplas, from/to; frontend lê width/height, {x,y},

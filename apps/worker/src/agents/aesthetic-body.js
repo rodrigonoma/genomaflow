@@ -32,6 +32,10 @@ function sanitizeRegion(r) {
   if (!r || !VALID_REGION_TYPES.has(r.type)) return null;
   const out = { type: r.type };
   if (typeof r.label === 'string') out.label = r.label.slice(0, MAX_LABEL_LENGTH);
+  // V2 Fase 2: severity opcional (0-100, 100=grave). Heatmap granular.
+  if (typeof r.severity === 'number' && Number.isFinite(r.severity)) {
+    out.severity = Math.max(0, Math.min(100, Math.round(r.severity)));
+  }
   switch (r.type) {
     case 'bbox': {
       const x = clamp01(r.x);
@@ -132,6 +136,9 @@ Para cada métrica, retorne:
     polygon  {"type":"polygon","points":[{"x":0..1,"y":0..1},...],"label":"..."}
     line     {"type":"line","x1":0..1,"y1":0..1,"x2":0..1,"y2":0..1}
     point    {"type":"point","x":0..1,"y":0..1}
+  Para cada região, OPCIONALMENTE inclua "severity" (0-100): grau de SEVERIDADE
+  do problema NESTA região. 100 = severo/intenso; 0 = mínimo. Use só quando
+  puder julgar com confiança alta.
 - label opcional (até 100 chars).
 
 IMPORTANTE — estimativas corporais 2D:
