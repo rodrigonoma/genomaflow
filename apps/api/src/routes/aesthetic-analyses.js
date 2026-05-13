@@ -7,7 +7,7 @@ const { getConsent } = require('../services/aesthetic-consent');
 const {
   createPending, validatePhotosOwnership, validatePhotosForAdvanced,
   listForSubject, getDetail, softDelete,
-  getMetricsOnly, computeDeltas,
+  getMetricsOnly, computeDeltas, evolutionBreakdown,
 } = require('../services/aesthetic-analyses');
 const { enqueue } = require('../queues/aesthetic-analysis-queue');
 const { buildAnalysisPDF } = require('../services/aesthetic-pdf-export');
@@ -253,12 +253,17 @@ module.exports = async function (fastify) {
       });
     }
     const result = computeDeltas(baseline.metrics, current.metrics);
+    // V2 Fase 2: breakdown evolutivo por categoria. Aparece apenas quando
+    // ambos os lados têm aggregates (ie. ambas análises rodaram pelo worker
+    // pós-V2 Fase 2 deploy). Análises antigas → breakdown vem com só `general:0`.
+    const breakdown = evolutionBreakdown(baseline.metrics, current.metrics);
     return reply.send({
       baseline_id: baseline.id,
       current_id: current.id,
       tier: current.tier,
       deltas: result.deltas,
       overall_change: result.overall_change,
+      evolution_breakdown: breakdown,
     });
   });
 

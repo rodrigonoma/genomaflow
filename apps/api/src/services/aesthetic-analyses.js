@@ -135,9 +135,35 @@ function computeDeltas(baselineMetrics, currentMetrics) {
   return { deltas, overall_change: count > 0 ? Math.round(sum / count) : 0 };
 }
 
+/**
+ * V2 Fase 2: breakdown evolutivo por categoria.
+ * Para cada um dos 6 aggregate_* + general (média), retorna delta = current - baseline.
+ * Categorias sem aggregate nos 2 lados são omitidas (não viram 0).
+ * `general` = média dos delta_categorias quando >0 contribuintes; 0 senão.
+ *
+ * Spec: docs/superpowers/specs/2026-05-13-aesthetic-v2-fase2-design.md §5
+ */
+function evolutionBreakdown(baselineMetrics, currentMetrics) {
+  const categories = ['skin_texture', 'spots', 'symmetry', 'wrinkles', 'dark_circles', 'acne'];
+  const breakdown = {};
+  let sum = 0, count = 0;
+  for (const cat of categories) {
+    const key = `aggregate_${cat}`;
+    const b = baselineMetrics?.[key]?.score;
+    const c = currentMetrics?.[key]?.score;
+    if (typeof b === 'number' && typeof c === 'number') {
+      breakdown[cat] = c - b;
+      sum += breakdown[cat];
+      count++;
+    }
+  }
+  breakdown.general = count > 0 ? Math.round(sum / count) : 0;
+  return breakdown;
+}
+
 module.exports = {
   createPending, validatePhotosOwnership,
   validatePhotosForAdvanced,
   listForSubject, getDetail, softDelete,
-  getMetricsOnly, computeDeltas,
+  getMetricsOnly, computeDeltas, evolutionBreakdown,
 };

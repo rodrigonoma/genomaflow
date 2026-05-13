@@ -510,6 +510,73 @@ describe('POST /aesthetic/analyses/:id/compare', () => {
     expect(body.tier).toBe('advanced');
     expect(body.deltas.symmetry_horizontal).toBe(+8);
   });
+
+  // V2 Fase 2 — evolution_breakdown
+  test('V2-F2: evolution_breakdown computado quando aggregates presentes', async () => {
+    const app = await buildApp();
+    app.pg.query.mockImplementation(async (sql, params) => {
+      if (/SELECT id, metrics, tier FROM aesthetic_analyses/i.test(sql)) {
+        if (params[0] === 'baseline') return { rows: [{
+          id: 'baseline', tier: 'standard',
+          metrics: {
+            rugas: { score: 60 },
+            aggregate_wrinkles: { score: 60, source: 'aggregate' },
+            aggregate_spots: { score: 50, source: 'aggregate' },
+          },
+        }] };
+        if (params[0] === 'current') return { rows: [{
+          id: 'current', tier: 'standard',
+          metrics: {
+            rugas: { score: 72 },
+            aggregate_wrinkles: { score: 72, source: 'aggregate' },
+            aggregate_spots: { score: 55, source: 'aggregate' },
+            aggregate_acne: { score: 80, source: 'aggregate' },
+          },
+        }] };
+        return { rows: [] };
+      }
+      return { rows: [] };
+    });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses/current/compare',
+      payload: { baseline_id: 'baseline' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.evolution_breakdown).toBeDefined();
+    expect(body.evolution_breakdown.wrinkles).toBe(+12); // 72-60
+    expect(body.evolution_breakdown.spots).toBe(+5);     // 55-50
+    // acne só no current → omitido (sem baseline)
+    expect(body.evolution_breakdown.acne).toBeUndefined();
+    // general = round((12+5)/2) = 9
+    expect(body.evolution_breakdown.general).toBe(9);
+  });
+
+  test('V2-F2: evolution_breakdown.general=0 quando sem aggregates compartilhados', async () => {
+    const app = await buildApp();
+    app.pg.query.mockImplementation(async (sql, params) => {
+      if (/SELECT id, metrics, tier FROM aesthetic_analyses/i.test(sql)) {
+        if (params[0] === 'baseline') return { rows: [{
+          id: 'baseline', tier: 'standard',
+          metrics: { rugas: { score: 60 } }, // sem aggregates legacy
+        }] };
+        if (params[0] === 'current') return { rows: [{
+          id: 'current', tier: 'standard',
+          metrics: { rugas: { score: 70 } },
+        }] };
+        return { rows: [] };
+      }
+      return { rows: [] };
+    });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses/current/compare',
+      payload: { baseline_id: 'baseline' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.evolution_breakdown).toBeDefined();
+    expect(body.evolution_breakdown.general).toBe(0); // sem aggregates compartilhados
+  });
 });
 
 describe('GET /aesthetic/analyses/:id/export.pdf', () => {
