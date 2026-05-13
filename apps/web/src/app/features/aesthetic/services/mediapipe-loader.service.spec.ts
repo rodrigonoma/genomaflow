@@ -22,6 +22,13 @@ describe('MediaPipeLoaderService', () => {
   let service: MediaPipeLoaderService;
 
   beforeEach(() => {
+    // Reset contadores dos mocks entre testes — sem isso, asserts
+    // `.toHaveBeenCalledTimes(1)` somam chamadas de testes anteriores e
+    // falham com `Received: 2` (Test 1 chamou createFromOptions 1x, Test 3
+    // chama mais 1x, counter total = 2). Localmente passa quando os testes
+    // rodam isolados; no CI todos rodam em sequência no mesmo arquivo.
+    jest.clearAllMocks();
+    TestBed.resetTestingModule();
     TestBed.configureTestingModule({ providers: [MediaPipeLoaderService] });
     service = TestBed.inject(MediaPipeLoaderService);
   });
