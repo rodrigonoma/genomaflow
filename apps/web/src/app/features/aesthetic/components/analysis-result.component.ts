@@ -278,6 +278,64 @@ export interface LifestyleRecommendations {
       margin: 0.25rem 0 0;
     }
 
+    /* ---- V2 Fase 2: Resumo da Análise (aggregate scores) ---- */
+    .aggregate-summary {
+      margin: 1rem 0;
+      padding: 1rem;
+      background: rgba(192, 193, 255, 0.04);
+      border-radius: 10px;
+      border: 1px solid rgba(192, 193, 255, 0.12);
+    }
+    .aggregate-summary h4 {
+      margin: 0 0 0.75rem;
+      font-size: 14px;
+      color: #c0c1ff;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .aggregate-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.75rem;
+    }
+    .aggregate-card {
+      padding: 0.75rem;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .aggregate-label {
+      font-size: 11px;
+      color: #9b9aad;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .aggregate-score-big {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #dae2fd;
+      line-height: 1;
+    }
+    .aggregate-bar {
+      height: 4px;
+      background: rgba(192, 193, 255, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .aggregate-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #22d3ee, #c0c1ff);
+      transition: width 0.3s ease;
+    }
+    .aggregate-conf-low {
+      font-size: 10px;
+      color: #fbbf24;
+      font-style: italic;
+    }
+
     /* ---- V2 tier badge & geometry section ---- */
     .tier-badge-banner {
       display: flex;
@@ -515,6 +573,32 @@ export interface LifestyleRecommendations {
       }
 
       <!-- ================================================================ -->
+      <!-- V2 Fase 2: Resumo da Análise (6 scores agregados, topo)           -->
+      <!-- ================================================================ -->
+      @if (aggregateScores().length > 0) {
+        <section class="aggregate-summary" data-testid="aggregate-summary">
+          <h4>
+            <span class="metric-section-icon">📊</span>
+            Resumo da análise
+          </h4>
+          <div class="aggregate-grid">
+            @for (s of aggregateScores(); track s[0]) {
+              <div class="aggregate-card" [attr.data-key]="s[0]">
+                <span class="aggregate-label">{{ humanAggregateLabel(s[0]) }}</span>
+                <div class="aggregate-score-big">{{ s[1].score }}</div>
+                <div class="aggregate-bar">
+                  <div class="aggregate-bar-fill" [style.width.%]="s[1].score"></div>
+                </div>
+                @if (s[1].confidence === 'low') {
+                  <span class="aggregate-conf-low">Confiança baixa</span>
+                }
+              </div>
+            }
+          </div>
+        </section>
+      }
+
+      <!-- ================================================================ -->
       <!-- Métricas — V2 split por source: Vision IA + Geometria             -->
       <!-- ================================================================ -->
       @if (visionMetrics().length > 0) {
@@ -732,17 +816,35 @@ export class AnalysisResultComponent implements OnInit {
    * geometryMetrics: source === 'mediapipe' (advanced tier — V2-E)
    */
   readonly visionMetrics = computed<[string, MetricData][]>(() =>
-    this.metricsList().filter(([, m]) => m.source !== 'mediapipe')
+    this.metricsList().filter(([, m]) => m.source !== 'mediapipe' && m.source !== 'aggregate')
   );
 
   readonly geometryMetrics = computed<[string, MetricData][]>(() =>
     this.metricsList().filter(([, m]) => m.source === 'mediapipe')
   );
 
+  /** V2 Fase 2: scores agregados (source='aggregate'). Renderizam na section topo. */
+  readonly aggregateScores = computed<[string, MetricData][]>(() =>
+    this.metricsList().filter(([, m]) => m.source === 'aggregate')
+  );
+
   /** V2: análise é advanced quando tem geometryMetrics OU tier='advanced' explícito. */
   readonly isAdvanced = computed(() =>
     this.analysis?.tier === 'advanced' || this.geometryMetrics().length > 0
   );
+
+  /** Label PT-BR pros 6 scores agregados (V2-F2). */
+  humanAggregateLabel(key: string): string {
+    const map: Record<string, string> = {
+      aggregate_skin_texture: 'Textura da pele',
+      aggregate_spots: 'Manchas',
+      aggregate_symmetry: 'Simetria',
+      aggregate_wrinkles: 'Rugas / Firmeza',
+      aggregate_dark_circles: 'Olheiras',
+      aggregate_acne: 'Acne',
+    };
+    return map[key] ?? key.replace(/^aggregate_/, '').replace(/_/g, ' ');
+  }
 
   /** Métricas que possuem regions com pelo menos 1 região (para o toolbar). */
   readonly availableLayers = computed<MetricSummary[]>(() => {

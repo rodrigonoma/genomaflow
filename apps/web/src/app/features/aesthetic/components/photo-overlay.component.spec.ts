@@ -161,8 +161,51 @@ describe('PhotoOverlayComponent', () => {
 
     triggerImgLoad(fixture);
 
-    const group: SVGGElement | null = fixture.nativeElement.querySelector('g[data-metric]');
-    expect(group).not.toBeNull();
-    expect(group!.getAttribute('opacity')).toBe('0.7');
+    // V2 Fase 2: opacity agora é aplicada no <g> INTERNO (por region)
+    // em vez do <g data-metric> externo (que mantém apenas fill/stroke).
+    // Permite severity por região modular opacity individual.
+    const layerGroup: SVGGElement | null = fixture.nativeElement.querySelector('g[data-metric]');
+    expect(layerGroup).not.toBeNull();
+    const regionGroup: SVGGElement | null = layerGroup!.querySelector('g[opacity]');
+    expect(regionGroup).not.toBeNull();
+    expect(regionGroup!.getAttribute('opacity')).toBe('0.7');
+  });
+
+  // -------------------------------------------------------------------------
+  // V2 Fase 2: severity-based opacity (per region)
+  // -------------------------------------------------------------------------
+  it('V2-F2: region.severity sobrescreve opacity global proporcional', () => {
+    const fixture = TestBed.createComponent(PhotoOverlayComponent);
+    fixture.componentRef.setInput('photoUrl', 'photo.jpg');
+    fixture.componentRef.setInput('metrics', {
+      rugas: {
+        score: 70, confidence: 'high',
+        regions: [
+          { type: 'bbox', x: 0.1, y: 0.1, width: 0.2, height: 0.2, severity: 80 },
+          { type: 'bbox', x: 0.5, y: 0.5, width: 0.1, height: 0.1 }, // sem severity
+        ],
+      },
+    });
+    fixture.componentRef.setInput('activeLayers', ['rugas']);
+    fixture.componentRef.setInput('opacity', 0.4);
+    fixture.detectChanges();
+    triggerImgLoad(fixture);
+
+    const groups = fixture.nativeElement.querySelectorAll('g[data-metric] > g[opacity]');
+    expect(groups.length).toBe(2);
+    // 1ª region: severity 80 → opacity 0.8
+    expect(groups[0].getAttribute('opacity')).toBe('0.8');
+    // 2ª region: sem severity → fallback pra opacity global (0.4)
+    expect(groups[1].getAttribute('opacity')).toBe('0.4');
+  });
+
+  it('V2-F2: severityOpacity helper clamp 0.2..0.9', () => {
+    const fixture = TestBed.createComponent(PhotoOverlayComponent);
+    const comp = fixture.componentInstance;
+    expect(comp.severityOpacity({ type: 'bbox', x:0, y:0, width:1, height:1 } as any)).toBeNull();
+    expect(comp.severityOpacity({ type: 'bbox', x:0, y:0, width:1, height:1, severity: 0 } as any)).toBe(0.2);
+    expect(comp.severityOpacity({ type: 'bbox', x:0, y:0, width:1, height:1, severity: 100 } as any)).toBe(0.9);
+    expect(comp.severityOpacity({ type: 'bbox', x:0, y:0, width:1, height:1, severity: 50 } as any)).toBe(0.5);
+    expect(comp.severityOpacity({ type: 'bbox', x:0, y:0, width:1, height:1, severity: 80 } as any)).toBe(0.8);
   });
 });

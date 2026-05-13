@@ -29,7 +29,16 @@ export type ConfidenceLevel = 'high' | 'medium' | 'low';
 // Region discriminated union
 // ---------------------------------------------------------------------------
 
-export interface RegionBbox {
+/**
+ * Campos comuns a todos os Region — incluindo severity opcional
+ * (V2 Fase 2): 0-100, 100=grave. Sem severity → opacity global.
+ */
+interface RegionCommon {
+  label?: string;
+  severity?: number;
+}
+
+export interface RegionBbox extends RegionCommon {
   type: 'bbox';
   x: number;
   y: number;
@@ -37,17 +46,17 @@ export interface RegionBbox {
   height: number;
 }
 
-export interface RegionPolyline {
+export interface RegionPolyline extends RegionCommon {
   type: 'polyline';
   points: Array<{ x: number; y: number }>;
 }
 
-export interface RegionPolygon {
+export interface RegionPolygon extends RegionCommon {
   type: 'polygon';
   points: Array<{ x: number; y: number }>;
 }
 
-export interface RegionLine {
+export interface RegionLine extends RegionCommon {
   type: 'line';
   x1: number;
   y1: number;
@@ -55,7 +64,7 @@ export interface RegionLine {
   y2: number;
 }
 
-export interface RegionPoint {
+export interface RegionPoint extends RegionCommon {
   type: 'point';
   x: number;
   y: number;
@@ -77,11 +86,12 @@ export interface MetricData {
   confidence: ConfidenceLevel;
   regions: Region[];
   /**
-   * V2 Fase 1: discriminador da origem da métrica.
+   * V2 Fase 1+2: discriminador da origem da métrica.
    * - undefined ou 'anthropic_vision' (legacy): IA Visual (Sonnet)
-   * - 'mediapipe': métrica geométrica (advanced tier)
+   * - 'mediapipe': métrica geométrica (advanced tier — V2 Fase 1)
+   * - 'aggregate': score agregado computado no worker (V2 Fase 2)
    */
-  source?: 'anthropic_vision' | 'mediapipe';
+  source?: 'anthropic_vision' | 'mediapipe' | 'aggregate';
   /** V2: pose usada (advanced tier). Ex: 'frontal', 'body_lateral_left'. */
   pose_used?: string;
   /** V2: medida bruta da métrica geométrica (rad, px norm, etc). */
@@ -216,4 +226,12 @@ export interface CompareResult {
   current_id: string;
   deltas: Record<string, number>;
   overall_change: number;
+  /** V2 Fase 1: tier da comparação. Backend retorna 400 TIER_MISMATCH em cross-tier. */
+  tier?: 'standard' | 'advanced';
+  /**
+   * V2 Fase 2: delta por categoria agregada quando ambos os lados têm
+   * `aggregate_*`. Categorias: skin_texture, spots, symmetry, wrinkles,
+   * dark_circles, acne + `general` (média). Ausente em análises pré-F2.
+   */
+  evolution_breakdown?: Record<string, number>;
 }

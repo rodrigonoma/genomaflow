@@ -110,6 +110,46 @@ const TYPE_LABELS: Record<AnalysisType, string> = {
       font-style: italic;
     }
 
+    /* ---- V2 Fase 2: Evolution breakdown ---- */
+    .evolution-breakdown {
+      margin: 0.5rem 0 1rem;
+      padding: 0.75rem 1rem;
+      background: rgba(192, 193, 255, 0.04);
+      border-radius: 8px;
+      border: 1px solid rgba(192, 193, 255, 0.12);
+    }
+    .evolution-breakdown h4 {
+      margin: 0 0 0.5rem;
+      font-size: 13px;
+      color: #c0c1ff;
+    }
+    .breakdown-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 0.5rem;
+    }
+    .breakdown-card {
+      padding: 0.5rem 0.65rem;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .breakdown-label {
+      font-size: 11px;
+      color: #9b9aad;
+      text-transform: uppercase;
+    }
+    .breakdown-delta {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .breakdown-positive .breakdown-delta { color: #10b981; }
+    .breakdown-negative .breakdown-delta { color: #ef4444; }
+    .breakdown-neutral  .breakdown-delta { color: #9b9aad; }
+
     /* ---- Loading spinner ---- */
     .loading-state {
       display: flex;
@@ -327,6 +367,29 @@ const TYPE_LABELS: Record<AnalysisType, string> = {
           }
         </div>
 
+        <!-- V2 Fase 2: breakdown por categoria (quando ambos têm aggregates) -->
+        @if (evolutionEntries().length > 0) {
+          <section class="evolution-breakdown" data-testid="evolution-breakdown">
+            <h4>Evolução por categoria</h4>
+            <div class="breakdown-grid">
+              @for (entry of evolutionEntries(); track entry[0]) {
+                <div class="breakdown-card"
+                     [attr.data-category]="entry[0]"
+                     [class.breakdown-positive]="entry[1] > 0"
+                     [class.breakdown-negative]="entry[1] < 0"
+                     [class.breakdown-neutral]="entry[1] === 0">
+                  <span class="breakdown-label">{{ humanCategoryLabel(entry[0]) }}</span>
+                  <span class="breakdown-delta">
+                    @if (entry[1] > 0) { +{{ entry[1] }} }
+                    @else if (entry[1] < 0) { {{ entry[1] }} }
+                    @else { 0 }
+                  </span>
+                </div>
+              }
+            </div>
+          </section>
+        }
+
         <!-- Deltas table -->
         <table class="delta-table" data-testid="delta-table">
           <thead>
@@ -444,6 +507,36 @@ export class ComparisonViewComponent {
     const cmp = this.comparison();
     if (!cmp) return [];
     return Object.entries(cmp.deltas).sort(([a], [b]) => a.localeCompare(b));
+  }
+
+  /**
+   * V2 Fase 2: entradas do evolution_breakdown na ordem canônica
+   * (general por último, demais alfabético). Vazio se ausente ou só
+   * tem `general` (=0 sem outras categorias compartilhadas).
+   */
+  evolutionEntries(): [string, number][] {
+    const breakdown = this.comparison()?.evolution_breakdown;
+    if (!breakdown) return [];
+    const keys = Object.keys(breakdown);
+    if (keys.length <= 1) return []; // só general → não mostra
+    const order = ['skin_texture', 'spots', 'symmetry', 'wrinkles', 'dark_circles', 'acne', 'general'];
+    return order
+      .filter(k => k in breakdown)
+      .map(k => [k, breakdown[k]] as [string, number]);
+  }
+
+  /** Label PT-BR pras categorias de evolution_breakdown. */
+  humanCategoryLabel(key: string): string {
+    const map: Record<string, string> = {
+      skin_texture: 'Textura',
+      spots: 'Manchas',
+      symmetry: 'Simetria',
+      wrinkles: 'Rugas',
+      dark_circles: 'Olheiras',
+      acne: 'Acne',
+      general: 'Geral',
+    };
+    return map[key] ?? key;
   }
 
   /**

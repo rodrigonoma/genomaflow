@@ -77,17 +77,38 @@ async function buildAnalysisPDF({ tenant, subject, analysis, metrics, treatments
   }
   hr();
 
-  // Metrics — V2: split Vision (source=anthropic_vision ou undefined) vs geometry (source=mediapipe)
+  // Metrics — V2: split por source (Vision | mediapipe | aggregate)
   if (metrics && typeof metrics === 'object') {
     const validEntries = Object.entries(metrics)
       .filter(([, v]) => v && typeof v === 'object' && typeof v.score === 'number');
+    const aggregateEntries = validEntries
+      .filter(([, v]) => v.source === 'aggregate');
     const visionEntries = validEntries
-      .filter(([, v]) => v.source !== 'mediapipe')
+      .filter(([, v]) => v.source !== 'mediapipe' && v.source !== 'aggregate')
       .sort((a, b) => b[1].score - a[1].score)
       .slice(0, 12);
     const geometryEntries = validEntries
       .filter(([, v]) => v.source === 'mediapipe')
       .sort((a, b) => b[1].score - a[1].score);
+
+    // V2 Fase 2: Resumo da Análise (6 scores agregados) no topo
+    if (aggregateEntries.length > 0) {
+      const HUMAN_LABEL = {
+        aggregate_skin_texture: 'Textura da pele',
+        aggregate_spots: 'Manchas',
+        aggregate_symmetry: 'Simetria',
+        aggregate_wrinkles: 'Rugas / Firmeza',
+        aggregate_dark_circles: 'Olheiras',
+        aggregate_acne: 'Acne',
+      };
+      draw('Resumo da Análise', { bold: true, size: 12 });
+      for (const [name, m] of aggregateEntries) {
+        ensure(20);
+        const label = HUMAN_LABEL[name] || name.replace(/^aggregate_/, '');
+        draw(`• ${label}: ${m.score}/100${m.confidence === 'low' ? ' (confiança baixa)' : ''}`);
+      }
+      hr();
+    }
 
     if (visionEntries.length > 0) {
       draw('Análise Visual (IA) — score 0-100', { bold: true, size: 12 });
