@@ -109,8 +109,70 @@ function verifyWebhook(headers) {
   return received === expected;
 }
 
+/**
+ * Envia documento via Z-API send-document (PDF, imagem, etc).
+ * URL deve ser publicamente acessível (S3 presigned URL OK).
+ *
+ * V2 Fase 4: usado pra enviar PDF paciente via WhatsApp.
+ *
+ * @param {Object} args
+ * @param {string} args.phone     Phone E.164 ou aceito por Z-API
+ * @param {string} args.mediaUrl  URL pública do documento (S3 presigned)
+ * @param {string} args.fileName  Nome do arquivo (ex: "analise-estetica.pdf")
+ * @param {string} [args.caption] Texto curto enviado junto (opcional)
+ * @param {object} [args.log]     Fastify request.log pra mock
+ * @returns {Promise<{ messageId, status, raw }>}
+ */
+async function sendDocument({ phone, mediaUrl, fileName, caption, log }) {
+  const phoneE164 = normalizePhone(phone);
+  if (!phoneE164) throw new Error('phone inválido');
+  if (!mediaUrl) throw new Error('mediaUrl obrigatório');
+
+  if (isMock()) {
+    if (log) log.info(
+      { phone: phoneE164, mediaUrl: mediaUrl.slice(0, 80), fileName },
+      'ZAPI_MOCK: sendDocument',
+    );
+    return { messageId: `mock-doc-${Date.now()}`, status: 'sent' };
+  }
+
+  const cfg = getConfig();
+  // Z-API endpoint: /send-document/{ext} (extensão da URL). Pra PDF, /send-document/pdf
+  const ext = (fileName?.split('.').pop() || 'pdf').toLowerCase();
+  const url = `${BASE_URL}/${cfg.instanceId}/token/${cfg.token}/send-document/${ext}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Client-Token': cfg.clientToken,
+    },
+    body: JSON.stringify({
+      phone: phoneE164,
+      document: mediaUrl,
+      fileName: fileName || `documento.${ext}`,
+      caption: caption || '',
+    }),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    const e = new Error(`Z-API send-document ${res.status}: ${errBody.slice(0, 200)}`);
+    e.statusCode = res.status;
+    throw e;
+  }
+
+  const data = await res.json();
+  return {
+    messageId: data.messageId || data.id || data.zaapId || null,
+    status: 'sent',
+    raw: data,
+  };
+}
+
 module.exports = {
   sendText,
+  sendDocument,
   verifyWebhook,
   normalizePhone,
   isMock,
