@@ -22,9 +22,13 @@ module.exports = async function (fastify) {
       return reply.status(401).send({ error: 'MISSING_SIGNATURE' });
     }
 
-    const rawBody = typeof request.body === 'string'
-      ? request.body
-      : JSON.stringify(request.body);
+    // HMAC do Trello é calculado sobre os bytes exatos do request body. Usar
+    // JSON.stringify(request.body) re-serializa e pode quebrar a assinatura
+    // por ordem de chaves/whitespace diferente do que o Trello enviou. server.js
+    // já expõe request.rawBody (Buffer com bytes originais) — preferir esse.
+    const rawBody = request.rawBody
+      ? request.rawBody.toString('utf8')
+      : (typeof request.body === 'string' ? request.body : JSON.stringify(request.body));
     const callbackUrl = process.env.WEBHOOK_CALLBACK_URL;
 
     if (!verifyWebhookSignature({ body: rawBody, signature, callbackUrl })) {
