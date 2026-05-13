@@ -16,8 +16,8 @@ Branch: `feat/aesthetic-v2-fase3` (merged ff em main, deploy `25817104163` verde
 | Sub-fase | Status |
 |---|---|
 | F3.1-A migration 103 + service | ✅ Prod |
-| F3.1-B worker depth-anything **MOCK** + processor + queue | ✅ Prod (mock gradient) |
-| F3.1-B.2 ONNX real (swap mock) | ❌ Pendente |
+| F3.1-B worker depth-anything **MOCK** + processor + queue | ✅ Prod (mock gradient) — superado |
+| F3.1-B.2 ONNX real (swap mock) | ✅ Prod (Depth-Anything-V2-Small) |
 | F3.1-C API rotas POST/GET /aesthetic/analyses/:id/depth | ✅ Prod |
 | F3.1-D DepthViewerComponent Three.js | ✅ Prod |
 | F3.1-E Integração analysis-result + WS | ✅ Prod |
@@ -98,26 +98,22 @@ Branch: `feat/aesthetic-v2-fase3` (merged ff em main, deploy `25817104163` verde
 
 ## Pendências críticas
 
-### F3.1-B.2: swap MOCK → ONNX real
+### F3.1-B.2: swap MOCK → ONNX real (ENTREGUE 2026-05-13)
 
-**Por que mock primeiro:** desacoplar pipeline (storage + viewer + UX) do risco do modelo (~25MB Dockerfile + onnxruntime-node + preprocess/postprocess complexo).
+Concluído primeira tentativa. Alpine + onnxruntime-node compatíveis (musl não bloqueia).
+HuggingFace download (~100MB) no Docker build passou com `--retry 3 --retry-delay 5`.
 
-**Como trocar:**
-1. `npm install onnxruntime-node@^1.17.0` no worker
-2. Atualizar `apps/worker/Dockerfile`: adicionar `RUN curl -L -o /app/models/depth-anything-v2-small.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx`
-3. Em `depth-anything.js`: substituir lógica MOCK por:
-   ```javascript
-   const ort = require('onnxruntime-node');
-   const session = await ort.InferenceSession.create('/app/models/depth-anything-v2-small.onnx');
-   // preprocess: resize 518x518, normalize, NCHW float32
-   // run inference
-   // postprocess: resize back to 512x512, normalize 0-1, multiply 255
-   // sharp().raw().png() → buffer
-   ```
-4. Mudar `PROVIDER_VERSION` de `'mock-gradient-v1'` para `'depth-anything-v2-small@1.0'`
-5. Tests existentes continuam passando (contrato Buffer PNG mantido)
+Pipeline real implementado em `apps/worker/src/lib/depth-anything.js`:
+- `getSession()` singleton lazy (modelo carrega no primeiro `generateDepthMap`)
+- `preprocess(buf)`: sharp resize 518x518 → CHW float32 com normalize ImageNet
+- `session.run({ inputName: tensor })` via introspection de inputNames
+- `postprocess(tensor)`: min-max normalize → 0-255 → resize 512x512 → PNG
+- Suporta output [1, H, W] ou [1, 1, H, W] (variação export ONNX)
 
-**Risco:** modelo download 25MB + inference CPU ~30-60s por foto em Fargate small. Pode precisar upgrade pra c6i/c7i (AVX512).
+PROVIDER_VERSION agora `'depth-anything-v2-small@1.0'` (audit trail).
+
+Tempo de inference em Fargate small a observar — se >60s vira gargalo,
+upgrade pra c6i/c7i (AVX512) ou GPU on-demand via Lambda.
 
 ### F3.2: multi-view fusion
 
