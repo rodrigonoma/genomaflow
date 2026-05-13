@@ -7,6 +7,7 @@ const { analyzeFacial } = require('../agents/aesthetic-facial');
 const { analyzeBody } = require('../agents/aesthetic-body');
 const { recommendProtocol } = require('../agents/aesthetic-recommender');
 const { computeLandmarkMetrics } = require('../agents/aesthetic-landmarks-metrics');
+const { computeAllAggregateScores } = require('../agents/aesthetic-aggregate-scores');
 
 const FACIAL_REGIONS = new Set(['facial', 'eyelids', 'neck']);
 const BODY_REGIONS_PROC = new Set(['legs', 'glutes', 'abdomen', 'arms', 'breast', 'full_body']);
@@ -103,6 +104,17 @@ async function processAestheticAnalysis({ pool, data } = {}) {
 
     // Merge metrics Vision + landmarks (geometria). Source flag separa os dois.
     const mergedMetrics = { ...visionResult.metrics, ...landmarkMetrics };
+
+    // V2 Fase 2: 6 scores agregados (textura/manchas/simetria/rugas/olheiras/acne).
+    // Determinístico, sem custo de IA. Roda em qualquer tier — em standard agrega
+    // só Vision; em advanced enriquece com geometria (mediapipe) quando aplicável.
+    try {
+      const aggregateScores = computeAllAggregateScores(mergedMetrics);
+      Object.assign(mergedMetrics, aggregateScores);
+    } catch (aggErr) {
+      // Defensivo: agregação é determinística, mas falha não deve bloquear análise
+      console.warn(`[aesthetic][${analysis_id}] aggregate-scores falhou:`, aggErr.message);
+    }
 
     // Buscar catálogo de tratamentos (global + tenant, ativos, top 50 por uso recente)
     stage = 'fetch_catalog';
