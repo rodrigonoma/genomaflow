@@ -22,7 +22,8 @@ Branch: `feat/aesthetic-v2-fase3` (merged ff em main, deploy `25817104163` verde
 | F3.1-D DepthViewerComponent Three.js | ✅ Prod |
 | F3.1-E Integração analysis-result + WS | ✅ Prod |
 | F3.1-F IAM S3 policy (CDK) | ⚠️ **Requer cdk deploy MANUAL** |
-| F3.2 Multi-view fusion (5 fotos → GLTF) | ❌ Pendente |
+| F3.2-A Multi-view depth (5 poses) + pose switcher UI | ✅ Prod |
+| F3.2-B GLTF mesh real + GLTFLoader rotação 360° | ❌ Pendente |
 
 ## Decisões F3-D1 a F3-D8
 
