@@ -36,6 +36,9 @@ Resultado para o usuário final: análise mais reprodutível, comparações ante
 | D7 | 1 sessão = 1 análise multi-pose (5 facial ou 4 corporal) | Reuso máximo de aesthetic_analyses |
 | D8 | Métricas geométricas no MESMO JSONB existente com flag `source: 'mediapipe'` | Zero nova RLS surface; frontend renderiza junto |
 | D9 | Mobile (Capacitor) consome a mesma lib MediaPipe Web | Paridade Android/iOS mandatória |
+| **D10** | **Dois tiers coexistem: `standard` (F1-F6, 5 cr) e `advanced` (V2, 10 cr)** | **Captura de valor — Premium 2x mantém F1-F6 vivo; basic vira commodity de volume** |
+| **D11** | **Naming UI: "Análise Avançada — Captura Guiada" com badge "PRECISÃO"** | **Evita "Premium" saturado em SaaS BR; reserva "Premium" pro tier Pseudo-3D futuro (Fase 3)** |
+| **D12** | **Endpoint /compare exige baseline e current do MESMO tier** | **Métricas geométricas só existem em advanced; cross-tier compare quebraria delta semântica** |
 
 ---
 
@@ -44,10 +47,15 @@ Resultado para o usuário final: análise mais reprodutível, comparações ante
 ### 4.1 Fluxo end-to-end
 
 ```
-[Esteticista entra em /aesthetic/capture]
-  ↓ Escolhe analysis_type (facial | body region)
+[Esteticista entra na aba "Análise Estética IA"]
   ↓
-[CaptureGuideComponent]
+[Seleção de Tier — 2 cards lado-a-lado]
+  ├─ [STANDARD] "Análise Rápida 2D" — 5 cr
+  │    └→ Fluxo F1-F6 atual inalterado (1-3 fotos avulsas → POST /aesthetic/analyses tier=standard)
+  └─ [ADVANCED] "Análise Avançada — Captura Guiada" ✨ PRECISÃO — 10 cr
+       └→ Fluxo V2 NOVO ↓
+
+[Tier ADVANCED — CaptureGuideComponent]
   ↓ Lazy-load MediaPipe FaceMesh/Pose (WASM ~10MB)
   ↓ Cycle por pose: frontal → perfil_E → perfil_D → 45_E → 45_D
   ↓ Live preview: webcam + overlay target + indicador OK/ajuste
@@ -65,9 +73,11 @@ Resultado para o usuário final: análise mais reprodutível, comparações ante
   ↓
 [Worker]
   ↓ analyzeFacial/analyzeBody (Sonnet Vision — inalterado)
-  ↓ NOVO: aesthetic-landmarks-metrics agente lê photos.landmarks
-  ↓        calcula simetria, proporções, ângulos
-  ↓        merge no metrics JSONB com source:'mediapipe'
+  ↓ Se tier === 'advanced':
+  ↓   NOVO: aesthetic-landmarks-metrics agente lê photos.landmarks
+  ↓          calcula simetria, proporções, ângulos
+  ↓          merge no metrics JSONB com source:'mediapipe'
+  ↓ Se tier === 'standard': pula direto pro recommender (fluxo F1-F6)
   ↓ recommendProtocol (inalterado)
   ↓ Persist analysis_result + WS notifyTenant aesthetic:event:*
   ↓
@@ -145,13 +155,48 @@ Valores válidos de `pose` (validados em código, não enum no DB):
 - Facial: `frontal`, `profile_left`, `profile_right`, `45_left`, `45_right`
 - Corporal: `body_front`, `body_back`, `body_lateral_left`, `body_lateral_right`
 
-### 5.3 Migration 101 — aesthetic_analyses link
+### 5.3 Migration 101 — aesthetic_analyses link + tier
 ```sql
 ALTER TABLE aesthetic_analyses
-  ADD COLUMN IF NOT EXISTS session_id UUID NULL REFERENCES aesthetic_sessions(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS session_id UUID NULL REFERENCES aesthetic_sessions(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS tier VARCHAR(20) NOT NULL DEFAULT 'standard';
+
+ALTER TABLE aesthetic_analyses
+  ADD CONSTRAINT aesthetic_analyses_tier_check
+  CHECK (tier IN ('standard', 'advanced'));
+
 CREATE INDEX IF NOT EXISTS idx_aesthetic_analyses_session
   ON aesthetic_analyses (session_id)
   WHERE session_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_aesthetic_analyses_tier
+  ON aesthetic_analyses (tenant_id, tier, created_at DESC)
+  WHERE deleted_at IS NULL;
+```
+
+### 5.3.1 Migration 102 — credit_ledger kinds para tier advanced
+```sql
+ALTER TABLE credit_ledger DROP CONSTRAINT IF EXISTS credit_ledger_kind_check;
+ALTER TABLE credit_ledger ADD CONSTRAINT credit_ledger_kind_check
+  CHECK (kind IN (
+    -- existentes preservados (migration 098)
+    'topup', 'adjustment', 'aesthetic_refund',
+    'aesthetic_facial_analysis', 'aesthetic_eyelids_analysis', 'aesthetic_neck_analysis',
+    'aesthetic_breast_analysis', 'aesthetic_arms_analysis', 'aesthetic_abdomen_analysis',
+    'aesthetic_legs_analysis', 'aesthetic_glutes_analysis', 'aesthetic_full_body_analysis',
+    'aesthetic_other_analysis',
+    -- NOVOS para tier advanced (V2 Fase 1)
+    'aesthetic_facial_analysis_advanced',
+    'aesthetic_eyelids_analysis_advanced',
+    'aesthetic_neck_analysis_advanced',
+    'aesthetic_breast_analysis_advanced',
+    'aesthetic_arms_analysis_advanced',
+    'aesthetic_abdomen_analysis_advanced',
+    'aesthetic_legs_analysis_advanced',
+    'aesthetic_glutes_analysis_advanced',
+    'aesthetic_full_body_analysis_advanced',
+    'aesthetic_other_analysis_advanced'
+  ));
 ```
 
 ### 5.4 Shape JSONB `aesthetic_photos.landmarks`
@@ -298,15 +343,31 @@ Backward compat: payload sem `pose`/`landmarks` continua aceito (fluxo F1-F6).
   "analysis_type": "facial",
   "subject_id": "uuid",
   "photo_ids": ["uuid1", "uuid2", "uuid3", "uuid4", "uuid5"],
-  "session_id": "uuid"   // NOVO — opcional
+  "session_id": "uuid",   // NOVO — opcional (obrigatório se tier='advanced')
+  "tier": "advanced"      // NOVO — 'standard' (default) | 'advanced'
 }
 ```
 
-Validação adicional quando `session_id` presente:
-- session deve existir + mesmo tenant + mesmo subject
-- todas as photos devem pertencer à mesma session (`aesthetic_photos.session_id`)
+**Regras de validação por tier:**
 
-Limite de `photo_ids`: estendido de 3 → 5.
+| Validação | `standard` | `advanced` |
+|---|---|---|
+| `photo_ids` length | 1–3 | 5 (facial) ou 4 (corporal) — exato |
+| `session_id` | opcional | **obrigatório** |
+| `aesthetic_photos.pose` | NULL ok | **NOT NULL** em todas as fotos |
+| `aesthetic_photos.landmarks` | NULL ok | **NOT NULL** em todas as fotos |
+| Consent reforçado p/ regiões sensíveis | aplicável | aplicável |
+| Custo (créditos) | 5 (env `AESTHETIC_FACIAL_COST`) | 10 (env `AESTHETIC_FACIAL_COST_ADVANCED`) |
+| credit_ledger.kind | `aesthetic_{type}_analysis` | `aesthetic_{type}_analysis_advanced` |
+
+Backward compat: payload sem `tier` = `standard` (fluxo F1-F6 idêntico).
+
+### 7.5 POST /aesthetic/analyses/:id/compare (estender)
+
+Validação adicional:
+- baseline.tier deve === current.tier; senão 400 `TIER_MISMATCH` com mensagem "Compare exige análises do mesmo tier"
+- Frontend filtra dropdown de baseline para mostrar só análises do mesmo tier
+- Mensagem UX clara: "Você só pode comparar análises Avançadas com Avançadas (têm métricas geométricas exclusivas)"
 
 ---
 
@@ -415,12 +476,12 @@ Landmarks faciais são **biometria** (LGPD Art. 11). Reforçar consent:
 
 | Sub-fase | Conteúdo | LOC estimado |
 |---|---|---|
-| **V2-A** | Migrations 099/100/101 + RLS + audit + repos backend | ~600 |
-| **V2-B** | Routes sessions + photos extend + analyses extend + validate service | ~800 |
-| **V2-C** | Frontend captura guiada facial: 5 poses, MediaPipe FaceMesh, 7 heurísticas, lazy-load, Capacitor smoke test | ~1500 |
+| **V2-A** | Migrations 099/100/101/102 + RLS + audit + repos backend + tier column + credit_ledger kinds | ~700 |
+| **V2-B** | Routes sessions + photos extend (pose+landmarks) + analyses extend (tier+session_id) + compare tier-gate + validate service + cost lookup tier-aware | ~900 |
+| **V2-C** | Frontend tier selector (2 cards) + captura guiada facial: 5 poses, MediaPipe FaceMesh, 7 heurísticas, lazy-load, Capacitor smoke test | ~1700 |
 | **V2-D** | Frontend captura guiada corporal: 4 poses, MediaPipe Pose, heurísticas adaptadas | ~1000 |
-| **V2-E** | Worker landmarks-metrics agente + integração no processor + merge no JSONB | ~700 |
-| **V2-F** | Frontend resultado: landmarks overlay + comparação visual antes/depois animada | ~600 |
+| **V2-E** | Worker landmarks-metrics agente + integração no processor (só roda se tier='advanced') + merge no JSONB | ~700 |
+| **V2-F** | Frontend resultado: landmarks overlay + comparação visual antes/depois animada + tier-gate em compare UI + PDF seção métricas geométricas | ~700 |
 
 Cada sub-fase = 1 PR independente, ff-only, testes verdes, mobile sync, aprovação.
 
@@ -445,14 +506,20 @@ Cada sub-fase = 1 PR independente, ff-only, testes verdes, mobile sync, aprovaç
 
 ## 15. Critérios de aceite
 
-- [ ] Wizard captura facial funcional em desktop Chrome + Android Capacitor
+- [ ] **Tier selector UI** com 2 cards distintos, badge "✨ PRECISÃO" no advanced, custos visíveis
+- [ ] Wizard captura facial funcional em desktop Chrome + Android Capacitor (somente tier advanced)
 - [ ] 5 poses faciais validadas client-side com overlay live
-- [ ] Foto + landmarks JSON gravados em S3 + Postgres
-- [ ] Session criada, vinculada à análise
-- [ ] Worker calcula 10 métricas geométricas (§5.5) sem afetar Vision
-- [ ] Frontend renderiza landmarks como SVG layer no resultado
-- [ ] Comparação evolutiva mostra delta de métricas geométricas
-- [ ] Fallback "pular validação" disponível
+- [ ] Foto + landmarks JSON gravados em S3 + Postgres (tier advanced)
+- [ ] Session criada e vinculada à análise quando tier=advanced
+- [ ] Worker calcula 10 métricas geométricas (§5.5) **APENAS** quando tier=advanced
+- [ ] Frontend renderiza landmarks como SVG layer no resultado (somente advanced)
+- [ ] Comparação evolutiva mostra delta de métricas geométricas (advanced↔advanced)
+- [ ] Compare cross-tier retorna 400 TIER_MISMATCH
+- [ ] credit_ledger.kind grava `*_advanced` quando tier=advanced
+- [ ] Cost lookup retorna 10 cr para advanced, 5 cr para standard
+- [ ] Refund: Vision falha → refund; landmarks-metrics falha → sem refund
+- [ ] Fluxo standard (1-3 fotos avulsas) **continua idêntico** ao F1-F6 (regressão zero)
+- [ ] Fallback "pular validação" disponível no tier advanced
 - [ ] Mobile (Android) testado em low-end com MediaPipe
 - [ ] Multi-módulo: human/vet inalterados (regressão zero)
 - [ ] +60 testes verdes; pipeline de deploy verde
@@ -460,7 +527,71 @@ Cada sub-fase = 1 PR independente, ff-only, testes verdes, mobile sync, aprovaç
 
 ---
 
-## 16. Fora de escopo (Fase 1)
+## 16. Pricing & Tier strategy
+
+### 16.1 Modelo de custos (env vars novas)
+
+| Env var | Default | Aplicado quando |
+|---|---|---|
+| `AESTHETIC_FACIAL_COST` | 5 | tier=standard, analysis_type=facial |
+| `AESTHETIC_FACIAL_COST_ADVANCED` | 10 | tier=advanced, analysis_type=facial |
+| `AESTHETIC_BODY_COST` | 5 | tier=standard, analysis_type ∈ body* |
+| `AESTHETIC_BODY_COST_ADVANCED` | 10 | tier=advanced, analysis_type ∈ body* |
+
+Implementação em `apps/api/src/routes/aesthetic-analyses.js`:
+```javascript
+const COST_TABLE = {
+  facial: {
+    standard: Number(process.env.AESTHETIC_FACIAL_COST || 5),
+    advanced: Number(process.env.AESTHETIC_FACIAL_COST_ADVANCED || 10),
+  },
+  body_measurements: {
+    standard: Number(process.env.AESTHETIC_BODY_COST || 5),
+    advanced: Number(process.env.AESTHETIC_BODY_COST_ADVANCED || 10),
+  },
+};
+function costFor(analysisType, tier = 'standard') {
+  return COST_TABLE[analysisType]?.[tier] ?? COST_TABLE[analysisType]?.standard ?? 5;
+}
+```
+
+### 16.2 UI tier selector
+
+Quando esteticista entra na aba "Análise Estética IA":
+
+```
+┌────────────────────────────────┬────────────────────────────────┐
+│  ANÁLISE RÁPIDA 2D             │  ANÁLISE AVANÇADA              │
+│                                │  ✨ CAPTURA GUIADA — PRECISÃO  │
+│  • 1–3 fotos avulsas           │                                │
+│  • IA Visual (40+ métricas)    │  • 5 fotos faciais padronizadas│
+│  • Recomendador + PDF          │  • Landmarks + métricas geom.  │
+│                                │  • Comparação evolutiva válida │
+│                                │  • Base para Pseudo-3D futuro  │
+│                                │                                │
+│  💎 5 créditos                 │  💎 10 créditos                │
+│  [ Começar análise rápida ]    │  [ Começar análise avançada ]  │
+└────────────────────────────────┴────────────────────────────────┘
+```
+
+### 16.3 Refund policy por tier
+
+| Cenário | tier=standard | tier=advanced |
+|---|---|---|
+| Vision falha (BAD_LLM_OUTPUT, NO_FACE_DETECTED, etc.) | Refund total | Refund total |
+| Vision OK, landmarks-metrics agente falha | N/A (não roda) | **Sem refund** — basic produto entregue (Vision + recommender) |
+| Vision OK, agente OK, recommender falha | Sem refund (já tem métricas) | Sem refund |
+| Foto inválida no pre-flight | Não cobra (antes do debit) | Não cobra |
+
+### 16.4 Master visibility
+
+- Master pode override env vars de pricing via SSM Parameter Store
+- Dashboard master `/master/aesthetic-stats` (futuro) — split por tier: count, revenue, conversion standard→advanced
+- Toggle "habilitar tier advanced para tenant X" via flag em `tenants` (futuro — Fase 2)
+
+---
+
+## 17. Fora de escopo (Fase 1)
 
 - Pseudo-3D facial (Fase 3)
 - Depth estimation (Fase 3)
