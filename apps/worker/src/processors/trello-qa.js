@@ -9,9 +9,9 @@ const { Pool } = require('pg');
 const {
   createAttempt, markRunning, markCompleted, markFailed,
   countCompletedAttempts, MAX_ATTEMPTS,
-} = require('../../../api/src/services/trello-fix-attempts');
+} = require('../services/trello-fix-attempts');
 
-const trelloClient = require('../../../api/src/services/trello-client');
+const trelloClient = require('../services/trello-client');
 const { triageCard, buildAnalysisComment } = require('../agents/trello-triage');
 const { fixCard } = require('../agents/trello-fix');
 
