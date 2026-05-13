@@ -278,6 +278,38 @@ export interface LifestyleRecommendations {
       margin: 0.25rem 0 0;
     }
 
+    /* ---- V2 tier badge & geometry section ---- */
+    .tier-badge-banner {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: linear-gradient(90deg, rgba(245, 158, 11, 0.15), rgba(236, 72, 153, 0.15));
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      border-radius: 8px;
+      padding: 0.6rem 1rem;
+      margin: 0.5rem 0 1rem;
+      color: #fbbf24;
+      font-size: 0.92rem;
+    }
+    .tier-badge-banner .badge-icon { font-size: 1.1rem; }
+    .tier-badge-banner .badge-subtext {
+      color: #c0c1ff;
+      font-size: 0.8rem;
+      margin-left: auto;
+      opacity: 0.85;
+    }
+    .metric-section-icon { font-size: 1rem; margin-right: 0.4rem; }
+    .metrics-geometry h4 { color: #fbbf24; }
+    .geometry-fill {
+      background: linear-gradient(90deg, #f59e0b, #ec4899) !important;
+    }
+    .geometry-note {
+      font-size: 11px;
+      color: #9b9aad;
+      margin: 0.4rem 0 0;
+      font-style: italic;
+    }
+
     /* ---- Observations ---- */
     .observations h4,
     .treatments h4,
@@ -472,12 +504,26 @@ export interface LifestyleRecommendations {
       }
 
       <!-- ================================================================ -->
-      <!-- Métricas individuais                                               -->
+      <!-- V2: Badge tier=advanced no header                                  -->
       <!-- ================================================================ -->
-      @if (metricsList().length > 0) {
-        <section class="metrics-bars">
-          <h4>Métricas</h4>
-          @for (m of metricsList(); track m[0]) {
+      @if (isAdvanced()) {
+        <div class="tier-badge-banner" data-testid="tier-badge-advanced">
+          <span class="badge-icon">✨</span>
+          <strong>Análise Avançada</strong>
+          <span class="badge-subtext">Captura guiada — Vision + 10 métricas geométricas</span>
+        </div>
+      }
+
+      <!-- ================================================================ -->
+      <!-- Métricas — V2 split por source: Vision IA + Geometria             -->
+      <!-- ================================================================ -->
+      @if (visionMetrics().length > 0) {
+        <section class="metrics-bars" data-testid="metrics-vision">
+          <h4>
+            <span class="metric-section-icon">🧪</span>
+            Análise Visual (IA)
+          </h4>
+          @for (m of visionMetrics(); track m[0]) {
             <div class="metric-row">
               <span class="metric-name">
                 {{ m[0] }}{{ m[1].confidence === 'low' ? ' *' : '' }}
@@ -490,10 +536,36 @@ export interface LifestyleRecommendations {
               <span class="metric-score">{{ m[1].score }}/100</span>
             </div>
           }
-          @if (hasLowConfidence()) {
-            <p class="confidence-note">* Métricas com confiança baixa exigem avaliação clínica.</p>
-          }
         </section>
+      }
+
+      @if (geometryMetrics().length > 0) {
+        <section class="metrics-bars metrics-geometry" data-testid="metrics-geometry">
+          <h4>
+            <span class="metric-section-icon">🎯</span>
+            Geometria (Análise Avançada)
+          </h4>
+          @for (m of geometryMetrics(); track m[0]) {
+            <div class="metric-row">
+              <span class="metric-name">
+                {{ m[0] }}{{ m[1].confidence === 'low' ? ' *' : '' }}
+              </span>
+              <div class="bar-track">
+                <div class="bar-fill geometry-fill"
+                     [style.width.%]="m[1].score"></div>
+              </div>
+              <span class="metric-score">{{ m[1].score }}/100</span>
+            </div>
+          }
+          <p class="geometry-note">
+            Calculado por MediaPipe a partir dos landmarks da captura guiada.
+            Use para acompanhar evolução entre análises do mesmo tipo.
+          </p>
+        </section>
+      }
+
+      @if (hasLowConfidence()) {
+        <p class="confidence-note">* Métricas com confiança baixa exigem avaliação clínica.</p>
       }
 
       <!-- ================================================================ -->
@@ -653,6 +725,24 @@ export class AnalysisResultComponent implements OnInit {
     if (!metrics) return [];
     return Object.entries(metrics).sort(([a], [b]) => a.localeCompare(b));
   });
+
+  /**
+   * V2: split de métricas por source.
+   * visionMetrics: source undefined (legacy F1-F6) ou 'anthropic_vision'
+   * geometryMetrics: source === 'mediapipe' (advanced tier — V2-E)
+   */
+  readonly visionMetrics = computed<[string, MetricData][]>(() =>
+    this.metricsList().filter(([, m]) => m.source !== 'mediapipe')
+  );
+
+  readonly geometryMetrics = computed<[string, MetricData][]>(() =>
+    this.metricsList().filter(([, m]) => m.source === 'mediapipe')
+  );
+
+  /** V2: análise é advanced quando tem geometryMetrics OU tier='advanced' explícito. */
+  readonly isAdvanced = computed(() =>
+    this.analysis?.tier === 'advanced' || this.geometryMetrics().length > 0
+  );
 
   /** Métricas que possuem regions com pelo menos 1 região (para o toolbar). */
   readonly availableLayers = computed<MetricSummary[]>(() => {

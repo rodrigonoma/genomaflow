@@ -76,6 +76,16 @@ export interface MetricData {
   score: number;
   confidence: ConfidenceLevel;
   regions: Region[];
+  /**
+   * V2 Fase 1: discriminador da origem da métrica.
+   * - undefined ou 'anthropic_vision' (legacy): IA Visual (Sonnet)
+   * - 'mediapipe': métrica geométrica (advanced tier)
+   */
+  source?: 'anthropic_vision' | 'mediapipe';
+  /** V2: pose usada (advanced tier). Ex: 'frontal', 'body_lateral_left'. */
+  pose_used?: string;
+  /** V2: medida bruta da métrica geométrica (rad, px norm, etc). */
+  value_raw?: number;
 }
 
 /** Mapa nome-da-métrica → dados da métrica */
@@ -160,6 +170,10 @@ export interface AestheticAnalysisListItem {
   deleted_at: string | null;
   created_at: string;
   completed_at: string | null;
+  /** V2 Fase 1: tier interno. Default 'standard' (legacy F1-F6). */
+  tier?: 'standard' | 'advanced';
+  /** V2: session wrapper id (presente quando tier='advanced'). */
+  session_id?: string | null;
 }
 
 export interface AestheticAnalysisDetail extends AestheticAnalysisListItem {

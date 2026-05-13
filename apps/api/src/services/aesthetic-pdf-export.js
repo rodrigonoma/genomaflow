@@ -69,23 +69,46 @@ async function buildAnalysisPDF({ tenant, subject, analysis, metrics, treatments
   // Analysis
   draw('Análise', { bold: true, size: 12 });
   draw(`Tipo: ${analysis?.analysis_type || '—'}`);
+  if (analysis?.tier === 'advanced') {
+    draw('Tier: AVANÇADA (Captura Guiada)', { bold: true, size: 10 });
+  }
   if (analysis?.completed_at) {
     draw(`Concluída: ${new Date(analysis.completed_at).toLocaleString('pt-BR')}`);
   }
   hr();
 
-  // Metrics (top 12)
+  // Metrics — V2: split Vision (source=anthropic_vision ou undefined) vs geometry (source=mediapipe)
   if (metrics && typeof metrics === 'object') {
-    draw('Métricas (score 0-100)', { bold: true, size: 12 });
-    const entries = Object.entries(metrics)
-      .filter(([, v]) => v && typeof v === 'object' && typeof v.score === 'number')
+    const validEntries = Object.entries(metrics)
+      .filter(([, v]) => v && typeof v === 'object' && typeof v.score === 'number');
+    const visionEntries = validEntries
+      .filter(([, v]) => v.source !== 'mediapipe')
       .sort((a, b) => b[1].score - a[1].score)
       .slice(0, 12);
-    for (const [name, m] of entries) {
-      ensure(20);
-      draw(`• ${name}: ${m.score}/100${m.confidence ? ` (${m.confidence})` : ''}`);
+    const geometryEntries = validEntries
+      .filter(([, v]) => v.source === 'mediapipe')
+      .sort((a, b) => b[1].score - a[1].score);
+
+    if (visionEntries.length > 0) {
+      draw('Análise Visual (IA) — score 0-100', { bold: true, size: 12 });
+      for (const [name, m] of visionEntries) {
+        ensure(20);
+        draw(`• ${name}: ${m.score}/100${m.confidence ? ` (${m.confidence})` : ''}`);
+      }
+      hr();
     }
-    hr();
+
+    if (geometryEntries.length > 0) {
+      draw('Métricas Geométricas (Análise Avançada) — score 0-100', { bold: true, size: 12 });
+      for (const [name, m] of geometryEntries) {
+        ensure(20);
+        const valueStr = typeof m.value_raw === 'number' ? ` [bruto: ${m.value_raw.toFixed(3)}]` : '';
+        draw(`• ${name}: ${m.score}/100${m.confidence ? ` (${m.confidence})` : ''}${valueStr}`);
+      }
+      ensure(20);
+      draw('Geometria calculada via MediaPipe — útil pra acompanhar evolução entre sessões.', { size: 9 });
+      hr();
+    }
   }
 
   // Treatment protocol

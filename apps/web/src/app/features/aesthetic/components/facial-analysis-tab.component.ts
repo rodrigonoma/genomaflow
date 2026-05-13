@@ -349,7 +349,8 @@ export type Step =
         <div data-testid="compare-state">
           <app-comparison-view
             [currentAnalysisId]="currentAnalysisId()"
-            [availableBaselines]="availableBaselines()">
+            [availableBaselines]="availableBaselines()"
+            [currentTier]="currentAnalysis()?.tier ?? null">
           </app-comparison-view>
 
           <div class="result-actions">

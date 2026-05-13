@@ -103,6 +103,12 @@ const TYPE_LABELS: Record<AnalysisType, string> = {
     .baseline-select:focus {
       border-color: rgba(192, 193, 255, 0.4);
     }
+    .tier-filter-note {
+      font-size: 11px;
+      color: #fbbf24;
+      margin: 0.25rem 0 0;
+      font-style: italic;
+    }
 
     /* ---- Loading spinner ---- */
     .loading-state {
@@ -263,13 +269,20 @@ const TYPE_LABELS: Record<AnalysisType, string> = {
             (change)="onBaselineChange(getSelectValue($event))"
           >
             <option value="">— selecione —</option>
-            @for (b of availableBaselines(); track b.id) {
+            @for (b of filteredBaselines(); track b.id) {
               <option [value]="b.id">
                 {{ b.created_at | date:'dd/MM/yyyy' }} · {{ typeLabel(b.analysis_type) }}
+                @if (b.tier === 'advanced') { · ✨ Avançada }
               </option>
             }
           </select>
         </div>
+        @if (currentTier() === 'advanced' && availableBaselines().length > filteredBaselines().length) {
+          <p class="tier-filter-note" data-testid="tier-filter-note">
+            Mostrando apenas análises Avançadas. Comparação cross-tier não é permitida
+            (métricas geométricas exclusivas).
+          </p>
+        }
       </div>
 
       <!-- ================================================================ -->
@@ -386,6 +399,20 @@ export class ComparisonViewComponent {
 
   readonly currentAnalysisId    = input<string | null | undefined>();
   readonly availableBaselines   = input<AestheticAnalysisListItem[]>([]);
+  /**
+   * V2 D12: tier do análise atual. Filtra availableBaselines pra mostrar
+   * apenas análises do mesmo tier (backend retorna 400 TIER_MISMATCH em
+   * cross-tier — filtramos no UI antes pra UX melhor).
+   */
+  readonly currentTier = input<'standard' | 'advanced' | null | undefined>(null);
+
+  /** Baselines filtrados pelo mesmo tier do current quando currentTier definido. */
+  readonly filteredBaselines = computed<AestheticAnalysisListItem[]>(() => {
+    const tier = this.currentTier();
+    const items = this.availableBaselines();
+    if (!tier) return items;
+    return items.filter(b => (b.tier ?? 'standard') === tier);
+  });
 
   // -------------------------------------------------------------------------
   // State signals
