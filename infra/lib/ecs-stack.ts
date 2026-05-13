@@ -210,6 +210,15 @@ export class EcsStack extends cdk.Stack {
       resources: ['arn:aws:s3:::genomaflow-uploads-prod/aesthetic-photos/*'],
     }));
 
+    // S3 — modelos 3D (V2 Fase 3 Pseudo-3D). Worker faz PutObject do PNG
+    // depth map (e .glb futuro em F3.2); API faz GetObject pra gerar signed
+    // URL no GET/POST /aesthetic/analyses/:id/depth. Mesma justificativa
+    // do prefix aesthetic-photos (incidente IAM S3 documentado).
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['s3:PutObject', 's3:GetObject', 's3:DeleteObject'],
+      resources: ['arn:aws:s3:::genomaflow-uploads-prod/aesthetic-depth/*'],
+    }));
+
     // ── ECS Cluster ──
     const cluster = new ecs.Cluster(this, 'Cluster', {
       vpc,
