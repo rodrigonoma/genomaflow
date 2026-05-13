@@ -51,6 +51,7 @@ import {
   QuickCreateDialogResult,
 } from '../../agenda/quick-create-dialog.component';
 import { PdfPreviewModalComponent } from './pdf-preview-modal.component';
+import { ShareAnalysisDialogComponent } from './share-analysis-dialog.component';
 
 // ---------------------------------------------------------------------------
 // Treatment protocol sub-type (parsed from recommendations JSON)
@@ -100,6 +101,7 @@ export interface LifestyleRecommendations {
   selector: 'app-analysis-result',
   standalone: true,
   imports: [DatePipe, MatButtonModule, MatIconModule, PhotoOverlayComponent, LayerToolbarComponent, TreatmentProtocolCardsComponent, DepthViewerComponent],
+  // Nota: ShareAnalysisDialogComponent é aberto via MatDialog (não declarativo no template)
   styles: [`
     :host { display: block; }
 
@@ -569,6 +571,12 @@ export interface LifestyleRecommendations {
           <button mat-stroked-button class="download-pdf-btn" (click)="openPdfPreview()"
                   data-testid="download-pdf-btn">
             <mat-icon>picture_as_pdf</mat-icon> Visualizar PDF
+          </button>
+          <!-- V2 Fase 4: compartilhar com paciente -->
+          <button mat-flat-button color="primary" class="share-patient-btn"
+                  data-testid="btn-share-patient"
+                  (click)="onShareWithPatient()">
+            <mat-icon>share</mat-icon> Compartilhar com paciente
           </button>
           <button class="btn-compare" (click)="compareRequested.emit(analysis.id)">
             Comparar análises
@@ -1070,6 +1078,26 @@ export class AnalysisResultComponent implements OnInit, AfterViewInit {
   // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
+
+  /** V2 Fase 4: abre modal de compartilhamento (email/WhatsApp). */
+  onShareWithPatient(): void {
+    if (!this.analysis?.id) return;
+    this.dialog.open(ShareAnalysisDialogComponent, {
+      data: {
+        analysisId: this.analysis.id,
+        defaultPatientName: this.subjectName,
+        defaultEmail: this.subjectEmail,
+        defaultPhone: this.subjectPhone,
+      },
+      width: '500px',
+      maxWidth: '95vw',
+    });
+  }
+
+  /** Inputs opcionais: paciente preenche default. Pais (analysis-tab) passa. */
+  @Input() subjectName?: string;
+  @Input() subjectEmail?: string;
+  @Input() subjectPhone?: string;
 
   /** Opens the quick-create-dialog pre-populated with procedimento_estetico data. */
   onScheduleTreatment(item: TreatmentProtocolItem): void {

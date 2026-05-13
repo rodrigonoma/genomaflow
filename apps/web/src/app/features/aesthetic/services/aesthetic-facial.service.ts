@@ -153,6 +153,78 @@ export class AestheticFacialService {
       `${this.base}/analyses/${analysisId}/depth`,
     );
   }
+
+  // -------------------------------------------------------------------------
+  // V2 Fase 4 — Compartilhamento relatório paciente + Timeline evolutiva
+  // -------------------------------------------------------------------------
+
+  /** POST /aesthetic/analyses/:id/share — envia por email e/ou WhatsApp. */
+  shareAnalysis(
+    analysisId: string,
+    payload: ShareAnalysisPayload,
+  ): Observable<ShareAnalysisResponse> {
+    return this.http.post<ShareAnalysisResponse>(
+      `${this.base}/analyses/${analysisId}/share`,
+      payload,
+    );
+  }
+
+  /** Download direto do PDF paciente — retorna blob pra anchor download. */
+  exportPatientPdfBlob(analysisId: string): Observable<Blob> {
+    return this.http.get(`${this.base}/analyses/${analysisId}/export-patient.pdf`, {
+      responseType: 'blob',
+    });
+  }
+
+  /** GET /aesthetic/subjects/:id/aesthetic-evolution — timeline temporal. */
+  getEvolution(subjectId: string, limit?: number): Observable<EvolutionResponse> {
+    let params = new HttpParams();
+    if (limit) params = params.set('limit', String(limit));
+    return this.http.get<EvolutionResponse>(
+      `${this.base}/subjects/${subjectId}/aesthetic-evolution`,
+      { params },
+    );
+  }
+}
+
+export interface ShareAnalysisPayload {
+  channels: Array<'email' | 'whatsapp'>;
+  recipient_email?: string;
+  recipient_phone?: string;
+  custom_message?: string;
+}
+
+export interface ShareChannelResult {
+  sent: boolean;
+  share_id: string;
+  provider_id?: string;
+  error?: string;
+}
+
+export interface ShareAnalysisResponse {
+  email?: ShareChannelResult | null;
+  whatsapp?: ShareChannelResult | null;
+  share_ids: string[];
+}
+
+export interface EvolutionPoint {
+  analysis_id: string;
+  completed_at: string;
+  tier: 'standard' | 'advanced';
+  analysis_type: string;
+  aggregate_scores: {
+    skin_texture: number | null;
+    spots: number | null;
+    symmetry: number | null;
+    wrinkles: number | null;
+    dark_circles: number | null;
+    acne: number | null;
+  };
+}
+
+export interface EvolutionResponse {
+  subject_id: string;
+  points: EvolutionPoint[];
 }
 
 export interface DepthModelResponse {
