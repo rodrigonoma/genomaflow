@@ -38,6 +38,8 @@ import { AiSuggestionsCardComponent } from '../../ai-suggestions/ai-suggestions-
 import { PatientTimelineComponent, TimelineEvent } from './patient-timeline.component';
 import { TimelinePanelComponent } from './timeline-panel.component';
 import { FacialAnalysisTabComponent } from '../../aesthetic/components/facial-analysis-tab.component';
+import { AestheticEvolutionTimelineComponent } from '../../aesthetic/components/aesthetic-evolution-timeline.component';
+import { EvolutionPoint } from '../../aesthetic/services/aesthetic-facial.service';
 import { AestheticProfileFormComponent } from '../../aesthetic/components/aesthetic-profile-form.component';
 import { shortId, examTypeLabel } from '../../../shared/utils/id-format';
 import { generateConsentTemplatePdf } from '../../../shared/utils/consent-pdf';
@@ -72,6 +74,7 @@ interface ComparisonBlock {
     PatientTimelineComponent,
     TimelinePanelComponent,
     FacialAnalysisTabComponent,
+    AestheticEvolutionTimelineComponent,
     AestheticProfileFormComponent,
   ],
   styles: [`
@@ -1792,6 +1795,19 @@ interface ComparisonBlock {
           </mat-tab>
         }
 
+        <!-- ── EVOLUÇÃO ESTÉTICA — V2 Fase 4 timeline (módulo estetica) ── -->
+        @if (auth.currentProfile?.module === 'estetica') {
+          <mat-tab label="📈 Evolução Estética" data-tab="aesthetic-evolution">
+            @if (subject()) {
+              <div style="padding: 1.25rem;">
+                <app-aesthetic-evolution-timeline
+                  [points]="aestheticEvolutionPoints()">
+                </app-aesthetic-evolution-timeline>
+              </div>
+            }
+          </mat-tab>
+        }
+
         <!-- ── PERFIL ESTÉTICO — nutrição + TMB/macros (módulo estetica) ── -->
         @if (auth.currentProfile?.module === 'estetica') {
           <mat-tab label="Perfil Estético" data-tab="aesthetic-profile">
@@ -1825,6 +1841,9 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
 
   /** Analysis ID requested from timeline deep-link. Passed to facial-analysis-tab. */
   targetAestheticAnalysisId = signal<string | null>(null);
+
+  /** V2 Fase 4: pontos da evolução estética temporal (timeline ng2-charts). */
+  aestheticEvolutionPoints = signal<EvolutionPoint[]>([]);
 
   subject   = signal<Subject | null>(null);
   exams     = signal<Exam[]>([]);
@@ -1979,6 +1998,15 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
       };
       if (s.owner_name) this.ownerQuery.set(s.owner_name);
     });
+    // V2 Fase 4: carregar evolução estética se módulo estetica
+    if (this.auth.currentProfile?.module === 'estetica') {
+      this.http.get<{ subject_id: string; points: EvolutionPoint[] }>(
+        `${environment.apiUrl}/aesthetic/subjects/${id}/aesthetic-evolution`,
+      ).subscribe({
+        next: (r) => this.aestheticEvolutionPoints.set(r.points || []),
+        error: () => this.aestheticEvolutionPoints.set([]),
+      });
+    }
   }
 
   private loadExams(id: string): void {
