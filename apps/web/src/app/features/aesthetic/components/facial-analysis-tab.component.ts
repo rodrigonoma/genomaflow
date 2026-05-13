@@ -47,6 +47,7 @@ import { AnalysisListComponent } from './analysis-list.component';
 import { ComparisonViewComponent } from './comparison-view.component';
 import { TierSelectorComponent, AnalysisTier } from './tier-selector.component';
 import { CaptureGuideFacialComponent } from './capture-guide-facial.component';
+import { CaptureGuideBodyComponent } from './capture-guide-body.component';
 
 // ---------------------------------------------------------------------------
 // Step type
@@ -84,6 +85,7 @@ export type Step =
     ComparisonViewComponent,
     TierSelectorComponent,
     CaptureGuideFacialComponent,
+    CaptureGuideBodyComponent,
   ],
   styles: [`
     :host { display: block; }
@@ -215,16 +217,27 @@ export type Step =
       }
 
       <!-- ================================================================ -->
-      <!-- CAPTURE — V2 advanced wizard guiado                               -->
+      <!-- CAPTURE — V2 advanced wizard guiado (facial OU corporal)          -->
       <!-- ================================================================ -->
       @if (step() === 'capture' && currentSessionId()) {
-        <app-capture-guide-facial
-          data-testid="capture-guide"
-          [subjectId]="subject().id"
-          [sessionId]="currentSessionId()!"
-          (complete)="onCaptureComplete($event)"
-          (cancel)="step.set('idle')">
-        </app-capture-guide-facial>
+        @if (_isFacialRegion()) {
+          <app-capture-guide-facial
+            data-testid="capture-guide-facial"
+            [subjectId]="subject().id"
+            [sessionId]="currentSessionId()!"
+            (complete)="onCaptureComplete($event)"
+            (cancel)="step.set('idle')">
+          </app-capture-guide-facial>
+        } @else {
+          <app-capture-guide-body
+            data-testid="capture-guide-body"
+            [subjectId]="subject().id"
+            [sessionId]="currentSessionId()!"
+            [photoType]="_bodyPhotoType()"
+            (complete)="onCaptureComplete($event)"
+            (cancel)="step.set('idle')">
+          </app-capture-guide-body>
+        }
       }
       @if (step() === 'capture' && !currentSessionId()) {
         <div data-testid="capture-session-loading" class="processing-wrap">
@@ -567,7 +580,7 @@ export class FacialAnalysisTabComponent implements OnInit, OnChanges {
     this.step.set('capture');
     this.svc.createSession({
       subject_id: this.subject().id,
-      session_type: 'facial_analysis',
+      session_type: this._isFacialRegion() ? 'facial_analysis' : 'body_analysis',
     }).subscribe({
       next: (sess) => this.currentSessionId.set(sess.id),
       error: (err: unknown) => {
@@ -576,6 +589,23 @@ export class FacialAnalysisTabComponent implements OnInit, OnChanges {
         this.step.set('idle');
       },
     });
+  }
+
+  /** True quando a região selecionada é facial (facial, eyelids, neck). */
+  _isFacialRegion(): boolean {
+    return ['facial', 'eyelids', 'neck'].includes(this.selectedRegion());
+  }
+
+  /** photo_type a registrar quando tier=advanced corporal. */
+  _bodyPhotoType(): string {
+    const region = this.selectedRegion();
+    // Mapeamento simples para reuso do photo_type existente F1-F6
+    if (region === 'breast') return 'breast_front';
+    if (region === 'abdomen') return 'abdomen_front';
+    if (region === 'legs') return 'legs_front';
+    if (region === 'glutes') return 'glutes_back';
+    if (region === 'arms') return 'arms_front';
+    return 'full_body_front';
   }
 
   /**

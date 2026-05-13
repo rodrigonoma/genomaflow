@@ -25,6 +25,17 @@ export type FacialPose =
   | '45_left'
   | '45_right';
 
+export type BodyPose =
+  | 'body_front'
+  | 'body_back'
+  | 'body_lateral_left'
+  | 'body_lateral_right';
+
+/** Ponto MediaPipe Pose: x, y, z normalizados + visibility (0-1). */
+export interface PosePoint extends Point3D {
+  visibility?: number;
+}
+
 export interface ValidationIssue {
   code: string;
   message: string;
@@ -231,6 +242,126 @@ export class CaptureValidatorService {
       case 'profile_right': return 'gire 90° para a direita';
       case '45_left': return 'gire 45° para a esquerda';
       case '45_right': return 'gire 45° para a direita';
+    }
+  }
+
+  // =========================================================================
+  // BODY validation — MediaPipe Pose Landmarker (33 pts)
+  // =========================================================================
+
+  /**
+   * Validação corporal com heurísticas:
+   *  1. FULL_BODY_VISIBLE  head (0) + ankles (27, 28) com visibility > 0.5
+   *  2. POSTURE_NEUTRAL    torso vertical (ombros 11,12 e quadril 23,24 alinhados verticalmente)
+   *  3. FEET_ALIGNED       |ankle_left.x - ankle_right.x| < 0.15
+   *  4. POSE_DIRECTION     pose declarada coerente com orientação detectada (ombros visíveis ou não)
+   *  5. FOCUS              Laplacian variance > 100
+   *  6. EXPOSURE           histogram mean ∈ [70, 180]
+   */
+  validateBody(
+    landmarks: PosePoint[],
+    canvas: HTMLCanvasElement,
+    expectedPose: BodyPose,
+  ): FaceValidationResult {
+    const issues: ValidationIssue[] = [];
+
+    // 1) FULL_BODY_VISIBLE
+    const head = landmarks[0];
+    const ankleL = landmarks[27];
+    const ankleR = landmarks[28];
+    const visOk = !!head && !!ankleL && !!ankleR
+      && (head.visibility ?? 1) > 0.5
+      && (ankleL.visibility ?? 1) > 0.5
+      && (ankleR.visibility ?? 1) > 0.5;
+    issues.push({
+      code: 'FULL_BODY_VISIBLE',
+      ok: visOk,
+      message: visOk ? 'Corpo inteiro enquadrado' : 'Enquadre da cabeça aos pés',
+    });
+
+    // 2) POSTURE_NEUTRAL — eixos torso vertical
+    let postureOk = false;
+    if (landmarks[11] && landmarks[12] && landmarks[23] && landmarks[24]) {
+      const shoulderMidX = (landmarks[11].x + landmarks[12].x) / 2;
+      const hipMidX = (landmarks[23].x + landmarks[24].x) / 2;
+      postureOk = Math.abs(shoulderMidX - hipMidX) < 0.06;
+    }
+    issues.push({
+      code: 'POSTURE_NEUTRAL',
+      ok: postureOk,
+      message: postureOk ? 'Postura neutra' : 'Mantenha o tronco alinhado verticalmente',
+    });
+
+    // 3) FEET_ALIGNED
+    let feetOk = false;
+    if (ankleL && ankleR) {
+      feetOk = Math.abs(ankleL.x - ankleR.x) < 0.20 && Math.abs(ankleL.y - ankleR.y) < 0.05;
+    }
+    issues.push({
+      code: 'FEET_ALIGNED',
+      ok: feetOk,
+      message: feetOk ? 'Pés alinhados' : 'Mantenha os pés na mesma linha',
+    });
+
+    // 4) POSE_DIRECTION
+    // Heurística simples: lateral_left tem ombro direito (12) bem mais "atrás"
+    // (z maior) que o esquerdo (11); body_front tem z aproximado em ambos.
+    let poseDirOk = false;
+    if (landmarks[11] && landmarks[12]) {
+      const dz = (landmarks[12].z ?? 0) - (landmarks[11].z ?? 0);
+      const absDz = Math.abs(dz);
+      if (expectedPose === 'body_front') {
+        poseDirOk = absDz < 0.15;
+      } else if (expectedPose === 'body_back') {
+        // Não dá pra distinguir muito de body_front via mediapipe pose 2D;
+        // usar visibilidade do nariz/olhos como proxy (front=visíveis, back=ocluídos).
+        const nose = landmarks[0];
+        const noseVis = nose?.visibility ?? 1;
+        poseDirOk = absDz < 0.15 && noseVis < 0.5; // costas: rosto deve estar ocluído/baixa vis
+      } else if (expectedPose === 'body_lateral_left') {
+        poseDirOk = dz > 0.15;
+      } else if (expectedPose === 'body_lateral_right') {
+        poseDirOk = dz < -0.15;
+      }
+    }
+    issues.push({
+      code: 'POSE_DIRECTION',
+      ok: poseDirOk,
+      message: poseDirOk ? 'Pose OK' : this._bodyPoseLabel(expectedPose),
+    });
+
+    // 5) FOCUS
+    const focus = this.laplacianVariance(canvas);
+    issues.push({
+      code: 'FOCUS',
+      ok: focus > 100,
+      message: focus > 100 ? 'Foco OK' : 'Foco insuficiente — peça pra alguém segurar o celular',
+    });
+
+    // 6) EXPOSURE
+    const expo = this.histogramMean(canvas);
+    const expoOk = expo > 70 && expo < 180;
+    issues.push({
+      code: 'EXPOSURE',
+      ok: expoOk,
+      message: expoOk ? 'Iluminação OK' : expo <= 70 ? 'Muito escuro' : 'Muito claro',
+    });
+
+    const okCount = issues.filter(i => i.ok).length;
+    return {
+      approved: okCount === issues.length,
+      score: okCount / issues.length,
+      issues,
+      yawDeg: 0, // não aplicável a corporal — campo mantido pra compat de interface
+    };
+  }
+
+  private _bodyPoseLabel(p: BodyPose): string {
+    switch (p) {
+      case 'body_front': return 'Fique de frente para a câmera';
+      case 'body_back': return 'Vire de costas para a câmera';
+      case 'body_lateral_left': return 'Vire o lado ESQUERDO para a câmera';
+      case 'body_lateral_right': return 'Vire o lado DIREITO para a câmera';
     }
   }
 }
