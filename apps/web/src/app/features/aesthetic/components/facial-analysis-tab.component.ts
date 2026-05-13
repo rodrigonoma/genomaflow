@@ -45,6 +45,7 @@ import { PhotoUploaderComponent } from './photo-uploader.component';
 import { AnalysisResultComponent } from './analysis-result.component';
 import { AnalysisListComponent } from './analysis-list.component';
 import { ComparisonViewComponent } from './comparison-view.component';
+import { TierSelectorComponent, AnalysisTier } from './tier-selector.component';
 
 // ---------------------------------------------------------------------------
 // Step type
@@ -52,10 +53,12 @@ import { ComparisonViewComponent } from './comparison-view.component';
 
 export type Step =
   | 'idle'
+  | 'tier_choice'   // V2: escolha standard vs advanced antes de region_pick
   | 'region_pick'
   | 'consent_check'
   | 'consent_ask'
   | 'guide'
+  | 'capture'       // V2: captura guiada (tier=advanced)
   | 'upload'
   | 'processing'
   | 'result'
@@ -78,6 +81,7 @@ export type Step =
     AnalysisResultComponent,
     AnalysisListComponent,
     ComparisonViewComponent,
+    TierSelectorComponent,
   ],
   styles: [`
     :host { display: block; }
@@ -179,6 +183,26 @@ export type Step =
       }
 
       <!-- ================================================================ -->
+      <!-- TIER_CHOICE — V2: escolha standard vs advanced                    -->
+      <!-- ================================================================ -->
+      @if (step() === 'tier_choice') {
+        <app-tier-selector
+          data-testid="tier-selector"
+          [standardCost]="standardCost"
+          [advancedCost]="advancedCost"
+          (tierSelected)="onTierSelected($event)">
+        </app-tier-selector>
+
+        <div class="result-actions">
+          <button mat-button
+                  data-testid="btn-back-idle-from-tier"
+                  (click)="step.set('idle')">
+            Voltar
+          </button>
+        </div>
+      }
+
+      <!-- ================================================================ -->
       <!-- REGION_PICK                                                        -->
       <!-- ================================================================ -->
       @if (step() === 'region_pick') {
@@ -186,6 +210,22 @@ export type Step =
           data-testid="region-picker"
           (regionSelected)="onRegionSelected($event)">
         </app-region-picker>
+      }
+
+      <!-- ================================================================ -->
+      <!-- CAPTURE — V2 advanced wizard guiado (lazy module)                 -->
+      <!-- ================================================================ -->
+      @if (step() === 'capture') {
+        <div data-testid="capture-placeholder" class="processing-wrap">
+          <div class="spinner"></div>
+          <span class="processing-text">
+            Carregando captura guiada...
+            <br><small style="font-size:11px;color:#7c7b8f">
+              Aguarde enquanto o MediaPipe Web é inicializado (~10s na primeira vez).
+            </small>
+          </span>
+          <!-- Componente <app-capture-guide-facial> será conectado em V2-C step C5 -->
+        </div>
       }
 
       <!-- ================================================================ -->
@@ -339,8 +379,23 @@ export class FacialAnalysisTabComponent implements OnInit, OnChanges {
   /** Current step in the state machine. */
   readonly step = signal<Step>('idle');
 
+  /** V2: tier selecionado (standard ou advanced). Default standard preserva F1-F6. */
+  readonly selectedTier = signal<AnalysisTier>('standard');
+
+  /** V2: session_id criado quando tier=advanced (POST /aesthetic/sessions). */
+  readonly currentSessionId = signal<string | null>(null);
+
   /** Selected anatomical region — defaults to facial for backward compat. */
   readonly selectedRegion = signal<AnalysisType>('facial');
+
+  /**
+   * Custos exibidos no TierSelector. Defaults batem com as env vars do
+   * backend (AESTHETIC_FACIAL_COST=5, AESTHETIC_FACIAL_COST_ADVANCED=10).
+   * Se vier override do servidor no futuro (e.g. GET /aesthetic/pricing),
+   * basta atualizar esses signals via setter.
+   */
+  readonly standardCost = 5;
+  readonly advancedCost = 10;
 
   readonly currentAnalysisId  = signal<string | null>(null);
   readonly currentAnalysis    = signal<AestheticAnalysisDetail | null>(null);
@@ -409,8 +464,18 @@ export class FacialAnalysisTabComponent implements OnInit, OnChanges {
   // Flow handlers
   // -------------------------------------------------------------------------
 
-  /** Step 1: User clicks "Nova análise" → pick region first. */
+  /** Step 1: User clicks "Nova análise" → V2 tier choice first. */
   startNewAnalysis(): void {
+    this.step.set('tier_choice');
+  }
+
+  /**
+   * V2: Tier escolhido → segue para region_pick. tier permanece em
+   * selectedTier para o resto do fluxo (consent, upload, createAnalysis).
+   */
+  onTierSelected(tier: AnalysisTier): void {
+    this.selectedTier.set(tier);
+    this.currentSessionId.set(null);
     this.step.set('region_pick');
   }
 
@@ -435,8 +500,8 @@ export class FacialAnalysisTabComponent implements OnInit, OnChanges {
             this._openConsentModal([this.selectedRegion()]);
             return;
           }
-          // All good → advance to guide
-          this.step.set('guide');
+          // All good → V2: tier=advanced abre captura guiada; standard segue guide normal.
+          this.step.set(this.selectedTier() === 'advanced' ? 'capture' : 'guide');
         } else {
           // No valid consent → open modal; mark reinforced if sensitive
           this._openConsentModal(this._pickedRegionIsSensitive() ? [this.selectedRegion()] : undefined);
@@ -498,6 +563,8 @@ export class FacialAnalysisTabComponent implements OnInit, OnChanges {
       analysis_type: this.selectedRegion(),
       subject_id: this.subject().id,
       photo_ids: photoIds,
+      tier: this.selectedTier(),
+      session_id: this.currentSessionId() || undefined,
     }).subscribe({
       next: (analysis) => {
         this.currentAnalysisId.set(analysis.id);
@@ -560,7 +627,8 @@ export class FacialAnalysisTabComponent implements OnInit, OnChanges {
 
     ref.afterClosed().subscribe((confirmed: boolean | undefined) => {
       if (confirmed === true) {
-        this.step.set('guide');
+        // V2: tier=advanced abre captura guiada após consent
+        this.step.set(this.selectedTier() === 'advanced' ? 'capture' : 'guide');
       } else {
         this.step.set('idle');
       }

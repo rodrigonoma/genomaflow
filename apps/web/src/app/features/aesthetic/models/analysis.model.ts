@@ -173,6 +173,13 @@ export interface CreateAnalysisPayload {
   subject_id: string;
   photo_ids: string[];
   baseline_id?: string;
+  /**
+   * V2 Fase 1: tier 'standard' (default — F1-F6 fluxo, 5cr) ou 'advanced'
+   * (V2 captura guiada, 10cr, exige session_id + N fotos com landmarks).
+   */
+  tier?: 'standard' | 'advanced';
+  /** Obrigatório quando tier='advanced'. ID da aesthetic_session. */
+  session_id?: string;
 }
 
 export interface ListAnalysesParams {

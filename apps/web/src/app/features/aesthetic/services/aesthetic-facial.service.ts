@@ -98,4 +98,37 @@ export class AestheticFacialService {
       baseline_id: baselineId,
     });
   }
+
+  // -------------------------------------------------------------------------
+  // V2 — aesthetic_sessions (wrapper para tier=advanced)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Cria um aesthetic_session wrapper. tier=advanced exige este ID
+   * obrigatoriamente no payload de POST /aesthetic/analyses.
+   */
+  createSession(payload: {
+    subject_id: string;
+    session_type: 'facial_analysis' | 'body_analysis';
+    notes?: string;
+  }): Observable<{ id: string; session_date: string; session_type: string }> {
+    return this.http.post<{ id: string; session_date: string; session_type: string }>(
+      `${this.base}/sessions`,
+      payload,
+    );
+  }
+
+  /**
+   * Upload de foto V2 com pose + landmarks JSON (MediaPipe).
+   * Form data fields adicionais (todos opcionais, backward compat F1-F6):
+   *   pose         — string da whitelist (frontal | profile_left | ...)
+   *   landmarks    — JSON.stringify dos landmarks gerados no cliente
+   *   session_id   — UUID da session wrapper
+   */
+  uploadPhotoV2(formData: FormData): Observable<AestheticPhoto & { pose?: string; session_id?: string }> {
+    return this.http.post<AestheticPhoto & { pose?: string; session_id?: string }>(
+      `${this.base}/photos`,
+      formData,
+    );
+  }
 }
