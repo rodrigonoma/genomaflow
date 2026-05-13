@@ -82,6 +82,7 @@ async function buildTestServer() {
     fastify.register(require('../../src/routes/aesthetic-analyses'),  { prefix: '/aesthetic' });
     fastify.register(require('../../src/routes/aesthetic-treatments'),{ prefix: '/aesthetic' });
     fastify.register(require('../../src/routes/aesthetic-profile'),   { prefix: '/aesthetic' });
+    fastify.register(require('../../src/routes/aesthetic-sessions'),  { prefix: '/aesthetic' });
   }, { prefix: API_PREFIX });
 
   return app;
