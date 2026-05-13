@@ -14,16 +14,28 @@ não cobrem. Bootstrap inicial teve 6 iterações antes de revelar que o
 boot do app no CI cold start excede o `beforeAll` default do Jest (60s).
 
 Status atual: **GATE OBRIGATÓRIO** desde 2026-05-12 — `needs: [test, integration]`
-no deploy job. Estabilizado via:
-- migrations FORA do Jest (step CI separado)
-- `pluginTimeout: 0` em NODE_ENV=test (Fastify server.js)
-- `beforeAll` + `jest.setTimeout` 180s no integration suite
-- Postgres + Redis service containers
+no deploy job.
 
-Bugs schema/SQL futuros são pegos antes de chegar em prod.
-Bug 4 do 2026-05-12 (`ref_id` em credit_ledger) foi a gota — passou pelos
-9 testes unitários mockados + Camada 1 (production build) e só explodiu
-em prod. Camada 2 obrigatória previne classe inteira.
+Estabilização final via `apps/api/tests/integration/test-server.js` minimal:
+- Boot 1.9s vs 180s+ do `apps/api/src/server.js` completo
+- Registra APENAS plugins essenciais (postgres, redis, auth, multipart,
+  rate-limit com limite altíssimo, pubsub) + rotas aesthetic + patients
+- NÃO registra: websocket, webhooks, master broadcasts, chat, agenda,
+  video, encounters extras (irrelevantes pra aesthetic mutations)
+
+Outros pontos do contrato:
+- Migrations aplicadas em step CI separado ANTES do Jest
+- `process.env.API_PREFIX = '/api'` setado no test ANTES de `buildTestServer()`
+- `teardownAestheticTenant` usa `SET session_replication_role = replica` pra
+  desligar audit_trigger_fn (cascade DELETE de tenants disparava FK violation)
+- Postgres + Redis service containers no workflow
+- `DATABASE_URL` + `DATABASE_URL_TEST` ambos setados (server.js usa DATABASE_URL,
+  setup.js usa DATABASE_URL_TEST)
+
+Bugs schema/SQL/RLS/audit-trigger futuros são pegos antes de chegar em prod.
+Os 6 bugs aesthetic do dia 2026-05-12 (updated_at, WS aesthetic, consent shape,
+uploader race, ref_id, kind CHECK) — 5 deles teriam sido pegos pela Camada 2
+se já estivesse obrigatória.
 
 ## Iterações já validadas
 

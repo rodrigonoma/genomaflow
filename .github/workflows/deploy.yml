@@ -58,16 +58,17 @@ jobs:
   # Bug 2026-05-12 PUT /aesthetic/profile 500 (column updated_at) teria sido
   # capturado aqui antes do deploy.
   integration:
-    name: Integration tests (Postgres real) [WIP — não bloqueia deploy]
+    name: Integration tests (Postgres real)
     runs-on: ubuntu-latest
-    # WIP de novo 2026-05-12: tentei promover a gate obrigatório mas
-    # beforeAll ainda excede 180s mesmo com migrations fora do Jest +
-    # pluginTimeout=0. Suspeita: algum plugin (redis pubsub psubscribe?
-    # @fastify/multipart? @fastify/websocket?) trava no boot do CI.
-    # Próximo passo: lazy boot com app mínimo (só rotas aesthetic + plugins
-    # essenciais) OU globalSetup pré-carregando app uma vez.
-    # Por ora mantém rodando + reportando, mas não bloqueia deploy.
-    continue-on-error: true
+    # GATE OBRIGATÓRIO desde 2026-05-12: bug ref_id em credit_ledger
+    # (4º bug schema do dia) seria pego aqui se o gate estivesse on.
+    # Estabilizado via tests/integration/test-server.js minimal:
+    #   - boot 1.9s vs 180s+ do server.js completo
+    #   - registra só plugins essenciais (pg, redis, auth, multipart,
+    #     rate-limit, pubsub) + rotas aesthetic + patients
+    #   - migrations FORA do Jest (step CI separado)
+    #   - teardown usa session_replication_role=replica pra desligar
+    #     audit_trigger_fn durante DELETE de tenants (cascade FK violation)
     services:
       postgres:
         image: pgvector/pgvector:pg15
@@ -119,9 +120,9 @@ jobs:
         run: npm run test:integration
 
   deploy:
-    # integration WIP de novo (boot do app excede 180s no CI). Reabilitar
-    # quando estabilizar via lazy boot ou globalSetup.
-    needs: [test]
+    # Gate obrigatório: BOTH test (unit + ng build prod) AND integration
+    # (Postgres real + smoke aesthetic mutations) precisam passar.
+    needs: [test, integration]
     runs-on: ubuntu-latest
     environment: production
 
