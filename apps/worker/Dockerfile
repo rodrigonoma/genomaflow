@@ -1,9 +1,16 @@
 # Build context expected: repo root (passar -f apps/worker/Dockerfile no docker build)
-FROM node:20-alpine
+#
+# Base: node:20-slim (Debian Bookworm) — NÃO Alpine.
+# onnxruntime-node prebuilds linkam contra glibc (libc.so.6 + ld-linux-x86-64.so.2);
+# Alpine usa musl libc e não tem ld-linux → require crasha com ERR_DLOPEN_FAILED.
+# Trocar pra slim resolve. (~40MB a mais de imagem, aceitável.)
+FROM node:20-slim
 WORKDIR /app
 
-# curl necessário pra download do modelo ONNX (camada separada cacheável)
-RUN apk add --no-cache curl
+# curl: download do modelo ONNX. ca-certificates: TLS handshake com huggingface.co.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY apps/worker/package.json apps/worker/package-lock.json ./
 RUN npm ci --production
