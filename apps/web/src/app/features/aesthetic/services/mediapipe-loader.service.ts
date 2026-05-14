@@ -64,6 +64,15 @@ export class MediaPipeLoaderService {
         });
         this.faceLandmarker = lm;
         return lm;
+      } catch (originalErr) {
+        // MediaPipe pode rejeitar Promise com objeto exótico (RuntimeError do
+        // WASM sem .message, ou string custa, ou undefined). Convertemos pra
+        // Error padrão com contexto antes de propagar pro caller — assim
+        // humanizeError captura via instanceof Error path.
+        // Causas comuns: WASM CDN bloqueado, WebGL desabilitado, GPU sem
+        // suporte float16, browser sem SIMD, antivírus interceptando.
+        this.loadingFace = undefined;  // permite retry após falha
+        throw _wrapMediaPipeError('FaceLandmarker', originalErr);
       } finally {
         this.loading.set(false);
       }
@@ -94,6 +103,9 @@ export class MediaPipeLoaderService {
         });
         this.poseLandmarker = lm;
         return lm;
+      } catch (originalErr) {
+        this.loadingPose = undefined;
+        throw _wrapMediaPipeError('PoseLandmarker', originalErr);
       } finally {
         this.loading.set(false);
       }
@@ -120,4 +132,33 @@ export class MediaPipeLoaderService {
   ): PoseLandmarkerResult {
     return landmarker.detectForVideo(video, timestampMs);
   }
+}
+
+/**
+ * Envelopa qualquer erro do MediaPipe (que pode ser RuntimeError WASM sem
+ * message, string lançada, ou undefined) num Error padrão com contexto
+ * humano-legível. Caller usa humanizeError no instanceof Error path.
+ *
+ * Incidente 2026-05-14: usuário viu "Erro inesperado. Veja o console..."
+ * (fallback genérico de humanizeError) ao abrir câmera premium. MediaPipe
+ * rejeitava com shape não reconhecido pelo humanizer.
+ */
+function _wrapMediaPipeError(kind: string, originalErr: unknown): Error {
+  let detail = '';
+  if (originalErr instanceof Error) {
+    detail = originalErr.message;
+  } else if (typeof originalErr === 'string') {
+    detail = originalErr;
+  } else if (originalErr && typeof originalErr === 'object') {
+    const o = originalErr as Record<string, unknown>;
+    detail = String(o['message'] || o['name'] || JSON.stringify(originalErr).slice(0, 200));
+  } else {
+    detail = `${typeof originalErr}: ${String(originalErr)}`;
+  }
+  const msg = `MediaPipe ${kind} não carregou: ${detail}. ` +
+    `Possíveis causas: CDN bloqueado, WebGL desabilitado, GPU sem suporte ou ` +
+    `antivírus interceptando. Tente recarregar a página ou outro navegador.`;
+  const wrapped = new Error(msg);
+  (wrapped as Error & { cause?: unknown }).cause = originalErr;
+  return wrapped;
 }

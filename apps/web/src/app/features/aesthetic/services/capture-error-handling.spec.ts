@@ -117,6 +117,21 @@ describe('humanizeError', () => {
     expect(humanizeError(null)).toContain('console');
   });
 
+  test('fallback diagnóstico inclui typeof (number)', () => {
+    expect(humanizeError(42)).toContain('number');
+  });
+
+  test('fallback diagnóstico inclui typeof + constructor (objeto custom)', () => {
+    class WeirdShape {}
+    const out = humanizeError(new WeirdShape());
+    expect(out).toContain('object');
+    expect(out).toContain('WeirdShape');
+  });
+
+  test('fallback null → typeof object (sem constructor accessivel)', () => {
+    expect(humanizeError(null)).toContain('object');
+  });
+
   // -------------------------------------------------------------------------
   // Side effect — sempre loga via console.error
   // -------------------------------------------------------------------------
