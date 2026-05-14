@@ -150,8 +150,11 @@ async function createFile({ path: relPath, content, repoRoot }) {
   return { ok: true, path: relPath };
 }
 
+// API tem `test` (full, com DB) e `test:unit` (subset sem DB). Worker container
+// não tem DB local → usar test:unit pra api. Worker tem só `test` (puro mock).
 async function runTests({ scope, repoRoot }) {
-  return await _spawnCmd('npm', ['test'], path.join(repoRoot, `apps/${scope}`));
+  const npmScript = scope === 'api' ? 'test:unit' : 'test';
+  return await _spawnCmd('npm', ['run', npmScript], path.join(repoRoot, `apps/${scope}`));
 }
 
 async function runLint({ scope, repoRoot }) {
