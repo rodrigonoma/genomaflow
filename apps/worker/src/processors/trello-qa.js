@@ -102,7 +102,7 @@ async function _handleTriage(client, data, startMs) {
     });
     try {
       await trelloClient.addComment(card_id,
-        `🚨 Agente falhou na triagem: \`${err.code || 'UNKNOWN'}\` — ${err.message}\n\nUm dev humano vai revisar manualmente.`);
+        `🚨 Agente falhou na triagem: \`${err.code || 'UNKNOWN'}\` — ${_redactSecrets(err.message)}\n\nUm dev humano vai revisar manualmente.`);
     } catch { /* best-effort */ }
   }
 }
@@ -162,7 +162,7 @@ async function _handleFix(client, data, startMs) {
       });
       try {
         await trelloClient.addComment(card_id,
-          `🚨 Re-análise falhou: \`${err.code || 'UNKNOWN'}\` — ${err.message}`);
+          `🚨 Re-análise falhou: \`${err.code || 'UNKNOWN'}\` — ${_redactSecrets(err.message)}`);
       } catch { /* best-effort */ }
     }
     return;
@@ -224,12 +224,25 @@ async function _handleFix(client, data, startMs) {
       errorMessage: err.message,
     });
     await trelloClient.addComment(card_id,
-      `🚨 Agente falhou: \`${err.code || 'UNKNOWN'}\` — ${err.message}\n\nComente \`/fix retry\` pra tentar de novo ou \`/fix cancel\`.`);
+      `🚨 Agente falhou: \`${err.code || 'UNKNOWN'}\` — ${_redactSecrets(err.message)}\n\nComente \`/fix retry\` pra tentar de novo ou \`/fix cancel\`.`);
   }
 }
 
 function _estimateCost(input, output) {
   return ((input * 3) + (output * 15)) / 1_000_000;
+}
+
+// SECURITY: nunca expor secrets em comentários no card Trello.
+// Aplicar em qualquer err.message antes de mandar pro Trello.
+// Incidente 2026-05-14: GitHub PAT vazou no card #21 via err.message do git push.
+function _redactSecrets(str) {
+  if (!str) return str;
+  return String(str)
+    .replace(/x-access-token:[^@\s]+@/g, 'x-access-token:[REDACTED]@')
+    .replace(/github_pat_[A-Za-z0-9_]+/g, '[REDACTED_PAT]')
+    .replace(/\bghp_[A-Za-z0-9]+/g, '[REDACTED_PAT]')
+    .replace(/sk-ant-[A-Za-z0-9_-]+/g, '[REDACTED_KEY]')
+    .replace(/ATTA[A-Za-z0-9]+/g, '[REDACTED_TRELLO_TOKEN]');
 }
 
 module.exports = { processTrelloQA };
