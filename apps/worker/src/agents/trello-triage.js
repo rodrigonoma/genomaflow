@@ -58,13 +58,25 @@ ${card.desc || '(sem descrição)'}` },
   ];
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const resp = await client.messages.create({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      system: SYSTEM_PROMPT,
-      tools: tools.getToolSchemas({ readOnly: true }),
-      messages,
-    });
+    console.log(`[trello-triage] iter ${i + 1}/${MAX_ITERATIONS} model=${MODEL} msgs=${messages.length}`);
+    const t0 = Date.now();
+    let resp;
+    try {
+      resp = await Promise.race([
+        client.messages.create({
+          model: MODEL,
+          max_tokens: MAX_TOKENS,
+          system: SYSTEM_PROMPT,
+          tools: tools.getToolSchemas({ readOnly: true }),
+          messages,
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('ANTHROPIC_TIMEOUT_60S')), 60_000)),
+      ]);
+    } catch (err) {
+      console.error(`[trello-triage] iter ${i + 1} FAIL after ${Date.now() - t0}ms: ${err.message}`);
+      throw err;
+    }
+    console.log(`[trello-triage] iter ${i + 1} OK in ${Date.now() - t0}ms stop=${resp.stop_reason} usage=in${resp.usage?.input_tokens}/out${resp.usage?.output_tokens}`);
 
     totalIn += resp.usage?.input_tokens || 0;
     totalOut += resp.usage?.output_tokens || 0;
