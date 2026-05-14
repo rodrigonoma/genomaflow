@@ -42,19 +42,23 @@ Ao terminar, retorne APENAS um JSON válido com este shape:
 
 Sem texto fora do JSON.`;
 
-async function triageCard({ card, repoRoot, anthropicClient }) {
+async function triageCard({ card, repoRoot, anthropicClient, hint }) {
   const client = anthropicClient || new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
     timeout: 120_000,
   });
 
   let totalIn = 0, totalOut = 0;
-  const messages = [
-    { role: 'user', content: `Analise este card Trello da coluna QA:
+  let userContent = `Analise este card Trello da coluna QA:
 
 # ${card.name} (#${card.idShort})
 
-${card.desc || '(sem descrição)'}` },
+${card.desc || '(sem descrição)'}`;
+  if (hint) {
+    userContent += `\n\n---\n\nHINT do dev/PO (análise anterior precisa de ajustes): ${hint}`;
+  }
+  const messages = [
+    { role: 'user', content: userContent },
   ];
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
