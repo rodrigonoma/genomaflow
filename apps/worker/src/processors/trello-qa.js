@@ -61,17 +61,28 @@ async function processTrelloQA({ pool, data }) {
 async function _handleTriage(client, data, startMs) {
   const { card_id, card_short_id, triggered_by } = data;
 
+  console.log(`[trello-qa] _handleTriage start card=${card_short_id}`);
   const attempt = await createAttempt(client, {
     cardId: card_id, cardShortId: card_short_id, attempt: 0,
     triggerType: 'triage', triggeredBy: triggered_by,
   });
+  console.log(`[trello-qa] createAttempt OK attemptId=${attempt.id}`);
   await markRunning(client, attempt.id);
+  console.log(`[trello-qa] markRunning OK`);
 
   try {
+    console.log(`[trello-qa] calling trelloClient.getCard(${card_id})`);
     const card = await trelloClient.getCard(card_id);
+    console.log(`[trello-qa] getCard OK name="${card.name?.slice(0, 50)}"`);
+
+    console.log(`[trello-qa] calling triageCard (Claude loop)`);
     const r = await triageCard({ card, repoRoot: REPO_ROOT });
+    console.log(`[trello-qa] triageCard OK iters=${r.iterations} tokens_in=${r.tokens_input} tokens_out=${r.tokens_output}`);
+
     const comment = buildAnalysisComment(r.analysis);
+    console.log(`[trello-qa] calling addComment (${comment.length} chars)`);
     await trelloClient.addComment(card_id, comment);
+    console.log(`[trello-qa] addComment OK`);
 
     await markCompleted(client, attempt.id, {
       status: 'completed',
@@ -80,7 +91,10 @@ async function _handleTriage(client, data, startMs) {
       llmCostUsd: _estimateCost(r.tokens_input, r.tokens_output),
       processingMs: Date.now() - startMs,
     });
+    console.log(`[trello-qa] markCompleted OK total=${Date.now() - startMs}ms`);
   } catch (err) {
+    console.error(`[trello-qa] ERROR card=${card_short_id} code=${err.code} msg=${err.message}`);
+    console.error(err.stack);
     await markFailed(client, attempt.id, {
       status: 'llm_failed',
       errorCode: err.code || 'UNKNOWN',
