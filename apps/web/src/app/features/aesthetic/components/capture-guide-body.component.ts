@@ -435,21 +435,25 @@ export class CaptureGuideBodyComponent implements OnInit, OnDestroy {
     pose: BodyPose,
     landmarks: PosePoint[],
   ): Promise<string> {
-    const lmPayload = {
-      type: 'body',
-      provider: 'mediapipe',
-      provider_version: this.mediaLoader.version,
-      model: 'pose_landmarker_v1',
-      points: landmarks,
-      detected_at: new Date().toISOString(),
-    };
     const fd = new FormData();
     fd.append('file', blob, `${pose}.jpg`);
     fd.append('subject_id', this.subjectId);
     fd.append('photo_type', this.photoType);
     fd.append('pose', pose);
     fd.append('session_id', this.sessionId);
-    fd.append('landmarks', JSON.stringify(lmPayload));
+    // Body PoseLandmarker = 33 pontos. Skip se MediaPipe não detectou
+    // (backend rejeita points.length !== 33).
+    if (landmarks.length === 33) {
+      const lmPayload = {
+        type: 'body',
+        provider: 'mediapipe',
+        provider_version: this.mediaLoader.version,
+        model: 'pose_landmarker_v1',
+        points: landmarks,
+        detected_at: new Date().toISOString(),
+      };
+      fd.append('landmarks', JSON.stringify(lmPayload));
+    }
 
     const resp = await new Promise<{ id: string }>((resolve, reject) => {
       this.svc.uploadPhotoV2(fd).subscribe({
