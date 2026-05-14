@@ -131,7 +131,19 @@ async function commitAndPushToMain({ repoRoot, message, gitUser = 'GenomaFlow Bo
   }
   await run(['config', 'user.name', gitUser]);
   await run(['config', 'user.email', gitEmail]);
-  await run(['add', '-A']);
+  // `git add -A` walka o working tree todo — em /app/repo isso inclui
+  // node_modules (apps/api e apps/worker têm npm ci no Docker build).
+  // Milhões de arquivos → timeout. Limitamos aos paths editáveis pelo
+  // agente (EDITABLE_PREFIXES de codebase-tools.js). Cada path é opcional:
+  // se não existir, git pula silenciosamente (precisamos `--` pra evitar
+  // ambiguidade quando algum caminho ainda não existe).
+  await run([
+    'add', '--',
+    'apps/api/src', 'apps/api/tests',
+    'apps/worker/src', 'apps/worker/tests',
+    'apps/web/src',
+    'docs',
+  ]);
   await run(['commit', '-m', message]);
   const sha = await run(['rev-parse', 'HEAD']);
   const token = process.env.GITHUB_BOT_TOKEN;
