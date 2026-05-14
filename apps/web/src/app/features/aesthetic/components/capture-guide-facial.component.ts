@@ -121,7 +121,24 @@ const POSE_LABEL: Record<FacialPose, string> = {
     .check-icon.ok { background: #10b981; }
     .check-icon.fail { background: #ef4444; }
 
-    .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; }
+    .actions {
+      display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center;
+      width: 100%;
+    }
+    /* Mobile portrait: video + checklist empurram botões pra fora do
+       viewport. Sticky bottom garante CTA sempre visível.
+       Bug reportado 2026-05-14: 'centralizei rosto e não tem botão'. */
+    @media (max-width: 768px) {
+      .actions {
+        position: sticky;
+        bottom: 0;
+        background: #1a1f33;
+        padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0));
+        margin: 0 -1rem -1rem;  /* sangra até as bordas do capture-wrap padding */
+        border-top: 1px solid rgba(192, 193, 255, 0.1);
+        z-index: 10;
+      }
+    }
 
     .error-banner {
       background: rgba(239, 68, 68, 0.1);
