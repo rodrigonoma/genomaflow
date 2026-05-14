@@ -1,7 +1,10 @@
 # Stage 1: build
 FROM node:20-alpine AS build
 WORKDIR /app
+# scripts/ precisa estar disponível ANTES de npm ci porque postinstall roda
+# scripts/download-mediapipe-assets.js (self-host MediaPipe WASM+models).
 COPY package.json package-lock.json ./
+COPY scripts ./scripts
 RUN npm ci
 ARG CACHEBUST
 COPY . .
