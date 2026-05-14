@@ -197,21 +197,20 @@ const POSE_HINT: Record<BodyPose, string> = {
         </ul>
       }
 
+      <!-- Botão de captura SEMPRE habilitado (UX). Cor muda conforme
+           validação aprovou ou não. Botão "Pular validação" removido —
+           agora o próprio Capturar serve como fallback. -->
       <div class="actions">
-        <button mat-flat-button color="primary"
+        <button mat-flat-button
+                [color]="canCapture() ? 'primary' : 'accent'"
                 data-testid="btn-capture"
-                [disabled]="!canCapture()"
                 (click)="captureCurrent()">
+          📷
           @if (capturedCount() < poseSequence.length - 1) {
-            Capturar e ir para próxima
+            {{ canCapture() ? 'Capturar e seguir' : 'Capturar mesmo assim' }}
           } @else {
-            Capturar última e finalizar
+            {{ canCapture() ? 'Capturar e finalizar' : 'Finalizar mesmo assim' }}
           }
-        </button>
-        <button mat-stroked-button
-                data-testid="btn-skip-validation"
-                (click)="skipValidation()">
-          Pular validação
         </button>
         <button mat-button
                 data-testid="btn-cancel"
@@ -284,11 +283,16 @@ export class CaptureGuideBodyComponent implements OnInit, OnDestroy {
   }
 
   async captureCurrent(): Promise<void> {
-    if (!this.canCapture() || !this.lastLandmarks) return;
+    if (!this.lastLandmarks) {
+      this.error.set('Aguardando detecção. Posicione-se na moldura e aguarde alguns segundos.');
+      return;
+    }
+    if (this.loading()) return;
     const pose = this.currentPose();
     if (!pose) return;
 
     try {
+      this.error.set(null);
       const blob = await this._snapshotJpeg();
       const photoId = await this._uploadPhoto(blob, pose, this.lastLandmarks);
       const captured: CapturedPhoto[] = [...this.captured(), { pose, photoId }];

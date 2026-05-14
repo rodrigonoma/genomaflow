@@ -202,22 +202,21 @@ const POSE_LABEL: Record<FacialPose, string> = {
         </ul>
       }
 
-      <!-- Actions -->
+      <!-- Actions: botão de captura SEMPRE habilitado (UX) — se rosto não
+           validado, faz captura mesmo assim (equivalente a "pular validação").
+           Cor muda pra dar feedback: 'primary' (azul) quando approved, 'accent'
+           (cinza-claro) quando não. -->
       <div class="actions">
-        <button mat-flat-button color="primary"
+        <button mat-flat-button
+                [color]="canCapture() ? 'primary' : 'accent'"
                 data-testid="btn-capture"
-                [disabled]="!canCapture()"
                 (click)="captureCurrent()">
+          📷
           @if (capturedCount() < poseSequence.length - 1) {
-            Capturar e ir para próxima
+            {{ canCapture() ? 'Capturar e seguir' : 'Capturar mesmo assim' }}
           } @else {
-            Capturar última e finalizar
+            {{ canCapture() ? 'Capturar e finalizar' : 'Finalizar mesmo assim' }}
           }
-        </button>
-        <button mat-stroked-button
-                data-testid="btn-skip-validation"
-                (click)="skipValidation()">
-          Pular validação
         </button>
         <button mat-button
                 data-testid="btn-cancel"
@@ -326,11 +325,19 @@ export class CaptureGuideFacialComponent implements OnInit, OnDestroy {
   // -------------------------------------------------------------------------
 
   async captureCurrent(): Promise<void> {
-    if (!this.canCapture() || !this.lastLandmarks) return;
+    // Sem rosto detectado ainda: dá feedback (não silencia o click).
+    if (!this.lastLandmarks) {
+      this.error.set('Aguardando detecção de rosto. Posicione-se na moldura e aguarde alguns segundos.');
+      return;
+    }
+    // Sem loading mas com landmarks → permite capturar (validação não bloqueia
+    // mais, é apenas indicador visual). UX: user vê o botão sempre clicável.
+    if (this.loading()) return;
     const pose = this.currentPose();
     if (!pose) return;
 
     try {
+      this.error.set(null);
       const blob = await this._snapshotJpeg();
       const photoId = await this._uploadPhoto(blob, pose, this.lastLandmarks);
       const captured: CapturedPhoto[] = [...this.captured(), { pose, photoId }];
