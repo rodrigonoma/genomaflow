@@ -55,6 +55,22 @@ async function createBranchAndPR({ branchName, baseBranch = 'main', title, body 
   return { url: pr.data.html_url, number: pr.data.number };
 }
 
+// SECURITY: redact tokens (GitHub PAT, x-access-token URLs) de qualquer string
+// antes de incluir em erro ou log. Evita vazamento via comentário no card Trello
+// quando agente reporta falha (incidente 2026-05-14: PAT vazou em card #21).
+function _redactSecrets(str) {
+  if (!str) return str;
+  return String(str)
+    // x-access-token URLs: https://x-access-token:TOKEN@github.com/...
+    .replace(/x-access-token:[^@\s]+@/g, 'x-access-token:[REDACTED]@')
+    // GitHub fine-grained PATs (github_pat_...) e classic (ghp_...) standalone
+    .replace(/github_pat_[A-Za-z0-9_]+/g, '[REDACTED_PAT]')
+    .replace(/\bghp_[A-Za-z0-9]+/g, '[REDACTED_PAT]')
+    // Trello/anthropic keys também
+    .replace(/sk-ant-[A-Za-z0-9_-]+/g, '[REDACTED_KEY]')
+    .replace(/ATTA[A-Za-z0-9]+/g, '[REDACTED_TRELLO_TOKEN]');
+}
+
 async function commitAndPushBranch({ repoRoot, branchName, message, gitUser = 'GenomaFlow Bot', gitEmail = 'bot@genomaflow.com.br' }) {
   const { spawn } = require('child_process');
   function run(args) {
@@ -64,7 +80,7 @@ async function commitAndPushBranch({ repoRoot, branchName, message, gitUser = 'G
       p.stderr.on('data', (d) => { stderr += d.toString(); });
       p.on('close', (code) => {
         if (code === 0) resolve();
-        else reject(new Error(`git ${args.join(' ')} exit ${code}: ${stderr}`));
+        else reject(new Error(_redactSecrets(`git ${args.join(' ')} exit ${code}: ${stderr}`)));
       });
     });
   }
@@ -97,7 +113,7 @@ async function commitAndPushToMain({ repoRoot, message, gitUser = 'GenomaFlow Bo
       p.stderr.on('data', (d) => { stderr += d.toString(); });
       p.on('close', (code) => {
         if (code === 0) resolve(stdout.trim());
-        else reject(new Error(`git ${args.join(' ')} exit ${code}: ${stderr}`));
+        else reject(new Error(_redactSecrets(`git ${args.join(' ')} exit ${code}: ${stderr}`)));
       });
     });
   }
