@@ -37,6 +37,12 @@ COPY .github /app/repo/.github
 COPY CLAUDE.md /app/repo/CLAUDE.md
 COPY .git /app/repo/.git
 
+# GitHub Actions checkout adiciona http.https://github.com/.extraheader com
+# credentials do runner (GITHUB_TOKEN do github-actions[bot]). Esse extraheader
+# vaza pro container e conflita com nosso PAT (duplicate header / wrong identity).
+# Limpa o config baked-in pra garantir push limpo.
+RUN cd /app/repo && git config --unset-all http.https://github.com/.extraheader 2>/dev/null || true
+
 # Install node_modules in apps/api e apps/worker no /app/repo pra run_tests passar.
 # (apps/web não precisa — fix agent não roda Angular tests por enquanto.)
 WORKDIR /app/repo/apps/api
