@@ -34,7 +34,7 @@ describe('MediaPipeLoaderService', () => {
   });
 
   it('versão exposta para audit em landmarks.provider_version', () => {
-    expect(service.version).toBe('0.10.16');
+    expect(service.version).toBe('0.10.35');
   });
 
   it('getFaceLandmarker carrega FaceLandmarker e cacheia', async () => {
