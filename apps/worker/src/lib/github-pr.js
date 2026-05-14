@@ -146,12 +146,17 @@ async function commitAndPushToMain({ repoRoot, message, gitUser = 'GenomaFlow Bo
   // agente (EDITABLE_PREFIXES de codebase-tools.js). Cada path é opcional:
   // se não existir, git pula silenciosamente (precisamos `--` pra evitar
   // ambiguidade quando algum caminho ainda não existe).
+  // Allowlist: NÃO incluir 'docs' aqui. Mesmo que codebase-tools permita
+  // edit em docs/, ele não deve mudar como parte de um fix de código.
+  // Bug 2026-05-14: working tree não tinha docs/ no /app/repo (Dockerfile
+  // copiava só pra /app/docs); git via tudo como deleted; agente comitou
+  // 173 deleções "de graça". Dockerfile agora copia docs/ pra /app/repo/docs
+  // (defensa em profundidade) E excluímos docs do allowlist (intencionalidade).
   await run([
     'add', '--',
     'apps/api/src', 'apps/api/tests',
     'apps/worker/src', 'apps/worker/tests',
     'apps/web/src',
-    'docs',
   ]);
   await run(['commit', '-m', message]);
   const sha = await run(['rev-parse', 'HEAD']);
