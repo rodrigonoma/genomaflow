@@ -2,13 +2,31 @@
 
 /**
  * Webhook receiver Trello + dispatch BullMQ.
+ *
+ * Suporta 3 colunas / 3 prefixos de slash command (mesma lógica de fix
+ * agent, só varia o "kind" no job data pra tracking + futuros prompts
+ * especializados):
+ *   - QA            → /fix      (kind=qa)
+ *   - Ideias        → /ideia    (kind=ideia)
+ *   - Roadmap       → /roadmap  (kind=roadmap)
+ *
  * Spec: docs/superpowers/specs/2026-05-13-trello-qa-agent-design.md §3
  */
 
 const { verifyWebhookSignature } = require('../../services/trello-client');
 const { enqueue } = require('../../queues/trello-qa-queue');
 
-const SLASH_COMMAND_RE = /^\/fix\s+(aprovado|retry|detalhe|cancel)(?::\s*(.+))?$/i;
+// Mapping: prefix de slash command → "kind". Mesmas subcommands (aprovado/retry/detalhe/cancel)
+// pra todos os 3 prefixos.
+const SLASH_COMMAND_RE = /^\/(fix|ideia|roadmap)\s+(aprovado|retry|detalhe|cancel)(?::\s*(.+))?$/i;
+const PREFIX_TO_KIND = { fix: 'qa', ideia: 'ideia', roadmap: 'roadmap' };
+
+function _resolveKind(listId) {
+  if (listId === process.env.TRELLO_QA_LIST_ID) return 'qa';
+  if (listId === process.env.TRELLO_IDEIAS_LIST_ID) return 'ideia';
+  if (listId === process.env.TRELLO_ROADMAP_LIST_ID) return 'roadmap';
+  return null;
+}
 
 module.exports = async function (fastify) {
   fastify.get('/trello', async () => ({ ok: true }));
@@ -43,30 +61,39 @@ module.exports = async function (fastify) {
     const card = action.data.card;
     const member = action.memberCreator?.username || 'unknown';
     const actionId = action.id;
-    const QA_LIST_ID = process.env.TRELLO_QA_LIST_ID;
 
-    if (action.type === 'updateCard'
-        && action.data.listAfter
-        && action.data.listAfter.id === QA_LIST_ID) {
-      await enqueue({
-        event: 'triage',
-        card_id: card.id,
-        card_short_id: String(card.idShort),
-        action_id: actionId,
-        triggered_by: member,
-      });
-      return reply.send({ ok: true, queued: 'triage' });
+    // Event 1: card movido pra uma das 3 listas monitoradas → triage
+    if (action.type === 'updateCard' && action.data.listAfter) {
+      const kind = _resolveKind(action.data.listAfter.id);
+      if (kind) {
+        await enqueue({
+          event: 'triage',
+          kind,
+          card_id: card.id,
+          card_short_id: String(card.idShort),
+          action_id: actionId,
+          triggered_by: member,
+        });
+        return reply.send({ ok: true, queued: 'triage', kind });
+      }
+      // Lista não monitorada — ignorar
     }
 
+    // Event 2: comment /fix|/ideia|/roadmap em qualquer card
     if (action.type === 'commentCard' && action.data.text) {
       const text = String(action.data.text).trim();
       const m = SLASH_COMMAND_RE.exec(text);
       if (!m) return reply.send({ ok: true, ignored: 'not_slash_command' });
 
-      const subcommand = m[1].toLowerCase();
-      const hint = (m[2] || '').trim() || undefined;
+      const prefix = m[1].toLowerCase();
+      const subcommand = m[2].toLowerCase();
+      const hint = (m[3] || '').trim() || undefined;
+      const kind = PREFIX_TO_KIND[prefix];
+
       await enqueue({
         event: 'fix',
+        kind,
+        command_prefix: prefix,  // pra montar mensagens de retorno com o prefix certo
         card_id: card.id,
         card_short_id: String(card.idShort),
         action_id: actionId,
@@ -75,7 +102,7 @@ module.exports = async function (fastify) {
         member_username: member,
         triggered_by: member,
       });
-      return reply.send({ ok: true, queued: 'fix', subcommand });
+      return reply.send({ ok: true, queued: 'fix', kind, subcommand });
     }
 
     return reply.send({ ok: true, ignored: 'unhandled_action_type' });

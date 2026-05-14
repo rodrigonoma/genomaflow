@@ -110,18 +110,19 @@ async function _handleTriage(client, data, startMs) {
 async function _handleFix(client, data, startMs) {
   const {
     card_id, card_short_id, slash_command, hint, member_username, triggered_by,
+    command_prefix = 'fix',  // 'fix' | 'ideia' | 'roadmap' — só varia a string nos comments
   } = data;
+  const cmd = `/${command_prefix}`;  // pra mensagens com prefixo correto
 
-  // SEMÂNTICA dos slash commands:
-  //   /fix aprovado         → APLICA o fix (edita código, roda testes, push main, deploy)
-  //   /fix retry [: hint]   → RE-ANALISA (triagem nova, opcionalmente com hint humano)
-  //   /fix detalhe          → stub (análise extra futura)
-  //   /fix cancel           → marca card pra dev humano
-  // Só `aprovado` mexe em código. `retry` é read-only (re-triagem).
+  // SEMÂNTICA dos slash commands (idêntica pra /fix, /ideia, /roadmap):
+  //   <cmd> aprovado         → APLICA (edita código, roda testes, push main, deploy)
+  //   <cmd> retry [: hint]   → RE-ANALISA (triagem nova, opcionalmente com hint humano)
+  //   <cmd> detalhe          → stub (análise extra futura)
+  //   <cmd> cancel           → marca card pra dev humano
 
   if (slash_command === 'detalhe') {
     await trelloClient.addComment(card_id,
-      `🔍 Análise detalhada vai vir aqui em proxima versão. Use \`/fix retry: <hint>\` pra forçar uma re-análise com sua dica.`);
+      `🔍 Análise detalhada vai vir aqui em proxima versão. Use \`${cmd} retry: <hint>\` pra forçar uma re-análise com sua dica.`);
     return;
   }
 
@@ -215,7 +216,7 @@ async function _handleFix(client, data, startMs) {
       });
       const failedCount = r.test_summary?.failed || '?';
       await trelloClient.addComment(card_id,
-        `❌ Testes falharam (${failedCount}). NÃO criei PR.\n\nSaída resumida:\n\`\`\`\n${(r.stdout || '').slice(-1500)}\n\`\`\`\n\nComente \`/fix retry: <hint>\` com sua dica ou \`/fix cancel\` se quiser dev humano.`);
+        `❌ Testes falharam (${failedCount}). NÃO criei PR.\n\nSaída resumida:\n\`\`\`\n${(r.stdout || '').slice(-1500)}\n\`\`\`\n\nComente \`${cmd} retry: <hint>\` com sua dica ou \`${cmd} cancel\` se quiser dev humano.`);
     }
   } catch (err) {
     await markFailed(client, attempt.id, {
@@ -224,7 +225,7 @@ async function _handleFix(client, data, startMs) {
       errorMessage: err.message,
     });
     await trelloClient.addComment(card_id,
-      `🚨 Agente falhou: \`${err.code || 'UNKNOWN'}\` — ${_redactSecrets(err.message)}\n\nComente \`/fix retry\` pra tentar de novo ou \`/fix cancel\`.`);
+      `🚨 Agente falhou: \`${err.code || 'UNKNOWN'}\` — ${_redactSecrets(err.message)}\n\nComente \`${cmd} retry\` pra tentar de novo ou \`${cmd} cancel\`.`);
   }
 }
 
