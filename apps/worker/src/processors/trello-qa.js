@@ -15,10 +15,28 @@ const trelloClient = require('../services/trello-client');
 const { triageCard, buildAnalysisComment } = require('../agents/trello-triage');
 const { fixCard } = require('../agents/trello-fix');
 
-const _pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-});
+// Mesma estratégia de poolConfig() de apps/api/src/plugins/postgres.js:
+// task def ECS expõe DB_HOST/PORT/NAME/USER/PASSWORD individuais (NÃO
+// DATABASE_URL). Usar só `connectionString: process.env.DATABASE_URL` fica
+// undefined → pg.Pool tenta localhost:5432 → connect trava indefinidamente.
+function _poolConfig() {
+  if (process.env.DATABASE_URL) {
+    return {
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    };
+  }
+  return {
+    host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    database: process.env.DB_NAME,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  };
+}
+
+const _pool = new Pool(_poolConfig());
 
 const REPO_ROOT = process.env.TRELLO_REPO_ROOT || '/app';
 
