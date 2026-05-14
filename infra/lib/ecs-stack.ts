@@ -129,16 +129,20 @@ export class EcsStack extends cdk.Stack {
     // aws ssm put-parameter --name /genomaflow/prod/trello-api-token      --value "..."  --type SecureString --overwrite
     // aws ssm put-parameter --name /genomaflow/prod/trello-webhook-secret --value "..."  --type SecureString --overwrite
     // aws ssm put-parameter --name /genomaflow/prod/trello-board-id       --value "..."  --type SecureString --overwrite
-    // aws ssm put-parameter --name /genomaflow/prod/trello-qa-list-id     --value "..."  --type SecureString --overwrite
-    // aws ssm put-parameter --name /genomaflow/prod/github-bot-token      --value "ghp_..." --type SecureString --overwrite
+    // aws ssm put-parameter --name /genomaflow/prod/trello-qa-list-id      --value "..."  --type SecureString --overwrite
+    // aws ssm put-parameter --name /genomaflow/prod/trello-ideias-list-id  --value "..."  --type SecureString --overwrite
+    // aws ssm put-parameter --name /genomaflow/prod/trello-roadmap-list-id --value "..."  --type SecureString --overwrite
+    // aws ssm put-parameter --name /genomaflow/prod/github-bot-token       --value "ghp_..." --type SecureString --overwrite
     // Webhook receiver (registrar manualmente após deploy):
     //   https://app.genomaflow.com.br/api/webhooks/trello
-    const trelloApiKey        = ssmParam('trello-api-key');
-    const trelloApiToken      = ssmParam('trello-api-token');
-    const trelloWebhookSecret = ssmParam('trello-webhook-secret');
-    const trelloBoardId       = ssmParam('trello-board-id');
-    const trelloQaListId      = ssmParam('trello-qa-list-id');
-    const githubBotToken      = ssmParam('github-bot-token');
+    const trelloApiKey         = ssmParam('trello-api-key');
+    const trelloApiToken       = ssmParam('trello-api-token');
+    const trelloWebhookSecret  = ssmParam('trello-webhook-secret');
+    const trelloBoardId        = ssmParam('trello-board-id');
+    const trelloQaListId       = ssmParam('trello-qa-list-id');
+    const trelloIdeiasListId   = ssmParam('trello-ideias-list-id');
+    const trelloRoadmapListId  = ssmParam('trello-roadmap-list-id');
+    const githubBotToken       = ssmParam('github-bot-token');
 
     // ── EFS — armazenamento compartilhado para uploads de PDFs ──
     const fileSystem = new efs.FileSystem(this, 'Uploads', {
@@ -310,6 +314,8 @@ export class EcsStack extends cdk.Stack {
       TRELLO_WEBHOOK_SECRET:   ecs.Secret.fromSsmParameter(trelloWebhookSecret),
       TRELLO_BOARD_ID:         ecs.Secret.fromSsmParameter(trelloBoardId),
       TRELLO_QA_LIST_ID:       ecs.Secret.fromSsmParameter(trelloQaListId),
+      TRELLO_IDEIAS_LIST_ID:   ecs.Secret.fromSsmParameter(trelloIdeiasListId),
+      TRELLO_ROADMAP_LIST_ID:  ecs.Secret.fromSsmParameter(trelloRoadmapListId),
       GITHUB_BOT_TOKEN:        ecs.Secret.fromSsmParameter(githubBotToken),
       DB_HOST:               ecs.Secret.fromSecretsManager(rdsSecret, 'host'),
       DB_PORT:               ecs.Secret.fromSecretsManager(rdsSecret, 'port'),

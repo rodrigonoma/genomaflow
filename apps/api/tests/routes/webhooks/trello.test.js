@@ -18,6 +18,8 @@ async function buildApp() {
 
   process.env.TRELLO_WEBHOOK_SECRET = 'sec';
   process.env.TRELLO_QA_LIST_ID = 'list-qa';
+  process.env.TRELLO_IDEIAS_LIST_ID = 'list-ideias';
+  process.env.TRELLO_ROADMAP_LIST_ID = 'list-roadmap';
   process.env.TRELLO_API_KEY = 'k';
   process.env.TRELLO_API_TOKEN = 't';
   process.env.WEBHOOK_CALLBACK_URL = 'https://app.example.com/api/webhooks/trello';
@@ -189,5 +191,145 @@ describe('POST /api/webhooks/trello — signature', () => {
       headers: { 'content-type': 'application/json', 'x-trello-webhook': sig },
     });
     expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/webhooks/trello — 3 listas e 3 prefixos (qa/ideia/roadmap)', () => {
+  test('triage quando card move pra coluna Ideias (kind=ideia)', async () => {
+    const app = await buildApp();
+    const body = {
+      action: {
+        id: 'a-i1', type: 'updateCard',
+        data: {
+          card: { id: 'c-i', idShort: 60, name: 'Nova feature' },
+          listAfter: { id: 'list-ideias' },
+          listBefore: { id: 'list-todo' },
+        },
+        memberCreator: { username: 'po' },
+      },
+    };
+    const bodyStr = JSON.stringify(body);
+    const sig = signBody(bodyStr, process.env.WEBHOOK_CALLBACK_URL, 'sec');
+    const res = await app.inject({
+      method: 'POST', url: '/api/webhooks/trello',
+      payload: bodyStr,
+      headers: { 'content-type': 'application/json', 'x-trello-webhook': sig },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(mockEnqueue).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'triage', kind: 'ideia', card_id: 'c-i',
+    }));
+  });
+
+  test('triage quando card move pra coluna Roadmap (kind=roadmap)', async () => {
+    const app = await buildApp();
+    const body = {
+      action: {
+        id: 'a-r1', type: 'updateCard',
+        data: {
+          card: { id: 'c-r', idShort: 61, name: 'Q3 plan' },
+          listAfter: { id: 'list-roadmap' },
+          listBefore: { id: 'list-todo' },
+        },
+        memberCreator: { username: 'po' },
+      },
+    };
+    const bodyStr = JSON.stringify(body);
+    const sig = signBody(bodyStr, process.env.WEBHOOK_CALLBACK_URL, 'sec');
+    await app.inject({
+      method: 'POST', url: '/api/webhooks/trello',
+      payload: bodyStr,
+      headers: { 'content-type': 'application/json', 'x-trello-webhook': sig },
+    });
+    expect(mockEnqueue).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'triage', kind: 'roadmap',
+    }));
+  });
+
+  test('triage NÃO dispara em listas não monitoradas', async () => {
+    const app = await buildApp();
+    const body = {
+      action: {
+        id: 'a-x1', type: 'updateCard',
+        data: {
+          card: { id: 'c-x', idShort: 70, name: 'X' },
+          listAfter: { id: 'list-unknown' },
+          listBefore: { id: 'list-qa' },
+        },
+        memberCreator: { username: 'x' },
+      },
+    };
+    const bodyStr = JSON.stringify(body);
+    const sig = signBody(bodyStr, process.env.WEBHOOK_CALLBACK_URL, 'sec');
+    await app.inject({
+      method: 'POST', url: '/api/webhooks/trello',
+      payload: bodyStr,
+      headers: { 'content-type': 'application/json', 'x-trello-webhook': sig },
+    });
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  test('/ideia aprovado → enqueue fix com kind=ideia + command_prefix=ideia', async () => {
+    const app = await buildApp();
+    const body = {
+      action: {
+        id: 'a-i2', type: 'commentCard',
+        data: { card: { id: 'c-i', idShort: 60, name: 'F' }, text: '/ideia aprovado' },
+        memberCreator: { username: 'po' },
+      },
+    };
+    const bodyStr = JSON.stringify(body);
+    const sig = signBody(bodyStr, process.env.WEBHOOK_CALLBACK_URL, 'sec');
+    await app.inject({
+      method: 'POST', url: '/api/webhooks/trello',
+      payload: bodyStr,
+      headers: { 'content-type': 'application/json', 'x-trello-webhook': sig },
+    });
+    expect(mockEnqueue).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'fix', kind: 'ideia', command_prefix: 'ideia', slash_command: 'aprovado',
+    }));
+  });
+
+  test('/roadmap retry: hint → enqueue fix com command_prefix=roadmap + hint', async () => {
+    const app = await buildApp();
+    const body = {
+      action: {
+        id: 'a-r2', type: 'commentCard',
+        data: { card: { id: 'c-r', idShort: 61, name: 'P' }, text: '/roadmap retry: priorizar nutrição' },
+        memberCreator: { username: 'dev' },
+      },
+    };
+    const bodyStr = JSON.stringify(body);
+    const sig = signBody(bodyStr, process.env.WEBHOOK_CALLBACK_URL, 'sec');
+    await app.inject({
+      method: 'POST', url: '/api/webhooks/trello',
+      payload: bodyStr,
+      headers: { 'content-type': 'application/json', 'x-trello-webhook': sig },
+    });
+    expect(mockEnqueue).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'fix', kind: 'roadmap', command_prefix: 'roadmap',
+      slash_command: 'retry', hint: 'priorizar nutrição',
+    }));
+  });
+
+  test('/fix continua funcionando (kind=qa)', async () => {
+    const app = await buildApp();
+    const body = {
+      action: {
+        id: 'a-q2', type: 'commentCard',
+        data: { card: { id: 'c-q', idShort: 50, name: 'Q' }, text: '/fix aprovado' },
+        memberCreator: { username: 'po' },
+      },
+    };
+    const bodyStr = JSON.stringify(body);
+    const sig = signBody(bodyStr, process.env.WEBHOOK_CALLBACK_URL, 'sec');
+    await app.inject({
+      method: 'POST', url: '/api/webhooks/trello',
+      payload: bodyStr,
+      headers: { 'content-type': 'application/json', 'x-trello-webhook': sig },
+    });
+    expect(mockEnqueue).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'fix', kind: 'qa', command_prefix: 'fix',
+    }));
   });
 });
