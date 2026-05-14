@@ -112,9 +112,16 @@ async function _handleFix(client, data, startMs) {
     card_id, card_short_id, slash_command, hint, member_username, triggered_by,
   } = data;
 
+  // SEMÂNTICA dos slash commands:
+  //   /fix aprovado         → APLICA o fix (edita código, roda testes, push main, deploy)
+  //   /fix retry [: hint]   → RE-ANALISA (triagem nova, opcionalmente com hint humano)
+  //   /fix detalhe          → stub (análise extra futura)
+  //   /fix cancel           → marca card pra dev humano
+  // Só `aprovado` mexe em código. `retry` é read-only (re-triagem).
+
   if (slash_command === 'detalhe') {
     await trelloClient.addComment(card_id,
-      `🔍 Análise detalhada vai vir aqui em proxima versão. Veja o último teste falhado no GitHub Actions ou rode \`/fix retry: <hint>\`.`);
+      `🔍 Análise detalhada vai vir aqui em proxima versão. Use \`/fix retry: <hint>\` pra forçar uma re-análise com sua dica.`);
     return;
   }
 
@@ -128,6 +135,40 @@ async function _handleFix(client, data, startMs) {
     return;
   }
 
+  // /fix retry → RE-TRIAGEM (não conta como attempt de fix; não chega no MAX_ATTEMPTS)
+  if (slash_command === 'retry') {
+    const attempt = await createAttempt(client, {
+      cardId: card_id, cardShortId: card_short_id, attempt: 0,
+      triggerType: 'retry', triggeredBy: triggered_by, hint,
+    });
+    await markRunning(client, attempt.id);
+    try {
+      const card = await trelloClient.getCard(card_id);
+      const r = await triageCard({ card, repoRoot: REPO_ROOT, hint });
+      const comment = buildAnalysisComment(r.analysis);
+      await trelloClient.addComment(card_id, comment);
+      await markCompleted(client, attempt.id, {
+        status: 'completed',
+        llmTokensInput: r.tokens_input,
+        llmTokensOutput: r.tokens_output,
+        llmCostUsd: _estimateCost(r.tokens_input, r.tokens_output),
+        processingMs: Date.now() - startMs,
+      });
+    } catch (err) {
+      await markFailed(client, attempt.id, {
+        status: 'llm_failed',
+        errorCode: err.code || 'UNKNOWN',
+        errorMessage: err.message,
+      });
+      try {
+        await trelloClient.addComment(card_id,
+          `🚨 Re-análise falhou: \`${err.code || 'UNKNOWN'}\` — ${err.message}`);
+      } catch { /* best-effort */ }
+    }
+    return;
+  }
+
+  // /fix aprovado → APLICA fix (edita, testa, push main, CI deploy)
   const completedCount = await countCompletedAttempts(client, { cardId: card_id });
   if (completedCount >= MAX_ATTEMPTS) {
     await trelloClient.addComment(card_id,
@@ -136,11 +177,10 @@ async function _handleFix(client, data, startMs) {
   }
 
   const newAttempt = completedCount + 1;
-  const triggerType = slash_command === 'retry' ? 'retry' : 'fix';
 
   const attempt = await createAttempt(client, {
     cardId: card_id, cardShortId: card_short_id, attempt: newAttempt,
-    triggerType, triggeredBy: triggered_by, hint,
+    triggerType: 'fix', triggeredBy: triggered_by, hint,
   });
   await markRunning(client, attempt.id);
 
