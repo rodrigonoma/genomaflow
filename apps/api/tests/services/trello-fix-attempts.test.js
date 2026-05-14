@@ -109,10 +109,11 @@ describe('getLastAttempt', () => {
 });
 
 describe('countCompletedAttempts', () => {
-  test('conta só fix (não retry/triage/cancel/detalhe) — retry é re-análise read-only', async () => {
+  test('conta só fix com status terminal de LLM full (pr_opened/tests_failed), não llm_failed', async () => {
     const pg = { query: jest.fn().mockResolvedValueOnce({ rows: [{ count: '3' }] }) };
     const n = await countCompletedAttempts(pg, { cardId: 'c1' });
     expect(n).toBe(3);
     expect(pg.query.mock.calls[0][0]).toMatch(/trigger_type = 'fix'/);
+    expect(pg.query.mock.calls[0][0]).toMatch(/status IN \('pr_opened', 'tests_failed'\)/);
   });
 });
