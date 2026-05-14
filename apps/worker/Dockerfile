@@ -34,7 +34,6 @@ COPY apps/worker/src ./src
 COPY apps /app/repo/apps
 COPY infra /app/repo/infra
 COPY .github /app/repo/.github
-COPY package.json /app/repo/package.json
 COPY CLAUDE.md /app/repo/CLAUDE.md
 COPY .git /app/repo/.git
 
