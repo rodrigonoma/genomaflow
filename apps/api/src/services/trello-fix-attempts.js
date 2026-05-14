@@ -107,7 +107,7 @@ async function countCompletedAttempts(pg, { cardId }) {
        FROM trello_fix_attempts
       WHERE card_id = $1
         AND trigger_type = 'fix'
-        AND status != 'queued'`,
+        AND status IN ('pr_opened', 'tests_failed')`,
     [cardId]
   );
   return parseInt(rows[0].count, 10);
