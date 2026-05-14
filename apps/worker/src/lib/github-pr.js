@@ -78,8 +78,43 @@ async function commitAndPushBranch({ repoRoot, branchName, message, gitUser = 'G
   await run(['push', `https://x-access-token:${token}@github.com/${owner}/${repo}.git`, branchName]);
 }
 
+/**
+ * Commit + push DIRETO em main (sem PR). Usado quando user pede skip de
+ * code review humano. Pré-requisito: working tree em /repoRoot já tem os
+ * edits do agente; testes locais passaram; main remoto não divergiu desde
+ * o último build do worker image. Retorna o SHA do commit pra logar.
+ *
+ * NOTA: bypassa code review humano. CI deploy.yml dispara automaticamente.
+ * Branch protection do GitHub precisa permitir push do bot user (sem PR).
+ */
+async function commitAndPushToMain({ repoRoot, message, gitUser = 'GenomaFlow Bot', gitEmail = 'bot@genomaflow.com.br' }) {
+  const { spawn } = require('child_process');
+  function run(args, captureStdout = false) {
+    return new Promise((resolve, reject) => {
+      const p = spawn('git', args, { cwd: repoRoot });
+      let stdout = '', stderr = '';
+      p.stdout.on('data', (d) => { stdout += d.toString(); });
+      p.stderr.on('data', (d) => { stderr += d.toString(); });
+      p.on('close', (code) => {
+        if (code === 0) resolve(stdout.trim());
+        else reject(new Error(`git ${args.join(' ')} exit ${code}: ${stderr}`));
+      });
+    });
+  }
+  await run(['config', 'user.name', gitUser]);
+  await run(['config', 'user.email', gitEmail]);
+  await run(['add', '-A']);
+  await run(['commit', '-m', message]);
+  const sha = await run(['rev-parse', 'HEAD']);
+  const token = process.env.GITHUB_BOT_TOKEN;
+  const { owner, repo } = _parseRepo();
+  await run(['push', `https://x-access-token:${token}@github.com/${owner}/${repo}.git`, 'HEAD:main']);
+  return { sha };
+}
+
 module.exports = {
   createBranchAndPR,
   commitAndPushBranch,
+  commitAndPushToMain,
   _resetClient,
 };

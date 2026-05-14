@@ -1,4 +1,3 @@
-// apps/worker/tests/agents/trello-fix.test.js
 'use strict';
 const { describe, test, expect } = require('@jest/globals');
 
@@ -22,6 +21,7 @@ jest.mock('../../src/lib/codebase-tools', () => mockTools);
 const mockPr = {
   createBranchAndPR: jest.fn(),
   commitAndPushBranch: jest.fn(async () => undefined),
+  commitAndPushToMain: jest.fn(async () => ({ sha: 'abc123' })),
 };
 jest.mock('../../src/lib/github-pr', () => mockPr);
 
@@ -32,10 +32,12 @@ beforeEach(() => {
   mockTools.runTests.mockReset();
   mockPr.createBranchAndPR.mockReset();
   mockPr.commitAndPushBranch.mockReset();
+  mockPr.commitAndPushToMain.mockReset();
+  mockPr.commitAndPushToMain.mockResolvedValue({ sha: 'abc123' });
 });
 
 describe('fixCard', () => {
-  test('happy path: edits + tests passam + PR criado', async () => {
+  test('happy path: edits + tests passam + push direto em main', async () => {
     mockMessages.create.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'FIX_DONE' }],
       stop_reason: 'end_turn',
@@ -47,9 +49,7 @@ describe('fixCard', () => {
       stdout: 'Tests: 50 passed, 1 skipped',
       stderr: '',
     });
-    mockPr.createBranchAndPR.mockResolvedValueOnce({
-      url: 'https://github.com/x/y/pull/1', number: 1,
-    });
+    mockPr.commitAndPushToMain.mockResolvedValueOnce({ sha: 'deadbeef' });
 
     const r = await fixCard({
       card: { id: 'c1', idShort: 42, name: 'Bug X', desc: 'desc' },
@@ -60,14 +60,15 @@ describe('fixCard', () => {
       scope: 'api',
     });
 
-    expect(r.status).toBe('pr_opened');
-    expect(r.pr_url).toBe('https://github.com/x/y/pull/1');
-    expect(r.branch_name).toBe('trello/42/fix-1');
+    expect(r.status).toBe('pushed_to_main');
+    expect(r.commit_sha).toBe('deadbeef');
     expect(r.test_summary).toMatchObject({ success: true });
-    expect(mockPr.commitAndPushBranch).toHaveBeenCalled();
+    expect(mockPr.commitAndPushToMain).toHaveBeenCalled();
+    expect(mockPr.createBranchAndPR).not.toHaveBeenCalled();
+    expect(mockPr.commitAndPushBranch).not.toHaveBeenCalled();
   });
 
-  test('testes falham: SEM PR, retorna tests_failed', async () => {
+  test('testes falham: SEM push, retorna tests_failed', async () => {
     mockMessages.create.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'FIX_DONE' }],
       stop_reason: 'end_turn',
@@ -90,9 +91,8 @@ describe('fixCard', () => {
     });
 
     expect(r.status).toBe('tests_failed');
-    expect(r.pr_url).toBeUndefined();
-    expect(mockPr.createBranchAndPR).not.toHaveBeenCalled();
-    expect(mockPr.commitAndPushBranch).not.toHaveBeenCalled();
+    expect(r.commit_sha).toBeUndefined();
+    expect(mockPr.commitAndPushToMain).not.toHaveBeenCalled();
   });
 
   test('hint humano injetado no prompt', async () => {
@@ -104,7 +104,7 @@ describe('fixCard', () => {
     mockTools.runTests.mockResolvedValueOnce({
       success: true, exitCode: 0, stdout: '', stderr: '',
     });
-    mockPr.createBranchAndPR.mockResolvedValueOnce({ url: 'u', number: 1 });
+    mockPr.commitAndPushToMain.mockResolvedValueOnce({ sha: 'x' });
 
     await fixCard({
       card: { id: 'c1', idShort: 42, name: 'X', desc: 'd' },
@@ -120,17 +120,17 @@ describe('fixCard', () => {
     expect(userText).toContain('usa getById em vez de getByName');
   });
 
-  test('branch name segue padrão trello/<short>/fix-<attempt>', async () => {
+  test('commit message inclui card short id + member username', async () => {
     mockMessages.create.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'OK' }],
       stop_reason: 'end_turn',
       usage: { input_tokens: 100, output_tokens: 50 },
     });
     mockTools.runTests.mockResolvedValueOnce({ success: true, exitCode: 0, stdout: '', stderr: '' });
-    mockPr.createBranchAndPR.mockResolvedValueOnce({ url: 'u', number: 1 });
+    mockPr.commitAndPushToMain.mockResolvedValueOnce({ sha: 'beef' });
 
     await fixCard({
-      card: { id: 'c1', idShort: 99, name: 'X', desc: 'd' },
+      card: { id: 'c1', idShort: 99, name: 'Card title', desc: 'd' },
       attempt: 3,
       hint: null,
       memberUsername: 'po',
@@ -138,11 +138,15 @@ describe('fixCard', () => {
       scope: 'worker',
     });
 
-    expect(mockPr.commitAndPushBranch).toHaveBeenCalledWith(
-      expect.objectContaining({ branchName: 'trello/99/fix-3' })
+    expect(mockPr.commitAndPushToMain).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoRoot: '/tmp/repo',
+        message: expect.stringContaining('fix(trello-99): Card title'),
+      })
     );
-    expect(mockPr.createBranchAndPR).toHaveBeenCalledWith(
-      expect.objectContaining({ branchName: 'trello/99/fix-3' })
-    );
+    const callArgs = mockPr.commitAndPushToMain.mock.calls[0][0];
+    expect(callArgs.message).toContain('Trello #99');
+    expect(callArgs.message).toContain('Approved by @po');
+    expect(callArgs.message).toContain('attempt 3');
   });
 });
