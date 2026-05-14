@@ -109,10 +109,10 @@ describe('getLastAttempt', () => {
 });
 
 describe('countCompletedAttempts', () => {
-  test('conta só fix/retry (não triage, cancel, detalhe)', async () => {
+  test('conta só fix (não retry/triage/cancel/detalhe) — retry é re-análise read-only', async () => {
     const pg = { query: jest.fn().mockResolvedValueOnce({ rows: [{ count: '3' }] }) };
     const n = await countCompletedAttempts(pg, { cardId: 'c1' });
     expect(n).toBe(3);
-    expect(pg.query.mock.calls[0][0]).toMatch(/IN \('fix', 'retry'\)/);
+    expect(pg.query.mock.calls[0][0]).toMatch(/trigger_type = 'fix'/);
   });
 });

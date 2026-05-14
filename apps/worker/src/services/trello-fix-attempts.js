@@ -114,7 +114,7 @@ async function countCompletedAttempts(pg, { cardId }) {
     `SELECT COUNT(*)::text AS count
        FROM trello_fix_attempts
       WHERE card_id = $1
-        AND trigger_type IN ('fix', 'retry')
+        AND trigger_type = 'fix'
         AND status != 'queued'`,
     [cardId]
   );
