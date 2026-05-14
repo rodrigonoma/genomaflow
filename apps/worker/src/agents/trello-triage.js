@@ -14,30 +14,61 @@ const MODEL = process.env.TRELLO_TRIAGE_MODEL || 'claude-sonnet-4-6';
 const MAX_TOKENS = 4096;
 const MAX_ITERATIONS = 20;
 
-const SYSTEM_PROMPT = `Você é o agente de triagem do GenomaFlow para a coluna QA do Trello.
+const SYSTEM_PROMPT = `Você é o agente de triagem do GenomaFlow para Trello. Cards podem vir de 3 colunas:
+- QA (bugs/melhorias específicas)
+- Ideias (sugestões abstratas pra brainstorm)
+- Roadmap (itens já priorizados pra implementação)
 
-Sua tarefa: ler o card (nome + descrição), explorar o codebase quando necessário, e produzir uma análise estruturada em JSON.
+Sua tarefa: ler o card (nome + descrição), explorar o codebase quando útil, e produzir análise estruturada em JSON.
 
-Tipos válidos: "bug" | "feature" | "copy" | "ux" | "documentation" | "configuration" | "infra" | "other"
+Tipos válidos: "bug" | "feature" | "copy" | "ux" | "documentation" | "configuration" | "infra" | "other" | "insufficient_info"
 makes_sense: "yes" | "partial" | "no"
 risk: "low" | "medium" | "high"
 
-Princípios:
+PRINCÍPIO CRÍTICO — INSUFFICIENT INFO:
+Se o card vem sem clareza mínima sobre o que precisa ser feito (descrição vazia, "fix bug" sem detalhe, "nova feature" sem escopo, requisito ambíguo a ponto de não dar pra desenhar uma solução), retorne:
+{
+  "type": "insufficient_info",
+  "makes_sense": "no",
+  "opinion": "1-2 frases dizendo o que falta clareza",
+  "needs_more_info": {
+    "required": true,
+    "missing": [
+      "item específico 1 (ex: passos pra reproduzir o bug)",
+      "item específico 2 (ex: browser/versão/dispositivo)",
+      "item específico 3 (ex: screenshot ou link)"
+    ]
+  },
+  "technical_details": [],
+  "impact": [],
+  "test_plan": [],
+  "risk": "low"
+}
+
+Lista de 'missing' deve ser ESPECÍFICA E ACIONÁVEL — exemplos por contexto:
+- Bug (coluna QA): passos pra reproduzir, dados do usuário/tenant, screenshot, mensagem de erro exata, browser/SO
+- Feature/Ideia: público-alvo, problema que resolve, critério de sucesso, escopo (in/out), referências
+- Roadmap: dependências, métrica esperada, prazo, owner técnico
+
+NÃO declare insufficient_info se houver minimamente pra trabalhar — prefira análise normal com partial e cite gaps no opinion. Reserva insufficient_info pra casos onde DE FATO não dá pra propor nada útil.
+
+Outros princípios (análise normal):
 - Seja crítico: se a tarefa não faz sentido, diga (makes_sense="no" com explicação clara)
 - Identifique impacto cross-feature concretamente (cite componentes/funções)
 - Plano de testes deve cobrir caso principal + edge cases
 - Detalhes técnicos concretos: cite arquivo:linha quando possível
-- NUNCA invente: se não tem informação, pesquise no codebase com tools
+- NUNCA invente: pesquise no codebase com tools quando faltar contexto técnico
 
 Ao terminar, retorne APENAS um JSON válido com este shape:
 {
-  "type": "bug|feature|...",
+  "type": "bug|feature|...|insufficient_info",
   "makes_sense": "yes|partial|no",
   "opinion": "1-3 frases explicando sua avaliação",
   "technical_details": ["Item 1", "Item 2", ...],
   "impact": ["Componente X afetado", ...],
   "test_plan": ["Teste 1", ...],
-  "risk": "low|medium|high"
+  "risk": "low|medium|high",
+  "needs_more_info": { "required": false } /* ou { "required": true, "missing": [...] } */
 }
 
 Sem texto fora do JSON.`;
@@ -146,11 +177,33 @@ async function _executeTool(name, input, repoRoot) {
   }
 }
 
-function buildAnalysisComment(a) {
+function buildAnalysisComment(a, commandPrefix = 'fix') {
+  const cmd = `/${commandPrefix}`;
+
+  // Caso especial: agente detectou info insuficiente no card. Em vez de
+  // forçar uma análise vazia, lista o que está faltando pro usuário
+  // completar o card antes de re-analisarmos.
+  if (a.needs_more_info?.required === true) {
+    const missing = Array.isArray(a.needs_more_info.missing)
+      ? a.needs_more_info.missing
+      : [];
+    const items = missing.length
+      ? missing.map(m => `- ${m}`).join('\n')
+      : '- contexto sobre o que precisa ser feito\n- critério de sucesso\n- escopo (in/out)';
+    return `## ❓ Preciso de mais informações pra analisar este card
+
+${a.opinion || 'O card está sem detalhes suficientes pra eu fazer uma triagem útil.'}
+
+**Por favor, adiciona ao card:**
+${items}
+
+Depois de atualizar a descrição, comente \`${cmd} retry\` pra eu reanalisar com os detalhes novos.`;
+  }
+
   const typeMap = {
     bug: 'Bug', feature: 'Feature', copy: 'Copy/Texto', ux: 'UX',
     documentation: 'Documentação', configuration: 'Configuração',
-    infra: 'Infra', other: 'Outro',
+    infra: 'Infra', other: 'Outro', insufficient_info: 'Info insuficiente',
   };
   const senseMap = {
     yes: '✅ Sim',
@@ -180,11 +233,11 @@ ${(a.test_plan || []).map(d => `- [ ] ${d}`).join('\n') || '_(definir antes do f
 ### Próximos passos
 
 Para que o agente implemente o fix, comente:
-- \`/fix aprovado\` — agente edita código + roda testes + abre PR
-- \`/fix retry\` — só após attempt anterior; re-tenta com mesma análise
-- \`/fix retry: <hint>\` — re-tenta com sua dica (ex: \`/fix retry: usa getById em vez de getByName\`)
-- \`/fix detalhe\` — agente explica análise profunda
-- \`/fix cancel\` — desiste, marca pra dev humano`;
+- \`${cmd} aprovado\` — agente edita código + roda testes + abre PR
+- \`${cmd} retry\` — re-analisa (read-only, sem mexer em código)
+- \`${cmd} retry: <hint>\` — re-analisa com sua dica
+- \`${cmd} detalhe\` — agente explica análise profunda
+- \`${cmd} cancel\` — desiste, marca pra dev humano`;
 }
 
 module.exports = { triageCard, buildAnalysisComment };

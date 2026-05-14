@@ -40,6 +40,14 @@ const _pool = new Pool(_poolConfig());
 
 const REPO_ROOT = process.env.TRELLO_REPO_ROOT || '/app';
 
+// kind (qa/ideia/roadmap) → prefix do slash command nas mensagens.
+// updateCard event traz só kind no job data; precisa derivar prefix pra
+// montar comments com /<prefix> retry|aprovado|etc corretos.
+const PREFIX_FROM_KIND = { qa: 'fix', ideia: 'ideia', roadmap: 'roadmap' };
+function _resolvePrefix(data) {
+  return data.command_prefix || PREFIX_FROM_KIND[data.kind] || 'fix';
+}
+
 async function processTrelloQA({ pool, data }) {
   pool = pool || _pool;
   const client = await pool.connect();
@@ -79,7 +87,7 @@ async function _handleTriage(client, data, startMs) {
     const r = await triageCard({ card, repoRoot: REPO_ROOT });
     console.log(`[trello-qa] triageCard OK iters=${r.iterations} tokens_in=${r.tokens_input} tokens_out=${r.tokens_output}`);
 
-    const comment = buildAnalysisComment(r.analysis);
+    const comment = buildAnalysisComment(r.analysis, _resolvePrefix(data));
     console.log(`[trello-qa] calling addComment (${comment.length} chars)`);
     await trelloClient.addComment(card_id, comment);
     console.log(`[trello-qa] addComment OK`);
@@ -146,7 +154,7 @@ async function _handleFix(client, data, startMs) {
     try {
       const card = await trelloClient.getCard(card_id);
       const r = await triageCard({ card, repoRoot: REPO_ROOT, hint });
-      const comment = buildAnalysisComment(r.analysis);
+      const comment = buildAnalysisComment(r.analysis, _resolvePrefix(data));
       await trelloClient.addComment(card_id, comment);
       await markCompleted(client, attempt.id, {
         status: 'completed',
