@@ -501,21 +501,27 @@ export class CaptureGuideFacialComponent implements OnInit, OnDestroy {
     pose: FacialPose,
     landmarks: Array<{ x: number; y: number; z: number }>,
   ): Promise<string> {
-    const lmPayload = {
-      type: 'face',
-      provider: 'mediapipe',
-      provider_version: this.mediaLoader.version,
-      model: 'face_landmarker_v1',
-      points: landmarks,
-      detected_at: new Date().toISOString(),
-    };
     const fd = new FormData();
     fd.append('file', blob, `${pose}.jpg`);
     fd.append('subject_id', this.subjectId);
     fd.append('photo_type', 'facial_front');
     fd.append('pose', pose);
     fd.append('session_id', this.sessionId);
-    fd.append('landmarks', JSON.stringify(lmPayload));
+    // Backend valida points.length === 468 quando o campo landmarks é
+    // enviado. Se o detector falhou, simplesmente NÃO mandamos o campo
+    // (backend trata landmarks como opcional). Mandar com points=[] →
+    // 400 INVALID_LANDMARKS (POINTS_COUNT_0_EXPECTED_468).
+    if (landmarks.length === 468) {
+      const lmPayload = {
+        type: 'face',
+        provider: 'mediapipe',
+        provider_version: this.mediaLoader.version,
+        model: 'face_landmarker_v1',
+        points: landmarks,
+        detected_at: new Date().toISOString(),
+      };
+      fd.append('landmarks', JSON.stringify(lmPayload));
+    }
 
     const resp = await new Promise<{ id: string }>((resolve, reject) => {
       this.svc.uploadPhotoV2(fd).subscribe({
