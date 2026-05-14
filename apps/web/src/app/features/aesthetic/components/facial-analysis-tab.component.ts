@@ -644,7 +644,25 @@ export class FacialAnalysisTabComponent implements OnInit, OnChanges {
         this._startPollingFallback(analysis.id);
       },
       error: (err: unknown) => {
-        const msg = err instanceof Error ? err.message : 'Erro ao criar análise.';
+        // Extrai mensagem útil do backend.
+        let msg = 'Erro ao criar análise.';
+        let backendCode = '';
+        if (err && typeof err === 'object') {
+          const e = err as { status?: number; error?: { error?: string; message?: string }; message?: string };
+          backendCode = e.error?.error || '';
+          if (e.error?.message) msg = e.error.message;
+          else if (e.error?.error) msg = e.error.error;
+          else if (e.message) msg = e.message;
+          if (e.status && e.status !== 200) msg = `[${e.status}] ${msg}`;
+        }
+        // Traduz códigos conhecidos pra mensagens amigáveis.
+        if (backendCode === 'PHOTOS_INCOMPLETE_FOR_ADVANCED') {
+          msg = 'Análise avançada exige detecção facial em todas as fotos, ' +
+                'mas o MediaPipe não conseguiu localizar seu rosto. ' +
+                'Tente em ambiente bem iluminado ou use outro navegador. ' +
+                'Você também pode escolher análise standard (5 créditos) que não exige detecção.';
+        }
+        console.error('[FacialAnalysisTab] createAnalysis erro:', err);
         this.error.set(msg);
         this.step.set('idle');
       },
