@@ -152,4 +152,70 @@ describe('buildAnalysisComment', () => {
     });
     expect(md).toContain('❌');
   });
+
+  test('insufficient_info renderiza pedido de mais informações', () => {
+    const md = buildAnalysisComment({
+      type: 'insufficient_info',
+      makes_sense: 'no',
+      opinion: 'card sem clareza de escopo',
+      needs_more_info: {
+        required: true,
+        missing: [
+          'Passos pra reproduzir o bug',
+          'Browser + versão',
+          'Screenshot da tela',
+        ],
+      },
+      technical_details: [],
+      impact: [],
+      test_plan: [],
+      risk: 'low',
+    });
+    expect(md).toContain('❓');
+    expect(md).toContain('Preciso de mais informações');
+    expect(md).toContain('Passos pra reproduzir');
+    expect(md).toContain('Browser');
+    expect(md).toContain('Screenshot');
+    expect(md).toContain('card sem clareza de escopo');
+    expect(md).not.toContain('Detalhes técnicos');  // não renderiza seções normais
+    expect(md).not.toContain('Próximos passos');
+  });
+
+  test('insufficient_info usa command_prefix correto em /<cmd> retry', () => {
+    const a = {
+      type: 'insufficient_info',
+      makes_sense: 'no',
+      opinion: 'X',
+      needs_more_info: { required: true, missing: ['mais info'] },
+    };
+    expect(buildAnalysisComment(a, 'fix')).toContain('`/fix retry`');
+    expect(buildAnalysisComment(a, 'ideia')).toContain('`/ideia retry`');
+    expect(buildAnalysisComment(a, 'roadmap')).toContain('`/roadmap retry`');
+  });
+
+  test('insufficient_info com missing vazio usa default', () => {
+    const md = buildAnalysisComment({
+      type: 'insufficient_info',
+      makes_sense: 'no',
+      opinion: 'vazio',
+      needs_more_info: { required: true, missing: [] },
+    });
+    expect(md).toContain('contexto sobre o que precisa ser feito');
+    expect(md).toContain('critério de sucesso');
+  });
+
+  test('análise normal com command_prefix=ideia usa /ideia nos próximos passos', () => {
+    const md = buildAnalysisComment({
+      type: 'feature',
+      makes_sense: 'yes',
+      opinion: 'ok',
+      technical_details: [],
+      impact: [],
+      test_plan: [],
+      risk: 'low',
+    }, 'ideia');
+    expect(md).toContain('`/ideia aprovado`');
+    expect(md).toContain('`/ideia retry`');
+    expect(md).not.toContain('`/fix aprovado`');
+  });
 });
