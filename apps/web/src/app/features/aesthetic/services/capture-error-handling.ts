@@ -64,7 +64,13 @@ export function humanizeError(e: unknown, logTag = '[CaptureGuide]'): string {
     }
   }
 
-  return 'Erro inesperado. Veja o console do navegador para mais detalhes.';
+  // Fallback diagnóstico: ao menos retornar typeof + constructor pra dar
+  // contexto. Incidente 2026-05-14: usuário viu só "Erro inesperado..." e
+  // não tinha pistas de qual lib estava falhando.
+  const ctor = (e && typeof e === 'object' && e.constructor?.name)
+    ? ` ${e.constructor.name}`
+    : '';
+  return `Erro inesperado (${typeof e}${ctor}). Veja o console do navegador para mais detalhes.`;
 }
 
 /**
