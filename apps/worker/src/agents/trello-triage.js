@@ -70,7 +70,7 @@ ${card.desc || '(sem descrição)'}` },
           tools: tools.getToolSchemas({ readOnly: true }),
           messages,
         }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('ANTHROPIC_TIMEOUT_60S')), 60_000)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('ANTHROPIC_TIMEOUT_180S')), 180_000)),
       ]);
     } catch (err) {
       console.error(`[trello-triage] iter ${i + 1} FAIL after ${Date.now() - t0}ms: ${err.message}`);
