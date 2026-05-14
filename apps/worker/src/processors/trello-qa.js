@@ -152,17 +152,19 @@ async function _handleFix(client, data, startMs) {
       scope: 'api',
     });
 
-    if (r.status === 'pr_opened') {
+    if (r.status === 'pushed_to_main') {
+      const commitUrl = `https://github.com/rodrigonoma/genomaflow/commit/${r.commit_sha}`;
       await markCompleted(client, attempt.id, {
-        status: 'pr_opened',
-        prUrl: r.pr_url, branchName: r.branch_name,
+        status: 'pr_opened',  // mantém enum existente; semântica nova
+        prUrl: commitUrl,
+        branchName: 'main',
         testSummary: r.test_summary,
         llmTokensInput: r.tokens_input, llmTokensOutput: r.tokens_output,
         llmCostUsd: _estimateCost(r.tokens_input, r.tokens_output),
         processingMs: Date.now() - startMs,
       });
       await trelloClient.addComment(card_id,
-        `✅ PR aberto: ${r.pr_url}\n\nTestes verdes (${r.test_summary?.passed} passed). Revise antes de mergear.`);
+        `✅ Mergeado direto em main: ${commitUrl}\n\nTestes verdes (test:unit). Deploy automático via deploy.yml — acompanhe em https://github.com/rodrigonoma/genomaflow/actions`);
     } else if (r.status === 'tests_failed') {
       await markCompleted(client, attempt.id, {
         status: 'tests_failed',
