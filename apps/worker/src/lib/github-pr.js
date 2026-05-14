@@ -124,7 +124,15 @@ async function commitAndPushToMain({ repoRoot, message, gitUser = 'GenomaFlow Bo
   const sha = await run(['rev-parse', 'HEAD']);
   const token = process.env.GITHUB_BOT_TOKEN;
   const { owner, repo } = _parseRepo();
-  await run(['push', `https://x-access-token:${token}@github.com/${owner}/${repo}.git`, 'HEAD:main']);
+  // Usa http.extraheader pra autenticar via Authorization: Bearer.
+  // Evita ambiguidade do username `x-access-token:` (que o GitHub às vezes
+  // interpreta como App installation token → identidade github-actions[bot]
+  // ao invés do user dono do PAT). Bearer é universalmente aceito p/ fine-
+  // grained PATs e classic.
+  await run([
+    '-c', `http.https://github.com/.extraheader=Authorization: Bearer ${token}`,
+    'push', `https://github.com/${owner}/${repo}.git`, 'HEAD:main',
+  ]);
   return { sha };
 }
 
