@@ -56,15 +56,26 @@ export class MediaPipeLoaderService {
       try {
         const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
         const resolver = await FilesetResolver.forVisionTasks(WASM_BASE);
-        const lm = await FaceLandmarker.createFromOptions(resolver, {
-          baseOptions: {
-            modelAssetPath: FACE_MODEL_URL,
-            delegate: 'GPU',
-          },
-          outputFaceBlendshapes: false,
-          runningMode: 'VIDEO',
-          numFaces: 1,
-        });
+        // Try GPU first (faster), fallback to CPU se falhar OU
+        // se detection retornar 0 hits (alguns webviews Android Capacitor
+        // dão GPU "sucesso" mas inferência fica em zero — sintoma silencioso).
+        let lm: FaceLandmarker;
+        try {
+          lm = await FaceLandmarker.createFromOptions(resolver, {
+            baseOptions: { modelAssetPath: FACE_MODEL_URL, delegate: 'GPU' },
+            outputFaceBlendshapes: false,
+            runningMode: 'VIDEO',
+            numFaces: 1,
+          });
+        } catch (gpuErr) {
+          console.warn('[MediaPipe] FaceLandmarker GPU falhou, fallback CPU:', gpuErr);
+          lm = await FaceLandmarker.createFromOptions(resolver, {
+            baseOptions: { modelAssetPath: FACE_MODEL_URL, delegate: 'CPU' },
+            outputFaceBlendshapes: false,
+            runningMode: 'VIDEO',
+            numFaces: 1,
+          });
+        }
         this.faceLandmarker = lm;
         return lm;
       } catch (originalErr) {
@@ -96,14 +107,21 @@ export class MediaPipeLoaderService {
       try {
         const { PoseLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
         const resolver = await FilesetResolver.forVisionTasks(WASM_BASE);
-        const lm = await PoseLandmarker.createFromOptions(resolver, {
-          baseOptions: {
-            modelAssetPath: POSE_MODEL_URL,
-            delegate: 'GPU',
-          },
-          runningMode: 'VIDEO',
-          numPoses: 1,
-        });
+        let lm: PoseLandmarker;
+        try {
+          lm = await PoseLandmarker.createFromOptions(resolver, {
+            baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate: 'GPU' },
+            runningMode: 'VIDEO',
+            numPoses: 1,
+          });
+        } catch (gpuErr) {
+          console.warn('[MediaPipe] PoseLandmarker GPU falhou, fallback CPU:', gpuErr);
+          lm = await PoseLandmarker.createFromOptions(resolver, {
+            baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate: 'CPU' },
+            runningMode: 'VIDEO',
+            numPoses: 1,
+          });
+        }
         this.poseLandmarker = lm;
         return lm;
       } catch (originalErr) {
