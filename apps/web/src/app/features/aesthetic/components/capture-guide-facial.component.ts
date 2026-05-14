@@ -325,13 +325,6 @@ export class CaptureGuideFacialComponent implements OnInit, OnDestroy {
   // -------------------------------------------------------------------------
 
   async captureCurrent(): Promise<void> {
-    // Sem rosto detectado ainda: dá feedback (não silencia o click).
-    if (!this.lastLandmarks) {
-      this.error.set('Aguardando detecção de rosto. Posicione-se na moldura e aguarde alguns segundos.');
-      return;
-    }
-    // Sem loading mas com landmarks → permite capturar (validação não bloqueia
-    // mais, é apenas indicador visual). UX: user vê o botão sempre clicável.
     if (this.loading()) return;
     const pose = this.currentPose();
     if (!pose) return;
@@ -339,7 +332,13 @@ export class CaptureGuideFacialComponent implements OnInit, OnDestroy {
     try {
       this.error.set(null);
       const blob = await this._snapshotJpeg();
-      const photoId = await this._uploadPhoto(blob, pose, this.lastLandmarks);
+      // Captura aceita SEM landmarks (lista vazia). Backend v2 calcula
+      // métricas server-side se faltarem; landmarks são bonus pra heatmap.
+      // UX: user pode capturar mesmo se MediaPipe não detectou (luz ruim,
+      // câmera fraca, browser sem WebGL — não trava a feature inteira).
+      const landmarks = this.lastLandmarks ?? [];
+      console.log(`[CaptureGuideFacial] capturing pose=${pose} landmarks=${landmarks.length}pts`);
+      const photoId = await this._uploadPhoto(blob, pose, landmarks);
       const captured: CapturedPhoto[] = [...this.captured(), { pose, photoId }];
       this.captured.set(captured);
 
@@ -400,6 +399,8 @@ export class CaptureGuideFacialComponent implements OnInit, OnDestroy {
     this.stream = undefined;
   }
 
+  private _loopFrameCount = 0;
+
   private _loop(landmarker: import('@mediapipe/tasks-vision').FaceLandmarker): void {
     if (this.destroyed) return;
 
@@ -417,6 +418,18 @@ export class CaptureGuideFacialComponent implements OnInit, OnDestroy {
         const result = this.mediaLoader.detectFaceForVideo(landmarker, video, tsMs);
 
         const lm = result.faceLandmarks?.[0];
+        // Diagnóstico: log a cada 60 frames (~1s) pra ver se detection
+        // está rodando + qual taxa de hits. Permanente até bug de detecção
+        // em prod estabilizar.
+        this._loopFrameCount++;
+        if (this._loopFrameCount % 60 === 0) {
+          console.log(
+            `[CaptureGuideFacial] loop frame=${this._loopFrameCount} ` +
+            `video=${video.videoWidth}x${video.videoHeight} ` +
+            `faces=${result.faceLandmarks?.length ?? 0} ` +
+            `pts=${lm?.length ?? 0}`,
+          );
+        }
         if (lm && lm.length === 468) {
           const pts = lm.map(p => ({ x: p.x, y: p.y, z: p.z ?? 0 }));
           this.lastLandmarks = pts;
@@ -428,6 +441,13 @@ export class CaptureGuideFacialComponent implements OnInit, OnDestroy {
           this.lastLandmarks = undefined;
           this.lastValidation.set(null);
         }
+      } else if (this._loopFrameCount === 0) {
+        // Primeira iter sem video pronto — loga uma vez pra diagnóstico
+        console.log(
+          `[CaptureGuideFacial] aguardando video ready: readyState=${video.readyState} ` +
+          `dims=${video.videoWidth}x${video.videoHeight}`,
+        );
+        this._loopFrameCount = 1;
       }
     } catch (loopErr) {
       // MediaPipe pode lançar em devices que não suportam WebGL/WASM

@@ -283,10 +283,6 @@ export class CaptureGuideBodyComponent implements OnInit, OnDestroy {
   }
 
   async captureCurrent(): Promise<void> {
-    if (!this.lastLandmarks) {
-      this.error.set('Aguardando detecção. Posicione-se na moldura e aguarde alguns segundos.');
-      return;
-    }
     if (this.loading()) return;
     const pose = this.currentPose();
     if (!pose) return;
@@ -294,7 +290,10 @@ export class CaptureGuideBodyComponent implements OnInit, OnDestroy {
     try {
       this.error.set(null);
       const blob = await this._snapshotJpeg();
-      const photoId = await this._uploadPhoto(blob, pose, this.lastLandmarks);
+      // Aceita sem landmarks — backend v2 calcula métricas server-side.
+      const landmarks = this.lastLandmarks ?? [];
+      console.log(`[CaptureGuideBody] capturing pose=${pose} landmarks=${landmarks.length}pts`);
+      const photoId = await this._uploadPhoto(blob, pose, landmarks);
       const captured: CapturedPhoto[] = [...this.captured(), { pose, photoId }];
       this.captured.set(captured);
 
