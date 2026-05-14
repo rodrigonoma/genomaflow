@@ -46,3 +46,7 @@ android/.gradle/
 android/app/build/
 ios/App/Pods/
 ios/App/App/public/
+
+# MediaPipe self-hosted assets — auto-baixados via postinstall, não commitar
+# (binários ~26MB; ver scripts/download-mediapipe-assets.js)
+public/mediapipe/
