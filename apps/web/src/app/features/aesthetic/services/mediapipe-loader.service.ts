@@ -20,17 +20,20 @@ import type {
   PoseLandmarkerResult,
 } from '@mediapipe/tasks-vision';
 
-const WASM_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.16/wasm';
-
-const FACE_MODEL_URL =
-  'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
-const POSE_MODEL_URL =
-  'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+// Self-hosted no mesmo origin (`app.genomaflow.com.br/mediapipe/...`).
+// Antes: cdn.jsdelivr.net (WASM) + storage.googleapis.com (modelos) — Brave
+// Shields, uBlock e firewalls corporativos bloqueavam como "third-party
+// tracking", causando MediaPipe FaceLandmarker error event sem detalhes.
+// Assets baixados via apps/web/scripts/download-mediapipe-assets.js no
+// postinstall do npm — versão deve permanecer alinhada com a do script.
+const WASM_BASE = '/mediapipe/wasm';
+const FACE_MODEL_URL = '/mediapipe/face_landmarker.task';
+const POSE_MODEL_URL = '/mediapipe/pose_landmarker_lite.task';
 
 @Injectable({ providedIn: 'root' })
 export class MediaPipeLoaderService {
   /** Versão exposta para incluir em landmarks.provider_version (audit). */
-  readonly version = '0.10.16';
+  readonly version = '0.10.35';
 
   /** True enquanto a primeira carga de qualquer landmarker está em curso. */
   readonly loading = signal(false);
