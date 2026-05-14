@@ -285,7 +285,7 @@ export class EcsStack extends cdk.Stack {
       WEBHOOK_CALLBACK_URL:         'https://app.genomaflow.com.br/api/webhooks/trello',
       TRELLO_TRIAGE_MODEL:          'claude-sonnet-4-6',
       TRELLO_FIX_MODEL:             'claude-sonnet-4-6',
-      TRELLO_REPO_ROOT:             '/app',
+      TRELLO_REPO_ROOT:             '/app/repo',
     };
 
     // Senha SMTP do Zoho (App Password gerado em 2026-05-11). Armazenado em
