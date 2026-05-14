@@ -131,6 +131,15 @@ async function commitAndPushToMain({ repoRoot, message, gitUser = 'GenomaFlow Bo
   }
   await run(['config', 'user.name', gitUser]);
   await run(['config', 'user.email', gitEmail]);
+  // Worker Dockerfile COPYa .git que veio do checkout do GitHub Actions runner.
+  // GitHub Actions seta http.https://github.com/.extraheader = "Authorization: Basic <GITHUB_TOKEN>"
+  // pra autenticar como github-actions[bot]. Esse extraheader fica cached
+  // em .git/config e vaza pro nosso push. Resultado: "duplicate header"
+  // OU push autentica como github-actions[bot] (sem permissão).
+  // Unset ANTES de qualquer operação remote.
+  try {
+    await run(['config', '--unset-all', 'http.https://github.com/.extraheader']);
+  } catch (_) { /* não existe — tudo bem */ }
   // `git add -A` walka o working tree todo — em /app/repo isso inclui
   // node_modules (apps/api e apps/worker têm npm ci no Docker build).
   // Milhões de arquivos → timeout. Limitamos aos paths editáveis pelo
@@ -148,14 +157,10 @@ async function commitAndPushToMain({ repoRoot, message, gitUser = 'GenomaFlow Bo
   const sha = await run(['rev-parse', 'HEAD']);
   const token = process.env.GITHUB_BOT_TOKEN;
   const { owner, repo } = _parseRepo();
-  // Usa http.extraheader pra autenticar via Authorization: Bearer.
-  // Evita ambiguidade do username `x-access-token:` (que o GitHub às vezes
-  // interpreta como App installation token → identidade github-actions[bot]
-  // ao invés do user dono do PAT). Bearer é universalmente aceito p/ fine-
-  // grained PATs e classic.
+  // Após unset do extraheader cached, URL-embedded auth funciona corretamente
+  // (autentica como dono do PAT, não github-actions[bot]).
   await run([
-    '-c', `http.https://github.com/.extraheader=Authorization: Bearer ${token}`,
-    'push', `https://github.com/${owner}/${repo}.git`, 'HEAD:main',
+    'push', `https://x-access-token:${token}@github.com/${owner}/${repo}.git`, 'HEAD:main',
   ]);
   return { sha };
 }
