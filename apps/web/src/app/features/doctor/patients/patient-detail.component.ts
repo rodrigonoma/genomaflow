@@ -6,6 +6,7 @@ import { ActivatedRoute, RouterModule } from '@angular/router';
 import { DatePipe, NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatTabsModule, MatTabGroup } from '@angular/material/tabs';
+import { TabSwipeDirective } from '../../../shared/directives/tab-swipe.directive';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -63,7 +64,7 @@ interface ComparisonBlock {
   selector: 'app-patient-detail',
   standalone: true,
   imports: [
-    RouterModule, DatePipe, NgClass, FormsModule,
+    RouterModule, DatePipe, NgClass, FormsModule, TabSwipeDirective,
     MatTabsModule, MatButtonModule, MatIconModule,
     MatFormFieldModule, MatInputModule, MatSelectModule,
     MatChipsModule, MatDialogModule, MatCheckboxModule, MatMenuModule, MatAutocompleteModule, MatSnackBarModule, MatTooltipModule, ExamCardComponent,
@@ -756,7 +757,10 @@ interface ComparisonBlock {
 
       <mat-tab-group animationDuration="150ms"
                      [selectedIndex]="selectedTabIndex()"
-                     (selectedIndexChange)="selectedTabIndex.set($event)">
+                     (selectedIndexChange)="selectedTabIndex.set($event)"
+                     appTabSwipe
+                     (swipeLeft)="nextTab()"
+                     (swipeRight)="prevTab()">
 
         <!-- ── PERFIL ── -->
         <mat-tab label="Perfil">
@@ -1835,6 +1839,20 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   private pollInterval?: ReturnType<typeof setInterval>;
 
   @ViewChild(MatTabGroup) tabGroup?: MatTabGroup;
+
+  /** Swipe esquerda → próxima aba (só dispara no mobile via TabSwipeDirective). */
+  nextTab(): void {
+    const total = this.tabGroup?._tabs?.length ?? 0;
+    if (!total) return;
+    const cur = this.selectedTabIndex();
+    if (cur < total - 1) this.selectedTabIndex.set(cur + 1);
+  }
+
+  /** Swipe direita → aba anterior. */
+  prevTab(): void {
+    const cur = this.selectedTabIndex();
+    if (cur > 0) this.selectedTabIndex.set(cur - 1);
+  }
 
   timelineSelectedEvent = signal<TimelineEvent | null>(null);
   timelinePanelOpen = signal(false);
