@@ -28,17 +28,21 @@ async function createPending(pg, {
 }
 
 /**
- * V2: validar que todas as photos pertencem à mesma session, têm pose e
- * landmarks. Usado em pre-flight de POST /aesthetic/analyses tier=advanced.
+ * V2: validar que todas as photos pertencem à mesma session e têm pose.
+ * Landmarks são OPCIONAIS — o worker (aesthetic-analysis.js Call #1b)
+ * já tolera ausência: se faltarem, omite as 10 métricas geométricas e
+ * entrega a análise Vision normalmente. Exigir landmarks no pre-flight
+ * bloqueava advanced em devices onde MediaPipe falha em webview Android
+ * (sintoma: PHOTOS_INCOMPLETE_FOR_ADVANCED após captura completa).
  *
  * Returns:
- *   { ok: true }                              tudo válido
+ *   { ok: true }                              session_id + pose ok em todas
  *   { ok: false, error: 'PHOTOS_NOT_FOUND' }  alguma photo não existe ou foi apagada
- *   { ok: false, error: 'PHOTOS_INCOMPLETE_FOR_ADVANCED' } falta pose/landmarks ou session_id diverge
+ *   { ok: false, error: 'PHOTOS_INCOMPLETE_FOR_ADVANCED' } falta pose ou session_id diverge
  */
 async function validatePhotosForAdvanced(pg, tenantId, photoIds, sessionId) {
   const { rows } = await pg.query(
-    `SELECT id, pose, landmarks, session_id
+    `SELECT id, pose, session_id
        FROM aesthetic_photos
       WHERE id = ANY($1::uuid[])
         AND tenant_id = $2
@@ -49,7 +53,7 @@ async function validatePhotosForAdvanced(pg, tenantId, photoIds, sessionId) {
     return { ok: false, error: 'PHOTOS_NOT_FOUND' };
   }
   for (const r of rows) {
-    if (!r.pose || !r.landmarks || r.session_id !== sessionId) {
+    if (!r.pose || r.session_id !== sessionId) {
       return { ok: false, error: 'PHOTOS_INCOMPLETE_FOR_ADVANCED' };
     }
   }

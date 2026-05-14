@@ -16,7 +16,8 @@ async function buildApp({
   balance = 100, hasConsent = true, photosOk = true,
   role = 'admin', module = 'estetica', consentRow = null,
   // V2 advanced tier mocks
-  advancedPhotosComplete = true,
+  // advancedPhotoPose: 'frontal' (valid) | null (invalid — bloqueia advanced)
+  advancedPhotoPose = 'frontal',
   advancedPhotosSessionId = 'sess-1',
 } = {}) {
   const app = Fastify({ logger: false });
@@ -34,14 +35,14 @@ async function buildApp({
         const row = consentRow !== null ? consentRow : { id: 'c1', created_at: '2026-05-11T00:00:00Z', reinforced_regions: [] };
         return { rows: [row] };
       }
-      // validatePhotosForAdvanced (V2) — distinguir pelo SELECT incluir pose
-      if (/SELECT id, pose, landmarks, session_id\s+FROM aesthetic_photos/i.test(sql)) {
+      // validatePhotosForAdvanced (V2) — landmarks deixou de ser exigido
+      // (worker tolera ausência); distinguir pelo SELECT incluir pose + session_id.
+      if (/SELECT id, pose, session_id\s+FROM aesthetic_photos/i.test(sql)) {
         if (!photosOk) return { rows: [] };
         return {
           rows: params[0].map((id) => ({
             id,
-            pose: advancedPhotosComplete ? 'frontal' : null,
-            landmarks: advancedPhotosComplete ? { type: 'face' } : null,
+            pose: advancedPhotoPose,
             session_id: advancedPhotosSessionId,
           })),
         };
@@ -279,8 +280,8 @@ describe('POST /aesthetic/analyses', () => {
     expect(JSON.parse(res.body).tier).toBe('advanced');
   });
 
-  test('V2: tier=advanced photo sem pose/landmarks → 400 PHOTOS_INCOMPLETE_FOR_ADVANCED', async () => {
-    const app = await buildApp({ advancedPhotosComplete: false });
+  test('V2: tier=advanced photo sem pose → 400 PHOTOS_INCOMPLETE_FOR_ADVANCED', async () => {
+    const app = await buildApp({ advancedPhotoPose: null });
     const res = await app.inject({
       method: 'POST', url: '/api/aesthetic/analyses',
       payload: {
@@ -292,6 +293,25 @@ describe('POST /aesthetic/analyses', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body).error).toBe('PHOTOS_INCOMPLETE_FOR_ADVANCED');
+  });
+
+  test('V2: tier=advanced sem landmarks (MediaPipe falhou no client) → 201 ok', async () => {
+    // Landmarks deixaram de ser exigidos no pre-flight: worker (Call #1b)
+    // tolera ausência e entrega análise Vision normalmente, só omite as
+    // 10 métricas geométricas. Fix 2026-05-14 — desbloqueou tier=advanced
+    // em webview Android onde MediaPipe não inicializa.
+    const app = await buildApp({ advancedPhotoPose: 'frontal' });
+    const res = await app.inject({
+      method: 'POST', url: '/api/aesthetic/analyses',
+      payload: {
+        analysis_type: 'facial', subject_id: 'sub1',
+        photo_ids: ['p1','p2','p3','p4','p5'],
+        tier: 'advanced',
+        session_id: 'sess-1',
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(JSON.parse(res.body).tier).toBe('advanced');
   });
 
   test('V2: tier=advanced photo de outra session → 400 PHOTOS_INCOMPLETE_FOR_ADVANCED', async () => {
@@ -346,8 +366,8 @@ describe('POST /aesthetic/analyses', () => {
         query: jest.fn(async (sql, params) => {
           if (/COALESCE\(SUM\(amount\)/i.test(sql)) return { rows: [{ balance: '100' }] };
           if (/SELECT .* FROM aesthetic_consent/i.test(sql)) return { rows: [{ id: 'c1', reinforced_regions: [] }] };
-          if (/SELECT id, pose, landmarks, session_id\s+FROM aesthetic_photos/i.test(sql)) {
-            return { rows: params[0].map(id => ({ id, pose: 'frontal', landmarks: {type:'face'}, session_id: 'sess-1' })) };
+          if (/SELECT id, pose, session_id\s+FROM aesthetic_photos/i.test(sql)) {
+            return { rows: params[0].map(id => ({ id, pose: 'frontal', session_id: 'sess-1' })) };
           }
           if (/SELECT id FROM aesthetic_photos/i.test(sql)) return { rows: params[0].map(id => ({ id })) };
           if (/INSERT INTO aesthetic_analyses/i.test(sql)) return { rows: [{ id: 'a-new', tier: 'advanced' }] };
