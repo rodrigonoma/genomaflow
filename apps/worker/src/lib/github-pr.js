@@ -107,11 +107,23 @@ async function commitAndPushToMain({ repoRoot, message, gitUser = 'GenomaFlow Bo
   const { spawn } = require('child_process');
   function run(args, captureStdout = false) {
     return new Promise((resolve, reject) => {
-      const p = spawn('git', args, { cwd: repoRoot });
+      // GIT_TERMINAL_PROMPT=0 força non-interactive: se push 401, falha em vez
+      // de prompt waiting forever em container (incidente 2026-05-14 — push
+      // travou 80+min porque git tentou perguntar credentials).
+      // Timeout 60s no spawn cobre casos onde rede trava.
+      const p = spawn('git', args, {
+        cwd: repoRoot,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      });
       let stdout = '', stderr = '';
       p.stdout.on('data', (d) => { stdout += d.toString(); });
       p.stderr.on('data', (d) => { stderr += d.toString(); });
+      const timeout = setTimeout(() => {
+        p.kill('SIGKILL');
+        reject(new Error(`git ${args[0]} TIMEOUT after 60s`));
+      }, 60_000);
       p.on('close', (code) => {
+        clearTimeout(timeout);
         if (code === 0) resolve(stdout.trim());
         else reject(new Error(_redactSecrets(`git ${args.join(' ')} exit ${code}: ${stderr}`)));
       });
