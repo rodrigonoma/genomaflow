@@ -1,183 +1,179 @@
 ---
-name: Trello QA Agent
-description: Agente IA que pega cards da coluna QA do Trello (webhook), faz triagem crítica (análise + impact + test plan + risco), e sob /fix aprovado edita codebase + roda testes + abre PR. Entregue 2026-05-13. Single-tenant interno.
+name: Trello QA Agent (3 colunas / 3 prefixos)
+description: Agente IA Trello — triagem read-only ao mover card pra QA/Ideias/Roadmap, /fix /ideia /roadmap aprovado edita codebase + push direto em main + deploy auto. Operacional 2026-05-14. Single-tenant interno.
 type: project
 ---
 
-# Trello QA Agent
+# Trello QA Agent — Estado de Produção (3 colunas, 3 prefixos)
 
 Pipeline completo Trello → webhook → BullMQ → Claude Tool Use → triagem ou fix.
+**Operacional desde 2026-05-14.** Primeiro fix end-to-end: commit `7cea565`
+(card #21 "Validação CPF"). Expandido pra 3 colunas no mesmo dia.
 
 Spec: `docs/superpowers/specs/2026-05-13-trello-qa-agent-design.md`.
 Plan: `docs/superpowers/plans/2026-05-13-trello-qa-agent.md`.
 
-## Componentes entregues
+## Mapeamento coluna → comando → kind
+
+| Coluna Trello | List ID | Slash command | kind (job data) |
+|---|---|---|---|
+| **QA** | `69faa165e4236ac4b664c3c5` | `/fix` | `qa` |
+| **Ideias** | `69faa0c0aaef882151345799` | `/ideia` | `ideia` |
+| **Roadmap** | `69faa0c0aaef88215134579b` | `/roadmap` | `roadmap` |
+
+Webhook detecta `listAfter.id` contra os 3 IDs (via `TRELLO_QA_LIST_ID` /
+`TRELLO_IDEIAS_LIST_ID` / `TRELLO_ROADMAP_LIST_ID` envs). Slash command
+regex `^/(fix|ideia|roadmap)\s+(aprovado|retry|detalhe|cancel)` aceita
+os 3 prefixos com os mesmos 4 subcomandos.
+
+**Comportamento idêntico pros 3 kinds atualmente** — mesmo system prompt
+de triagem, mesma lógica de fix. Campo `kind` + `command_prefix` no job
+data permite especializar prompts no futuro (ex: avaliar ROI de ideia vs
+fazer fix de bug) sem refactor estrutural.
+
+## Semântica dos slash commands
+
+| Comando | O que faz | Mexe em código? |
+|---|---|---|
+| `<prefix> aprovado` | edita + `npm run test:unit` + **push DIRETO em main** + CI deploy auto | ✅ |
+| `<prefix> retry` | RE-ANALISA (triagem nova, ignora análise anterior) | ❌ |
+| `<prefix> retry: <hint>` | re-analisa com dica humana | ❌ |
+| `<prefix> detalhe` | stub (análise extra futura) | ❌ |
+| `<prefix> cancel` | marca card pra dev humano | ❌ |
+
+`prefix` ∈ {fix, ideia, roadmap}. Mensagens de retorno do processor usam
+o `command_prefix` correto pra orientar o usuário (ex: `/ideia retry`).
+
+**User override do D10 ("PR nunca auto-merge"):** fluxo final pula PR e
+pushea direto em main. CI deploy.yml dispara automaticamente. SEM human
+review intermediário. Cap MAX_ATTEMPTS=5 por card protege contra custo
+runaway.
+
+## Componentes em produção
 
 ### Backend (apps/api)
-
-| Arquivo | Função |
+| Arquivo | Responsabilidade |
 |---|---|
-| `db/migrations/105_trello_fix_attempts.sql` | Audit table (trigger_type/status state machine, attempt counter, tokens/custo) |
-| `services/trello-fix-attempts.js` | CRUD audit (createAttempt, markRunning/Completed/Failed, getLastAttempt, countCompletedAttempts) + enums + MAX_ATTEMPTS=5 |
-| `services/trello-client.js` | REST wrap (fetch direto, sem lib oficial) + HMAC-SHA1 verify + 16384 char truncate em comentário + encodeURIComponent defensivo em cardId/labelId/boardId |
-| `queues/trello-qa-queue.js` | BullMQ producer singleton (queue `trello-qa`, attempts=1, removeOnComplete age 1h) |
-| `routes/webhooks/trello.js` | GET/HEAD healthcheck + POST com HMAC + dispatch (updateCard→triage / commentCard `/fix`→fix). Rate limit 600/h. **Usa request.rawBody (bytes originais) para HMAC** — não JSON.stringify(request.body) |
-| `server.js` | Registro de rota em `/api/webhooks/trello` |
+| `db/migrations/105_trello_fix_attempts.sql` | Audit table append-only |
+| `services/trello-fix-attempts.js` | CRUD audit. `countCompletedAttempts` conta SÓ `trigger_type='fix' AND status IN ('pr_opened','tests_failed')` — falhas de infra (`llm_failed`) NÃO contam |
+| `services/trello-client.js` | REST wrap fetch + HMAC-SHA1 verify + 16384c truncate + encodeURIComponent defensivo |
+| `queues/trello-qa-queue.js` | BullMQ producer (queue `trello-qa` — única pra 3 kinds, diferencia por job data) |
+| `routes/webhooks/trello.js` | GET/HEAD healthcheck + POST. **HMAC sobre `request.rawBody`** (bytes originais). 3 listas + 3 prefixos. `kind` + `command_prefix` no job data |
 
 ### Worker (apps/worker)
-
-| Arquivo | Função |
+| Arquivo | Responsabilidade |
 |---|---|
-| `lib/codebase-tools.js` | Tools Claude: read_file/list_files/grep (read-only) + edit_file/create_file/run_tests/run_lint. Allowlist `EDITABLE_PREFIXES` (apps/{api,worker,web}/src/, docs/, tests/) + `BLOCKED_PATTERNS` (infra/, .github/, migrations/*.sql, package.json root, Dockerfile, aws/, node_modules/). MAX_FILE_SIZE=50KB. Anti-traversal `..` |
-| `lib/github-pr.js` | Octokit wrapper (createBranchAndPR + commitAndPushBranch via git CLI nativo — não Contents API porque tem limite ~1MB/commit) |
-| `agents/trello-triage.js` | Claude Tool Use loop READ-ONLY. MAX_ITERATIONS=20. System prompt gera JSON estruturado {type, makes_sense, opinion, technical_details[], impact[], test_plan[], risk}. buildAnalysisComment renderiza markdown PT-BR |
-| `agents/trello-fix.js` | Claude Tool Use loop FULL (edit_file + create_file + run_tests). MAX_ITERATIONS=30. **Gate de testes obrigatório antes do PR** — se npm test falha, retorna `tests_failed` sem criar branch/PR. Branch pattern `trello/<idShort>/fix-<attempt>` |
-| `processors/trello-qa.js` | Orquestra triage/fix. Cross-app require de apps/api/src/services (válido em CI Docker context=repo root). Slash commands handled: aprovado, retry, retry: hint, detalhe (stub), cancel. MAX_ATTEMPTS=5 enforced |
-| `index.js` | Worker `trello-qa` registrado, concurrency=1 (fix é caro: LLM + tests + git) |
+| `lib/codebase-tools.js` | Tools Claude. `runTests` usa `npm run test:unit` pra scope=api (sem DB no container), `npm test` pros outros |
+| `lib/github-pr.js` | `commitAndPushToMain`: unset extraheader cached → `git add` com allowlist explícito (sem `docs`) → commit → URL-embedded auth push direto em main. `GIT_TERMINAL_PROMPT=0` + 60s timeout. `_redactSecrets` em error msgs |
+| `agents/trello-triage.js` | Claude loop READ-ONLY, aceita `hint` opcional pra re-análise. Timeout 180s por iter |
+| `agents/trello-fix.js` | Claude loop FULL. Após loop: runTests gate → `commitAndPushToMain` se passa. Timeout 180s por iter |
+| `services/trello-fix-attempts.js` | Duplicata controlada do mesmo arquivo em api (containers Docker isolados) |
+| `services/trello-client.js` | Duplicata controlada do mesmo arquivo em api |
+| `processors/trello-qa.js` | Orquestra 3 kinds. `_handleFix` lê `command_prefix` pra montar comments com prefix certo. `<prefix> aprovado` → fixCard; `<prefix> retry` → triageCard (read-only); cancel/detalhe → comment only |
+| `index.js` | Worker `trello-qa` registrado, concurrency=1 |
+
+### Worker Dockerfile (CRÍTICO)
+```dockerfile
+FROM node:20-slim                # NÃO Alpine (onnxruntime-node precisa glibc)
+RUN apt-get install curl ca-certificates git
+COPY apps/worker/package.json ./
+RUN npm ci --production
+RUN curl ... model.onnx
+COPY apps/worker/src ./src
+# Repo completo pra fix agent (working tree alinhado com HEAD):
+COPY apps /app/repo/apps
+COPY infra /app/repo/infra
+COPY .github /app/repo/.github
+COPY docs /app/repo/docs          # CRÍTICO: sem isso, git status mostra docs/* como deleted
+COPY CLAUDE.md /app/repo/CLAUDE.md
+COPY .git /app/repo/.git
+# CRÍTICO: unset extraheader cached do actions/checkout
+RUN cd /app/repo && git config --unset-all http.https://github.com/.extraheader 2>/dev/null || true
+# npm ci em api+worker pra run_tests funcionar
+WORKDIR /app/repo/apps/api && RUN npm ci ...
+WORKDIR /app/repo/apps/worker && RUN npm ci ...
+WORKDIR /app
+CMD ["node", "src/index.js"]
+```
 
 ### Infra
+- 8 SSM secrets: `/genomaflow/prod/trello-*` (api-key, api-token, webhook-secret, board-id, qa-list-id, ideias-list-id, roadmap-list-id) + `github-bot-token`
+- 4 env vars no task def: `WEBHOOK_CALLBACK_URL`, `TRELLO_TRIAGE_MODEL`, `TRELLO_FIX_MODEL`, `TRELLO_REPO_ROOT=/app/repo`
+- Webhook Trello ID: `6a050cf2ae95e0d60c7cc7cc` (active)
 
-| Arquivo | Função |
-|---|---|
-| `infra/lib/ecs-stack.ts` | 6 SSM secrets em backendSecrets (compartilhado API+Worker): TRELLO_API_KEY, TRELLO_API_TOKEN, TRELLO_WEBHOOK_SECRET, TRELLO_BOARD_ID, TRELLO_QA_LIST_ID, GITHUB_BOT_TOKEN. 4 env vars em backendEnv: WEBHOOK_CALLBACK_URL, TRELLO_TRIAGE_MODEL, TRELLO_FIX_MODEL, TRELLO_REPO_ROOT |
-
-## Pipeline
+## Pipeline `<prefix> aprovado` end-to-end
 
 ```
-Trello (card move/comment) 
-  → POST /api/webhooks/trello (HMAC SHA1 sobre rawBody+callbackUrl)
-  → BullMQ enqueue { event: triage|fix, card_id, slash_command?, hint? }
-  → Worker trello-qa
-     IF event=triage:
-        createAttempt(attempt=0, trigger=triage) → markRunning
-        triageCard (Claude loop read-only, MAX 20 iter)
-        addComment markdown (🤖 Análise Automática)
-        markCompleted
-     IF event=fix:
-        ▸ detalhe → comentário stub
-        ▸ cancel  → createAttempt(trigger=cancel) + comentário
-        ▸ aprovado|retry:
-             se countCompleted >= 5 → comentário limite atingido (sem attempt)
-             senão: createAttempt(attempt=N+1, trigger=fix|retry, hint?) → markRunning
-                fixCard (Claude loop full, MAX 30 iter)
-                runTests → SE FAIL: markCompleted(status=tests_failed) + comentário ❌ + stdout
-                                SE PASS: commitAndPushBranch + createBranchAndPR
-                                          markCompleted(status=pr_opened, pr_url) + comentário ✅
+1. Trello → POST /api/webhooks/trello (HMAC sobre rawBody)
+2. API valida HMAC + identifica kind (regex prefix + list ID match) + enfileira BullMQ trello-qa
+3. Worker pega job → _handleFix
+4. createAttempt(trigger='fix', attempt=N) → markRunning
+5. trelloClient.getCard
+6. fixCard agent:
+   - Claude Tool Use loop (até MAX_ITERATIONS=30, timeout 180s/iter)
+   - Tools: read_file, list_files, grep, edit_file, create_file (em /app/repo)
+   - Loop sai quando agent diz FIX_DONE ou esgota iters
+7. runTests({ scope: 'api', repoRoot: '/app/repo' }) → `npm run test:unit` no /app/repo/apps/api
+   - SE falha → markCompleted(status='tests_failed'), comment ❌, FIM
+8. commitAndPushToMain:
+   - git config --unset-all http.extraheader (defensivo)
+   - git config user.name/email
+   - git add -- apps/{api,worker,web}/src apps/{api,worker}/tests  (allowlist SEM docs)
+   - git commit -m "fix(trello-N): <card name>"
+   - git push https://x-access-token:$PAT@github.com/.../HEAD:main
+9. markCompleted(status='pr_opened', prUrl=commitUrl)
+10. trelloClient.addComment "✅ Mergeado direto em main: <commit>"
+11. CI deploy.yml dispara em push pra main → builda imagens → ECS update
 ```
-
-## Slash commands
-
-| Comando | Trigger | Comportamento |
-|---|---|---|
-| `/fix aprovado` | comentário em qualquer card | Cria fix attempt, edita, testa, abre PR (se passa) |
-| `/fix retry` | mesmo | Como aprovado mas trigger_type=retry (incrementa attempt) |
-| `/fix retry: <hint>` | mesmo | Como retry mas injeta hint humano no prompt do agente |
-| `/fix detalhe` | mesmo | Stub MVP — comentário informando feature futura |
-| `/fix cancel` | mesmo | Marca card pra dev humano, agente para de responder |
-
-## Secrets
-
-6 SSM Parameter Store params em `/genomaflow/prod/trello-*` + `/genomaflow/prod/github-bot-token`. CDK ecs-stack.ts injeta via `ecs.Secret.fromSsmParameter` em containerDefinitions[].secrets (API + Worker, via backendSecrets shared).
-
-**Operator manual antes do cdk deploy:**
-
-```bash
-aws ssm put-parameter --name /genomaflow/prod/trello-api-key       --type SecureString --value "<KEY>"
-aws ssm put-parameter --name /genomaflow/prod/trello-api-token     --type SecureString --value "<TOKEN>"
-aws ssm put-parameter --name /genomaflow/prod/trello-webhook-secret --type SecureString --value "$(openssl rand -hex 32)"
-aws ssm put-parameter --name /genomaflow/prod/trello-board-id      --type String       --value "<BOARD_ID>"
-aws ssm put-parameter --name /genomaflow/prod/trello-qa-list-id    --type String       --value "<QA_LIST_ID>"
-aws ssm put-parameter --name /genomaflow/prod/github-bot-token     --type SecureString --value "<GH_PAT_repo_scope>"
-```
-
-**Operator manual após cdk deploy:**
-
-```bash
-curl -X POST "https://api.trello.com/1/webhooks/?key=<KEY>&token=<TOKEN>" \
-  -d 'description=GenomaFlow QA Agent' \
-  -d 'callbackURL=https://app.genomaflow.com.br/api/webhooks/trello' \
-  -d 'idModel=<BOARD_ID>'
-```
-
-Trello chama HEAD/GET no callbackURL na criação — endpoint já responde 200.
 
 ## Limites operacionais
 
-- MAX_ATTEMPTS=5 por card (depois força `/fix cancel`)
-- MAX_ITERATIONS=20 no loop triagem (read-only)
-- MAX_ITERATIONS=30 no loop fix (full)
-- Rate limit webhook 600/h (Trello fan-out tipicamente <50/h)
-- Concurrency BullMQ trello-qa = 1 (fix é caro)
-- Test gate obrigatório antes do PR (`r.status === 'tests_failed'` curto-circuita)
-- Allowlist explícita de paths editáveis (não pode editar infra/, migrations/, .github/, package.json root)
-- Cost estimate inline: $3/1M input + $15/1M output (Claude Sonnet 4.6)
+- **MAX_ATTEMPTS=5** por card (só conta `pr_opened`+`tests_failed`)
+- **MAX_ITERATIONS** triage=20, fix=30
+- **Timeout Anthropic** 180s por iter (Promise.race)
+- **Timeout git ops** 60s por comando (`GIT_TERMINAL_PROMPT=0`)
+- **Rate limit webhook** 600/h
+- **Concurrency BullMQ** trello-qa = 1
+- **Working tree** `/app/repo` (~150MB com node_modules de api+worker)
 
-## Cobertura de testes (61 testes novos)
+## Bugs encontrados e resolvidos pós-deploy (2026-05-13/14)
 
-- T1: migration only
-- T2: 12 testes trello-fix-attempts (CRUD + state machine + truncate 500 chars error_message)
-- T3: 9 testes trello-client (HMAC valid/invalid/empty + REST wrap + truncate 16384 chars + status non-OK)
-- T4: 9 testes webhook (GET/HEAD healthcheck + 401 signature + dispatch triage/fix/no-op + slash command regex hint extraction)
-- T5: 24 testes codebase-tools (allowlist 9 + readFile 3 + listFiles 1 + grep 2 + editFile 4 + createFile 3 + schemas 2)
-- T6: 2 testes github-pr (happy path Octokit + missing GITHUB_BOT_TOKEN throws)
-- T7: 7 testes trello-triage (1-shot + multi-turn + 20 iter breaker + BAD_LLM_OUTPUT + markdown render yes/partial/no)
-- T8: 4 testes trello-fix (happy path PR + tests_failed sem PR + hint injection + branch naming)
-- T9: processor (cobertura indireta via T7+T8)
-
-Total: 61 testes verdes na branch. `npm test` worker reportou 272/272 com 0 regressões em outras suites.
-
-## Decisões críticas (D1-D10 do spec)
-
-- **D1** Triagem AGORA (no card-move) + fix SOB DEMANDA (slash command)
-- **D2** Webhook Trello (não polling)
-- **D3** Slash command no comentário (recomendado vs label move)
-- **D4** Família completa `/fix aprovado | retry | retry: hint | detalhe | cancel`
-- **D5** Tests_failed comenta NO CARD (stdout truncado) — dev decide retry com hint
-- **D6** Single tenant interno (1 board), no RLS, no withTenant
-- **D7** Qualquer membro do board pode aprovar (small team)
-- **D8** PR nunca auto-merge (revisão humana obrigatória)
-- **D9** MAX_ATTEMPTS=5 / card (cost cap)
-- **D10** PR + comentário no card linkado (não direct merge)
-
-## Auditoria & cost tracking
-
-Tabela `trello_fix_attempts` grava per attempt:
-- tokens_input/output, llm_cost_usd estimado
-- pr_url, branch_name (quando aplicável)
-- test_summary jsonb (passed/failed/skipped)
-- processing_ms
-- error_code, error_message (truncate 500 chars)
-
-Audit append-only — sem trigger automático (single-tenant interno, sem PII).
-
-## Pendências conhecidas
-
-- `/fix detalhe` é stub MVP — implementar análise profunda do último erro (re-prompt com test stdout)
-- Scope hard-coded `api` no `fixCard` — auto-detect baseado em files editados seria melhor
-- Sem multi-tenant — fora de escopo MVP (board único do time interno)
-- Cross-app require `apps/worker/.../../../api/src/services/...` funciona no CI (Docker context=repo root, todos os apps copiados) MAS quebra em local docker-compose isolado (mesmo padrão pré-existente do aestheticDepth processor)
+| # | Sintoma | Causa real | Fix |
+|---|---|---|---|
+| 1 | Worker crasha `ERR_DLOPEN_FAILED` em tasks novas | onnxruntime-node prebuild precisa glibc, Alpine usa musl | `FROM node:20-slim` |
+| 2 | Processor crasha `Cannot find module ../../../api/src/services/...` | Worker container só tem `/app/src`, cross-app require resolve em `/api/...` inexistente | Duplicar services em `apps/worker/src/services/` |
+| 3 | `pool.connect()` trava indefinidamente após "Job N event=triage" | Task def só tem DB_HOST/USER/PASSWORD secrets, não DATABASE_URL → pg tenta localhost | `poolConfig()` fallback igual `apps/api/src/plugins/postgres.js` |
+| 4 | Anthropic SDK timeout não dispara | SDK 0.88 nem sempre honra config | `Promise.race` explícito 180s |
+| 5 | Anthropic API "credit balance too low" 400 | Conta sem créditos | User adicionou créditos |
+| 6 | `npm test` hang | API `npm test` precisa DB, container worker não tem | `runTests` usa `npm run test:unit` pra scope=api |
+| 7 | Limite 5 attempts atinge cedo demais | Conta `llm_failed` (falhas de infra) | `WHERE status IN ('pr_opened','tests_failed')` |
+| 8 | `git add -A` TIMEOUT 60s | Walk inclui node_modules (milhões de arquivos) | `git add -- <paths>` com allowlist explícito |
+| 9 | Push falha "denied to github-actions[bot]" + "Duplicate Authorization" | `actions/checkout` carimba `http.extraheader` em `.git/config` com GITHUB_TOKEN do runner, vaza pro container | Dockerfile + runtime `git config --unset-all http.https://github.com/.extraheader` |
+| 10 | PAT vazado em comment de erro no Trello | `git push` URL com `x-access-token:TOKEN` aparece em err.message | `_redactSecrets` regex no github-pr.js E no processor |
+| 11 | Agente deletou 173 arquivos `docs/` em commit | Dockerfile copiava docs/ pra `/app/docs` (Copilot RAG), NÃO `/app/repo/docs` → working tree via docs como "deleted" → git add docs (allowlist) stage delete | (1) Dockerfile `COPY docs /app/repo/docs` (2) Remove `docs` do allowlist do git add |
 
 ## Não regredir
 
-❌ Não desabilitar gate de testes antes do PR (`runTests` é mandatório)
-❌ Não permitir agente editar `infra/`, `migrations/*.sql`, `.github/`, root `package.json`, `Dockerfile` (BLOCKED_PATTERNS em codebase-tools.js)
-❌ Não auto-mergear PR (Octokit nunca chama `merge`)
-❌ Não passar attempt > 5 (countCompletedAttempts gate em processor)
-❌ Não usar JSON.stringify(request.body) para HMAC (re-serialização quebra signature em prod com Trello bytes)
-❌ Não remover encodeURIComponent dos IDs em trello-client (defense em depth contra path injection)
-❌ Não rodar git stash em qualquer fluxo do agente — WIP vira commit `WIP:` na branch dele
+❌ Não voltar `git add -A` em `/app/repo` (timeout garantido com node_modules)
+❌ Não remover `git config --unset-all http.extraheader` do Dockerfile ou runtime — extraheader cached do actions/checkout vai contaminar de novo
+❌ Não voltar a usar `npm test` em scope=api no fix agent (precisa DB que container não tem)
+❌ Não contar `llm_failed` em `countCompletedAttempts` — só `pr_opened` + `tests_failed`
+❌ Não usar `request.body` re-serializado pra HMAC — sempre `request.rawBody`
+❌ Não usar `node:20-alpine` no worker — onnxruntime-node sem prebuild musl
+❌ Não voltar processor pra cross-app require `../../../api/src/services/...` — duplicar
+❌ Não logar/comentar `err.message` no Trello sem passar por `_redactSecrets`
+❌ Não remover `COPY docs /app/repo/docs` do Dockerfile — working tree desalinha com HEAD, agente comita deleções
+❌ Não incluir `docs` no allowlist do `git add` em github-pr.js — agente de FIX DE CÓDIGO não deve mexer em docs
 
-✅ HMAC SEMPRE sobre `request.rawBody` (server.js já expõe via addContentTypeParser parseAs=buffer)
-✅ Allowlist `EDITABLE_PREFIXES` é a primeira linha de defesa — toda edit/create checa via `isEditableAllowed`
-✅ PR sempre referenciado pelo card via "Closes Trello card https://trello.com/c/<short>" no body
-✅ Comentário no card sempre quando attempt termina (sucesso ou falha) — usuário não fica no escuro
+✅ Sempre `git config --unset-all http.https://github.com/.extraheader` em qualquer container que COPYa `.git` de workspace GitHub Actions
+✅ Sempre `_redactSecrets()` em mensagens de erro que vão pra UI (Trello, Slack, e-mail, audit log público)
+✅ Sempre fallback `DB_HOST`/`DB_PORT` em pg.Pool quando `DATABASE_URL` não está no ambiente
+✅ Sempre `Promise.race` com timeout explícito ao chamar Anthropic SDK
+✅ Sempre `git add` com allowlist em working trees que tenham node_modules baked-in
+✅ Working tree do agente DEVE estar 1:1 com HEAD (sem arquivos missing) pra evitar deleções acidentais
 
-## Smoke prod (operator)
+## Smoke prod confirmado 2026-05-14
 
-1. Confirmar deploy verde no GitHub Actions
-2. Aplicar `cdk deploy genomaflow-ecs --require-approval never`
-3. Mover card de teste pra coluna QA → aguardar ~30s
-4. Verificar comentário "🤖 Análise Automática"
-5. Conferir row em `trello_fix_attempts` com `attempt=0, status=completed`
-6. Comentar `/fix aprovado` → aguardar ~2-5min
-7. Conferir worker CloudWatch logs + PR no GitHub + comentário ✅/❌ no card
+- Cards #22, #23 (QA): triagem IA real com análise estruturada
+- Card #21 (QA): fix end-to-end completo — commit `7cea565` em main, CI deploy.yml dispara
+- 3 colunas (QA/Ideias/Roadmap) operacionais com prefixos `/fix`, `/ideia`, `/roadmap`
