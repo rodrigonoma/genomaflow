@@ -62,7 +62,14 @@ async function fixCard({
         client.messages.create({
           model: MODEL,
           max_tokens: MAX_TOKENS,
-          system: SYSTEM_PROMPT,
+          // Static cache breakpoint em tools + system. Render order é
+          // tools → system → messages; marker no system cacheia ambos.
+          // Sonnet 4.6 cacheia se prefixo ≥ 2048 tokens; abaixo é no-op.
+          system: [{
+            type: 'text',
+            text: SYSTEM_PROMPT,
+            cache_control: { type: 'ephemeral' },
+          }],
           tools: tools.getToolSchemas({ readOnly: false }),
           messages,
         }),
@@ -72,7 +79,7 @@ async function fixCard({
       console.error(`[trello-fix] iter ${i + 1} FAIL after ${Date.now() - t0}ms: ${err.message}`);
       throw err;
     }
-    console.log(`[trello-fix] iter ${i + 1} OK in ${Date.now() - t0}ms stop=${resp.stop_reason} usage=in${resp.usage?.input_tokens}/out${resp.usage?.output_tokens}`);
+    console.log(`[trello-fix] iter ${i + 1} OK in ${Date.now() - t0}ms stop=${resp.stop_reason} usage=in${resp.usage?.input_tokens}/out${resp.usage?.output_tokens} cache=write${resp.usage?.cache_creation_input_tokens || 0}/read${resp.usage?.cache_read_input_tokens || 0}`);
     totalIn += resp.usage?.input_tokens || 0;
     totalOut += resp.usage?.output_tokens || 0;
 
@@ -91,6 +98,12 @@ async function fixCard({
           tool_use_id: block.id,
           content: typeof result === 'string' ? result : JSON.stringify(result).slice(0, 5000),
         });
+      }
+      // Sliding cache breakpoint na conversa (cresce ~1-3KB/iter).
+      // Limpa marker das iters anteriores antes de adicionar novo.
+      _stripCacheControl(messages);
+      if (toolResults.length > 0) {
+        toolResults[toolResults.length - 1].cache_control = { type: 'ephemeral' };
       }
       messages.push({ role: 'assistant', content: resp.content });
       messages.push({ role: 'user', content: toolResults });
@@ -150,6 +163,23 @@ function _parseTestSummary(testResult) {
     skipped: skipped ? parseInt(skipped) : null,
     exit_code: testResult.exitCode,
   };
+}
+
+/**
+ * Remove cache_control de todos os blocos em messages.
+ * Sliding breakpoint: marker antigo é apagado antes do novo ser adicionado.
+ * Sem isso, acumularia > 4 markers e a API rejeita.
+ */
+function _stripCacheControl(messages) {
+  for (const msg of messages) {
+    if (Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (block && typeof block === 'object' && 'cache_control' in block) {
+          delete block.cache_control;
+        }
+      }
+    }
+  }
 }
 
 async function _executeTool(name, input, repoRoot) {
