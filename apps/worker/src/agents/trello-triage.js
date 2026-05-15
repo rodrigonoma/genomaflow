@@ -12,7 +12,18 @@ const tools = require('../lib/codebase-tools');
 
 const MODEL = process.env.TRELLO_TRIAGE_MODEL || 'claude-sonnet-4-6';
 const MAX_TOKENS = 4096;
-const MAX_ITERATIONS = 20;
+// 60 = headroom 3x sobre o legado (20). Cards grandes de Roadmap precisam
+// explorar muito mais arquivos que QA bugs típicos. Custo absoluto ainda
+// limitado: 60 × 4096 tokens output × ~$3/1M ≈ $0.75 worst-case por card.
+const MAX_ITERATIONS = 60;
+// Wall-clock cap por job. Sem isso, BullMQ concurrency=1 trava a fila se
+// um único card entrar em loop infinito. 10min é folga sobre tempo médio
+// observado (~1-3min) sem ser tão longo que UX sofra.
+const MAX_WALL_CLOCK_MS = 10 * 60 * 1000;
+// A partir desse iter, injetar convergence pressure no tool_result pra
+// forçar JSON final em vez de hard-fail. Margem de 3 iters = espaço pro
+// modelo terminar exploração em curso + escrever a resposta.
+const CONVERGENCE_PRESSURE_AT = MAX_ITERATIONS - 3;
 
 const SYSTEM_PROMPT = `Você é o agente de triagem do GenomaFlow para Trello. Cards podem vir de 3 colunas:
 - QA (bugs/melhorias específicas)
@@ -80,6 +91,7 @@ async function triageCard({ card, repoRoot, anthropicClient, hint }) {
   });
 
   let totalIn = 0, totalOut = 0;
+  const startedAt = Date.now();
   let userContent = `Analise este card Trello da coluna QA:
 
 # ${card.name} (#${card.idShort})
@@ -93,7 +105,15 @@ ${card.desc || '(sem descrição)'}`;
   ];
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    console.log(`[trello-triage] iter ${i + 1}/${MAX_ITERATIONS} model=${MODEL} msgs=${messages.length}`);
+    const elapsed = Date.now() - startedAt;
+    if (elapsed > MAX_WALL_CLOCK_MS) {
+      throw Object.assign(new Error(`WALL_CLOCK_EXCEEDED após ${(elapsed / 1000).toFixed(0)}s (iter ${i + 1}/${MAX_ITERATIONS})`), {
+        code: 'WALL_CLOCK_EXCEEDED',
+        tokens_input: totalIn,
+        tokens_output: totalOut,
+      });
+    }
+    console.log(`[trello-triage] iter ${i + 1}/${MAX_ITERATIONS} elapsed=${(elapsed / 1000).toFixed(1)}s model=${MODEL} msgs=${messages.length}`);
     const t0 = Date.now();
     let resp;
     try {
@@ -133,7 +153,22 @@ ${card.desc || '(sem descrição)'}`;
         });
       }
       messages.push({ role: 'assistant', content: resp.content });
-      messages.push({ role: 'user', content: toolResults });
+      // Convergence pressure: nas últimas 3 iters, anexa text block no
+      // user message (junto com os tool_results) forçando o modelo a
+      // parar de explorar e emitir o JSON final. Evita hard-fail
+      // MAX_ITERATIONS — modelo prefere responder makes_sense='partial'
+      // + opinion citando gaps. Text block é válido no mesmo content
+      // array que tool_results (API Anthropic aceita mix).
+      const iterNumber = i + 1;
+      const userContent = [...toolResults];
+      if (iterNumber >= CONVERGENCE_PRESSURE_AT) {
+        const remaining = MAX_ITERATIONS - iterNumber;
+        userContent.push({
+          type: 'text',
+          text: `[SISTEMA] Você está em iter ${iterNumber}/${MAX_ITERATIONS} (${remaining} restantes). PARE de explorar e emita o JSON FINAL agora. Se faltar contexto técnico, use makes_sense="partial" e cite os gaps em "opinion". Não faça mais tool calls.`,
+        });
+      }
+      messages.push({ role: 'user', content: userContent });
       continue;
     }
 

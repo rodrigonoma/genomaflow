@@ -77,7 +77,7 @@ describe('triageCard', () => {
     expect(mockMessages.create).toHaveBeenCalledTimes(2);
   });
 
-  test('loop infinito breaker: max 20 iterações', async () => {
+  test('loop infinito breaker: max 60 iterações', async () => {
     mockMessages.create.mockResolvedValue({
       content: [{ type: 'tool_use', id: 'tu', name: 'read_file', input: { path: 'x' } }],
       stop_reason: 'tool_use',
@@ -89,7 +89,64 @@ describe('triageCard', () => {
       repoRoot: '/tmp/repo',
     })).rejects.toThrow(/MAX_ITERATIONS/);
 
-    expect(mockMessages.create).toHaveBeenCalledTimes(20);
+    expect(mockMessages.create).toHaveBeenCalledTimes(60);
+  });
+
+  test('convergence pressure: text block injetado nas últimas 3 iters', async () => {
+    // Mock retorna tool_use eternamente → vai bater max_iters em 60
+    mockMessages.create.mockResolvedValue({
+      content: [{ type: 'tool_use', id: 'tu', name: 'read_file', input: { path: 'x' } }],
+      stop_reason: 'tool_use',
+      usage: { input_tokens: 100, output_tokens: 50 },
+    });
+
+    await expect(triageCard({
+      card: { id: 'c1', idShort: 1, name: 'X', desc: 'y' },
+      repoRoot: '/tmp/repo',
+    })).rejects.toThrow(/MAX_ITERATIONS/);
+
+    // Inspect a chamada da iter 58 (índice 57): a mensagem user anterior
+    // (passada PRA essa chamada como msgs[N-1]) deve ter o text block de
+    // convergence. Em outras palavras, a chamada feita após iter 57
+    // termina já tem o aviso no histórico.
+    const callAtIter58 = mockMessages.create.mock.calls[57][0];
+    const lastUserMsg = callAtIter58.messages[callAtIter58.messages.length - 1];
+    expect(lastUserMsg.role).toBe('user');
+    expect(Array.isArray(lastUserMsg.content)).toBe(true);
+    const hasTextBlock = lastUserMsg.content.some(
+      (b) => b.type === 'text' && /PARE de explorar/i.test(b.text)
+    );
+    expect(hasTextBlock).toBe(true);
+  });
+
+  test('iters iniciais NÃO recebem convergence pressure', async () => {
+    mockMessages.create
+      .mockResolvedValueOnce({
+        content: [{ type: 'tool_use', id: 'tu1', name: 'read_file', input: { path: 'x' } }],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 100, output_tokens: 50 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: 'text', text: JSON.stringify({
+          type: 'bug', makes_sense: 'yes', opinion: 'ok',
+          technical_details: [], impact: [], test_plan: [], risk: 'low',
+        }) }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+    await triageCard({
+      card: { id: 'c1', idShort: 1, name: 'X', desc: 'y' },
+      repoRoot: '/tmp/repo',
+    });
+
+    // iter 2 (índice 1): user content NÃO deve ter convergence text.
+    const callAtIter2 = mockMessages.create.mock.calls[1][0];
+    const lastUserMsg = callAtIter2.messages[callAtIter2.messages.length - 1];
+    const hasTextBlock = Array.isArray(lastUserMsg.content)
+      ? lastUserMsg.content.some((b) => b.type === 'text' && /PARE de explorar/i.test(b.text))
+      : false;
+    expect(hasTextBlock).toBe(false);
   });
 
   test('JSON malformado no texto → BAD_LLM_OUTPUT', async () => {
