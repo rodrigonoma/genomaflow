@@ -58,8 +58,12 @@ async function classifyModality(imageBase64, imageMeta, rawBuffer = null) {
   if (!imageBase64) return null;
   const mediaType = rawBuffer ? detectImageMime(rawBuffer) : 'image/png';
   try {
+    // Classificação trivial (1 palavra). Haiku 4.5 suporta vision e é
+    // 3-4x mais barato que Sonnet — adequado pra tarefas categoriais
+    // simples em fallback (DICOM header é a fonte primária). Se Haiku
+    // regredir qualidade em prod, reverter pra MODELS.VISION.
     const response = await client.messages.create({
-      model: MODELS.VISION,
+      model: MODELS.UTILITY,
       max_tokens: 20,
       messages: [{
         role: 'user',

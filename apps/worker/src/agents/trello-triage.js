@@ -121,7 +121,17 @@ ${card.desc || '(sem descrição)'}`;
         client.messages.create({
           model: MODEL,
           max_tokens: MAX_TOKENS,
-          system: SYSTEM_PROMPT,
+          // Prompt caching estático: tools + system viram prefixo cacheável.
+          // Render order da API é tools → system → messages, então marker no
+          // último bloco do system cacheia ambos juntos.
+          // ⚠️ Sonnet 4.6 exige prefixo ≥ 2048 tokens pra realmente cachear;
+          // se prefixo for menor, é no-op (não cobra extra). Métricas no log
+          // (cache=write/read) permitem auditar em prod se realmente kicka.
+          system: [{
+            type: 'text',
+            text: SYSTEM_PROMPT,
+            cache_control: { type: 'ephemeral' },
+          }],
           tools: tools.getToolSchemas({ readOnly: true }),
           messages,
         }),
@@ -131,7 +141,7 @@ ${card.desc || '(sem descrição)'}`;
       console.error(`[trello-triage] iter ${i + 1} FAIL after ${Date.now() - t0}ms: ${err.message}`);
       throw err;
     }
-    console.log(`[trello-triage] iter ${i + 1} OK in ${Date.now() - t0}ms stop=${resp.stop_reason} usage=in${resp.usage?.input_tokens}/out${resp.usage?.output_tokens}`);
+    console.log(`[trello-triage] iter ${i + 1} OK in ${Date.now() - t0}ms stop=${resp.stop_reason} usage=in${resp.usage?.input_tokens}/out${resp.usage?.output_tokens} cache=write${resp.usage?.cache_creation_input_tokens || 0}/read${resp.usage?.cache_read_input_tokens || 0}`);
 
     totalIn += resp.usage?.input_tokens || 0;
     totalOut += resp.usage?.output_tokens || 0;
@@ -151,6 +161,15 @@ ${card.desc || '(sem descrição)'}`;
           tool_use_id: block.id,
           content: typeof result === 'string' ? result : JSON.stringify(result).slice(0, 5000),
         });
+      }
+      // Sliding cache breakpoint: marca o último tool_result da iter atual,
+      // limpa marker das iters anteriores. Conversation cresce ~1-3KB/iter
+      // (assistant tool_use + user tool_result), então após 2-3 iters o
+      // prefixo total cruza o mínimo de 2048 tokens e cacheia. Limit da
+      // API é 4 breakpoints por request — mantemos 2 (system + sliding).
+      _stripCacheControl(messages);
+      if (toolResults.length > 0) {
+        toolResults[toolResults.length - 1].cache_control = { type: 'ephemeral' };
       }
       messages.push({ role: 'assistant', content: resp.content });
       // Convergence pressure: nas últimas 3 iters, anexa text block no
@@ -197,6 +216,24 @@ ${card.desc || '(sem descrição)'}`;
     tokens_input: totalIn,
     tokens_output: totalOut,
   });
+}
+
+/**
+ * Remove cache_control de TODOS os blocos em todas as mensagens.
+ * Usado pra sliding breakpoint: limpa marker antigo antes de adicionar
+ * o novo no fim da iter atual. Sem isso, acumularia markers e estouraria
+ * o limite de 4 breakpoints por request da API Anthropic.
+ */
+function _stripCacheControl(messages) {
+  for (const msg of messages) {
+    if (Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (block && typeof block === 'object' && 'cache_control' in block) {
+          delete block.cache_control;
+        }
+      }
+    }
+  }
 }
 
 async function _executeTool(name, input, repoRoot) {

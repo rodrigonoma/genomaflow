@@ -15,7 +15,11 @@ const Anthropic = require('@anthropic-ai/sdk').default;
 const MODELS = require('../config/models');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000 });
-const MODEL = MODELS.VISION;
+// Vision usado para OCR de laudo impresso (extração de texto longa
+// e estruturada → exige Sonnet pra qualidade). Classify é tarefa
+// trivial de 1 palavra → Haiku 4.5 economiza ~75% sem perda prática.
+const VISION_MODEL = MODELS.VISION;
+const CLASSIFY_MODEL = MODELS.UTILITY;
 
 /**
  * Classifica o conteúdo da imagem.
@@ -26,7 +30,7 @@ const MODEL = MODELS.VISION;
 async function classifyImageContent(imageBase64, mediaType) {
   try {
     const response = await client.messages.create({
-      model: MODEL,
+      model: CLASSIFY_MODEL,
       max_tokens: 30,
       messages: [{
         role: 'user',
@@ -60,7 +64,7 @@ async function classifyImageContent(imageBase64, mediaType) {
  */
 async function ocrLabReport(imageBase64, mediaType) {
   const response = await client.messages.create({
-    model: MODEL,
+    model: VISION_MODEL,
     max_tokens: 4000,
     messages: [{
       role: 'user',
