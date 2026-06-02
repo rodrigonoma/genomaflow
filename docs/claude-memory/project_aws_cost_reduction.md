@@ -142,31 +142,55 @@ Após smoke browser OK, deletado tudo do GenomaFlow que estava ocioso:
   Zoho MX/TXT/DKIM, DMARC, NS, SOA. SES DKIM CNAMEs ficaram órfãos mas inofensivos.
 - Snapshot RDS `pre-shutdown-vps-migration-20260602` (20GB, available) — retido pra rollback emergencial
 
-**Auditty — deletado (escolha do usuário: só ALB + Redis):**
-- ALB `auditt-Alb16-YYOCUwtpnbGF` + 4 target groups
-- ElastiCache `str143vhbl98q59y`
-- Stack `auditty-staging-redis`
+**Auditty — deletado COMPLETAMENTE (decisão final do usuário 2026-06-02 ~17:50 UTC):**
 
-**Auditty — preservado (escolha do usuário):**
-- ECS cluster + services (em desired=0)
-- RDS `auditty-staging-rds-...` (stopped)
-- Stacks `auditty-staging-{monitoring,ecs,rds,vpc}`, `auditty-ecr`
+Usuário decidiu deletar tudo após "estou executando localmente para terminar
+o desenvolvimento. Após o término irei decidir onde hospedar."
+
+- ALB `auditt-Alb16-YYOCUwtpnbGF` + 4 target groups
+- ElastiCache `str143vhbl98q59y` (Redis)
+- ECS cluster `auditty-staging` + 5 services (glitchtip, api, worker, web, admin)
+- RDS `auditty-staging-rds-postgres9dc8bb04-antvpzumwqnl` + snapshots automáticos
 - ECR repos `auditty/{api,worker,web,admin}`
-- S3 `auditty-staging-documents`
-- Stack auditty-staging-ecs tem **drift** (ALB removido fora do CFN). Próximo cdk deploy do auditty vai detectar e recriar o ALB.
+- S3 bucket `auditty-staging-documents`
+- 1 Secrets Manager `/auditty/staging/rds-credentials`
+- 13 SSM SecureString `/auditty/{prod,staging,production}/*`
+- 5 CloudFormation stacks: `auditty-staging-{monitoring,ecs,rds,vpc}`, `auditty-ecr`
+  - Stack `auditty-staging-rds` precisou `--retain-resources` no Postgres+Secret
+    porque CFN tentou deletar o Secrets Manager secret que já havia sido
+    deletado manualmente via aws cli (`ResourceNotFoundException`)
+
+**Auditty — preservado (segurança):**
+- Snapshot manual `auditty-final-pre-delete-20260602` (20GB, available)
+  copiado de snapshot automático `rds:...2026-06-02-10-21` antes do delete.
+  Retido pra eventual restauração caso Rodrigo decida voltar pra AWS.
 
 ### Custo final (Junho 2026 em diante)
 
 | Item | Mensal |
 |---|---:|
 | VPS Hostinger KVM 4 (4 vCPU, 15GB RAM, 191GB SSD) | R$ 129 (~USD 25) |
-| AWS Route 53 hosted zone | USD 0,50 |
+| AWS Route 53 hosted zone `genomaflow.com.br` | USD 0,50 |
 | AWS Chime SDK Meetings (per-meeting) | ~USD 0,20 |
-| AWS RDS snapshot retido (20GB, USD 0,02/GB/mês) | USD 0,40 |
-| AWS Auditty residual (RDS storage stopped + ECR + S3 + VPC sem ALB) | ~USD 4-5 |
-| **Total mensal** | **~USD 30-32** |
+| AWS RDS 2 snapshots manuais retidos (40GB total, USD 0,02/GB/mês) | USD 0,80 |
+| AWS CDK assets (ECR + S3 toolkit, ~10MB) | <USD 0,10 |
+| **Total mensal** | **~USD 27** |
 
-Vs AWS original (USD 268,20/mês fatura maio 2026): **economia ~USD 236-238/mês (~88-89%)**.
+Vs AWS original (USD 268,20/mês fatura maio 2026): **economia ~USD 241/mês (~90%)** = ~BRL 1.215/mês.
+
+### Estado AWS final pós-cleanup
+
+Só restam na conta `981207388012`:
+- Stack `genomaflow-dns` (Route 53 hosted zone Z07483541PB5S8YMKZYX1 com 16 records)
+- Stack `CDKToolkit` (bootstrap)
+- 1 ECR `cdk-hnb659fds-container-assets-*` (vazio, ~kb)
+- 1 S3 `cdk-hnb659fds-assets-*` (assets CDK)
+- 1 SSM `/cdk-bootstrap/hnb659fds/version`
+- 2 snapshots manuais RDS (genomaflow + auditty pre-delete, 20GB cada)
+- IAM users (auditty-deploy ainda com AdminAccess — TODO rotacionar)
+
+ECS, RDS, ElastiCache, ALB, EFS, Secrets Manager (não-CDK), Application secrets em SSM,
+CloudWatch logs, SNS topics, SES Configuration Sets, ACM certs próprios — **tudo deletado.**
 
 ### Pendências futuras
 
