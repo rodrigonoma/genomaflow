@@ -1,8 +1,6 @@
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-
-const BUCKET = process.env.S3_BUCKET || 'genomaflow-uploads-prod';
-const client = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
+const { client, BUCKET } = require('./s3-client');
 
 async function uploadFile(key, buffer, contentType) {
   await client.send(new PutObjectCommand({

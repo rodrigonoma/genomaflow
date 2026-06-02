@@ -1,0 +1,106 @@
+# Caddy reverse proxy + auto Let's Encrypt para a stack GenomaFlow.
+#
+# Substitui o ALB AWS. Caddy faz challenge HTTP-01 automaticamente nos certs
+# (renova ~60 dias antes da expiração) e termina TLS na porta 443. HTTP/3
+# (QUIC) habilitado por padrão.
+#
+# Subdomínios:
+#   genomaflow.com.br + www  → web (nginx serve landing)
+#   app.*                     → web (nginx serve Angular SPA) + /api/* → api
+#   s3.*                      → MinIO S3 API (presigned URLs apontam aqui)
+#   minio-console.*           → MinIO admin console (uso interno)
+
+{
+    # Email pra avisos do Let's Encrypt (cert prestes a expirar, etc).
+    # Trocar pelo email do administrador antes de subir em prod.
+    email admin@genomaflow.com.br
+
+    # Servers TLS modernos. Caddy default já é seguro mas seta explícito.
+    servers {
+        protocols h1 h2 h3
+    }
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# Landing apex + www
+# ─────────────────────────────────────────────────────────────────────
+genomaflow.com.br, www.genomaflow.com.br {
+    encode zstd gzip
+    reverse_proxy web:80 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+    log {
+        output stdout
+        format console
+    }
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# App principal: Angular SPA + API no mesmo host (sem CORS).
+# Ordem importa: /api/* MATCHA primeiro porque é mais específico.
+# WebSocket upgrade headers passados via header_up.
+# ─────────────────────────────────────────────────────────────────────
+app.genomaflow.com.br, api.genomaflow.com.br {
+    encode zstd gzip
+
+    handle /api/* {
+        reverse_proxy api:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            # WebSocket /api/ws — sem timeout pra manter chat conectado
+            transport http {
+                read_timeout 5m
+                write_timeout 5m
+            }
+        }
+    }
+
+    handle {
+        reverse_proxy web:80 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# MinIO S3 endpoint (público — presigned URLs apontam pra cá).
+# Acesso PUT/GET autenticado via signature S3-V4. Sem signature = 403.
+# ─────────────────────────────────────────────────────────────────────
+s3.genomaflow.com.br {
+    reverse_proxy minio:9000 {
+        header_up Host {host}
+        # MinIO precisa do Host header literal pra signature funcionar.
+    }
+    log {
+        output stdout
+        format console
+    }
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# MinIO Console (admin) — pra gerenciar buckets/usuários via browser.
+# Em prod, considere restringir por IP via @internal matcher:
+#   @internal { remote_ip 1.2.3.4 }
+#   handle @internal { reverse_proxy minio:9001 }
+#   handle { respond 403 }
+# ─────────────────────────────────────────────────────────────────────
+minio-console.genomaflow.com.br {
+    reverse_proxy minio:9001
+    log {
+        output stdout
+        format console
+    }
+}

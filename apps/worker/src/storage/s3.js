@@ -1,7 +1,5 @@
-const { S3Client, GetObjectCommand, DeleteObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
-
-const BUCKET = process.env.S3_BUCKET || 'genomaflow-uploads-prod';
-const client = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
+const { GetObjectCommand, DeleteObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { client, BUCKET } = require('./s3-client');
 
 async function downloadFile(key) {
   const res = await client.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
