@@ -116,14 +116,65 @@ usuário comprou VPS Hostinger (R$ 129/mês = ~USD 25). Migração híbrida:
 Comparado com AWS pré-Onda-2 (USD 268/mês): **economia de ~USD 240/mês
 (BRL 1.200/mês = ~90%)**.
 
-### Próximos passos pendentes
-- [ ] Pós-7d-estável: deletar ALB (USD 22/mês), ElastiCache (USD 12), VPC
-- [ ] Pós-30d-estável: deletar RDS final (após snapshot retido), S3 bucket
-- [ ] Criar IAM user dedicado `genomaflow-vps-chime` + rotacionar `auditty-deploy`
-- [ ] Trocar senha root SSH antiga (já inválida pra SSH mas exposta no chat)
-- [ ] Migrar zona Route 53 → Hostinger DNS (sem pressa)
-- [ ] Configurar backup automatizado pro Backblaze B2 (cron já existe em `/etc/cron.d/genomaflow-backup`)
-- [ ] Atualizar webhooks externos pra novos hosts: Stripe, Z-API (já mesma URL — só DNS mudou)
+### Cleanup AWS final (aplicado 2026-06-02 ~17:30 UTC)
+
+Após smoke browser OK, deletado tudo do GenomaFlow que estava ocioso:
+
+**GenomaFlow — deletados:**
+- ECS cluster + 3 services (api/worker/web) + task definitions
+- ALB `genoma-Alb16-8IjuSHO6N1Ng` + 2 target groups
+- ACM cert wildcard `*.genomaflow.com.br` (Caddy gera novos via Let's Encrypt)
+- EFS `fs-07e76c09d3a1eb588`
+- RDS instance + 25 snapshots automáticos + snapshot manual `pre-cost-onda2`
+- ElastiCache replication group `strqk2w1fqk2g68`
+- S3 bucket `genomaflow-uploads-prod`
+- ECR repos `genomaflow/api`, `/worker`, `/web` (21 imagens)
+- 3 Secrets Manager: `/genomaflow/prod/{rds-credentials,smtp-password,master-credentials}`
+- 17 SSM SecureString parameters `/genomaflow/prod/*`
+- CloudWatch log group `/genomaflow/prod`
+- SNS topic `genomaflow-ses-events` + SES Configuration Set `genomaflow-events`
+- IAM roles ECS (ExecRole, TaskRole)
+- 5 CloudFormation stacks: `genomaflow-{ecs,rds,redis,vpc,ecr}`
+
+**GenomaFlow — preservados (intencional):**
+- Stack `genomaflow-dns` (Route 53 hosted zone `Z07483541PB5S8YMKZYX1`) — necessário pros A records `2.25.163.251`
+- 16 records DNS: A records (genomaflow, www, app, api, s3, minio-console),
+  Zoho MX/TXT/DKIM, DMARC, NS, SOA. SES DKIM CNAMEs ficaram órfãos mas inofensivos.
+- Snapshot RDS `pre-shutdown-vps-migration-20260602` (20GB, available) — retido pra rollback emergencial
+
+**Auditty — deletado (escolha do usuário: só ALB + Redis):**
+- ALB `auditt-Alb16-YYOCUwtpnbGF` + 4 target groups
+- ElastiCache `str143vhbl98q59y`
+- Stack `auditty-staging-redis`
+
+**Auditty — preservado (escolha do usuário):**
+- ECS cluster + services (em desired=0)
+- RDS `auditty-staging-rds-...` (stopped)
+- Stacks `auditty-staging-{monitoring,ecs,rds,vpc}`, `auditty-ecr`
+- ECR repos `auditty/{api,worker,web,admin}`
+- S3 `auditty-staging-documents`
+- Stack auditty-staging-ecs tem **drift** (ALB removido fora do CFN). Próximo cdk deploy do auditty vai detectar e recriar o ALB.
+
+### Custo final (Junho 2026 em diante)
+
+| Item | Mensal |
+|---|---:|
+| VPS Hostinger KVM 4 (4 vCPU, 15GB RAM, 191GB SSD) | R$ 129 (~USD 25) |
+| AWS Route 53 hosted zone | USD 0,50 |
+| AWS Chime SDK Meetings (per-meeting) | ~USD 0,20 |
+| AWS RDS snapshot retido (20GB, USD 0,02/GB/mês) | USD 0,40 |
+| AWS Auditty residual (RDS storage stopped + ECR + S3 + VPC sem ALB) | ~USD 4-5 |
+| **Total mensal** | **~USD 30-32** |
+
+Vs AWS original (USD 268,20/mês fatura maio 2026): **economia ~USD 236-238/mês (~88-89%)**.
+
+### Pendências futuras
+
+- [ ] Criar IAM user dedicado `genomaflow-vps-chime` (policy mínima) + rotacionar `auditty-deploy` (AdminAccess exposto no chat)
+- [ ] Configurar backup automatizado pro Backblaze B2 (cron `/etc/cron.d/genomaflow-backup` já existe)
+- [ ] Migrar zona Route 53 → Hostinger DNS (economia USD 0,50/mês — sem pressa)
+- [ ] Decisão sobre Auditty: manter parado ou deletar tudo
+- [ ] Quando Route 53 sair, deletar SES DKIM CNAMEs órfãos (3 CNAMEs + ACM validation CNAME órfão)
 
 ## Descobertas extras — não-genomaflow na conta AWS
 
