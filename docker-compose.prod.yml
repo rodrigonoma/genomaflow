@@ -191,12 +191,14 @@ services:
   redis:
     image: redis:7-alpine
     container_name: genomaflow-redis
+    # BullMQ exige maxmemory-policy=noeviction (filas não podem perder jobs).
+    # Sessões de chat (TTL 2h) usam expiração nativa, não dependem de eviction.
     command: >
       redis-server
       --save 60 1
       --loglevel warning
       --maxmemory 1gb
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy noeviction
     volumes:
       - redisdata:/data
     restart: unless-stopped
