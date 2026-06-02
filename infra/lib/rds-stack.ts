@@ -29,7 +29,13 @@ export class RdsStack extends cdk.Stack {
       credentials: rds.Credentials.fromGeneratedSecret('genomaflow', {
         secretName: '/genomaflow/prod/rds-credentials',
       }),
-      multiAz: true,
+      // Single-AZ na Onda 2 de redução de custo (2026-06-01) — economiza ~50%
+      // do custo RDS. Trade-off: perdemos failover automático (RTO ~10min via
+      // restore de snapshot vs <60s de Multi-AZ). Snapshot diário + 7 dias de
+      // retenção dão PITR pra recovery; risco de downtime extendido em caso
+      // de falha de AZ é aceito pra MVP. Reativar Multi-AZ assim que tiver
+      // SLA de uptime contratado com clientes que justifique +USD 20/mês.
+      multiAz: false,
       allocatedStorage: 20,
       storageType: rds.StorageType.GP2,
       backupRetention: cdk.Duration.days(30),

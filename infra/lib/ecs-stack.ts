@@ -540,17 +540,42 @@ export class EcsStack extends cdk.Stack {
     });
 
     // ── ECS Services ──
+    // Onda 2 redução de custo: desiredCount 2→1 + autoscaling 1→3 baseado
+    // em CPU/Memory target tracking. Baseline single task economiza ~$31/mês.
+    // Em pico, scale-out (~60s) absorvido pelo circuit breaker do ECS.
+    // minHealthyPercent: 100 garante que durante deploy de nova revisão o
+    // ECS sobe a nova ANTES de matar a velha (evita janela de 0 task running).
     const apiService = new ecs.FargateService(this, 'ApiService', {
       cluster,
       taskDefinition:    apiTask,
       serviceName:       'genomaflow-api',
-      desiredCount:      2,
+      desiredCount:      1,
+      minHealthyPercent: 100,
+      maxHealthyPercent: 200,
       securityGroups:    [sgEcs],
       assignPublicIp:    true, // necessário sem NAT gateway para pull do ECR
       vpcSubnets:        { subnetType: ec2.SubnetType.PUBLIC },
       circuitBreaker:    { enable: true, rollback: true },
     });
     apiService.attachToApplicationTargetGroup(apiTg);
+
+    // Application Autoscaling: target tracking em CPU 70% e Memory 80%.
+    // scaleOutCooldown agressivo (60s) pra reagir rápido a pico; scaleIn
+    // generoso (300s) pra evitar flapping.
+    const apiScaling = apiService.autoScaleTaskCount({
+      minCapacity: 1,
+      maxCapacity: 3,
+    });
+    apiScaling.scaleOnCpuUtilization('CpuScaling', {
+      targetUtilizationPercent: 70,
+      scaleInCooldown:  cdk.Duration.seconds(300),
+      scaleOutCooldown: cdk.Duration.seconds(60),
+    });
+    apiScaling.scaleOnMemoryUtilization('MemScaling', {
+      targetUtilizationPercent: 80,
+      scaleInCooldown:  cdk.Duration.seconds(300),
+      scaleOutCooldown: cdk.Duration.seconds(60),
+    });
 
     new ecs.FargateService(this, 'WorkerService', {
       cluster,
@@ -563,11 +588,16 @@ export class EcsStack extends cdk.Stack {
       circuitBreaker: { enable: true, rollback: true },
     });
 
+    // Onda 2 redução de custo: desiredCount 2→1. nginx servindo Angular
+    // estático em ECS tem footprint trivial — 1 task é suficiente.
+    // minHealthyPercent: 100 mantém continuidade durante deploys.
     const webService = new ecs.FargateService(this, 'WebService', {
       cluster,
       taskDefinition: webTask,
       serviceName:    'genomaflow-web',
-      desiredCount:   2,
+      desiredCount:   1,
+      minHealthyPercent: 100,
+      maxHealthyPercent: 200,
       securityGroups: [sgEcs],
       assignPublicIp: true,
       vpcSubnets:     { subnetType: ec2.SubnetType.PUBLIC },
