@@ -39,10 +39,91 @@ Engenheiro/Arquiteto/PO/UX/Eng. Dados/DBA — trade-offs explicitados em cada on
 **Mudanças:** Compute Savings Plan 1y no-upfront (~USD 0.04/h commit), RDS RI db.t4g.micro 1y NU, ElastiCache RN cache.t4g.micro 1y NU.
 **Economia projetada:** USD 22-25/mês.
 
-### Onda 4 — Angular S3+CloudFront, deletar Web ECS (PENDENTE)
+### Onda 4 — Angular S3+CloudFront, deletar Web ECS (CANCELADA)
 **Branch:** `perf/cost-reduction-wave-4` (7497bbf) — pronta mas NÃO aplicada.
-**Mudanças:** Novo `static-site-stack.ts` (S3 + CloudFront com /api/* origin pro ALB), deploy-web reescrito (build Angular + sync S3 + CF invalidate), ARecord app.* migrado de ALB pro CloudFront.
-**Economia projetada:** USD 25/mês.
+**Status:** SUPERADA pela migração VPS Hostinger (ver seção abaixo). Branch fica
+arquivada como referência caso volte pra AWS.
+
+---
+
+## MIGRAÇÃO COMPLETA PRA VPS HOSTINGER (2026-06-02)
+
+**Branch:** `feat/vps-migration` (commit `73e39d0`).
+
+A decisão de cortar 50% da AWS via Ondas 1-4 virou irrelevante quando o
+usuário comprou VPS Hostinger (R$ 129/mês = ~USD 25). Migração híbrida:
+
+- **VPS Hostinger BR** (4 vCPU EPYC, 15GB RAM, 191GB SSD, Ubuntu 24.04):
+  - Caddy (TLS Let's Encrypt automático)
+  - api + worker + web (Docker containers)
+  - PostgreSQL 15 + pgvector
+  - Redis 7 (noeviction policy pra BullMQ)
+  - MinIO (S3-compatible)
+- **AWS residual** (apenas pra Chime SDK Meetings):
+  - IAM user com policy mínima
+  - Sem ECS, RDS, ElastiCache, ALB, S3, ECR
+
+### O que aplicado em 2026-06-02
+- VPS bootstrap: swap 4GB, ufw, fail2ban, Docker, unattended-upgrades
+- SSH hardening: chave ed25519, senha root nova, PasswordAuthentication desabilitado
+- 17 segredos coletados do AWS SSM, RDS creds do Secrets Manager
+- `.env` montado e copiado pra `/opt/genomaflow/.env`
+- Stack subiu (7 containers healthy)
+- pg_dump RDS via ECS task one-shot → S3 → VPS (RDS estava em PRIVATE_ISOLATED, sem rota externa)
+- pg_restore: 12 tenants, 13 users, 5 subjects, pgvector ativa
+- S3 → MinIO via `mc mirror`: 26MB em 45 objetos
+- Route 53 cutover: A records de Alias ALB pra A simples → 2.25.163.251
+- Caddy obteve certs Let's Encrypt em ~1min após DNS propagar
+- AWS desligada parcial (2026-06-02): ECS desired=0, RDS stopped, snapshot
+  `pre-shutdown-vps-migration-20260602` preservado
+
+### Mudanças mínimas no código
+- `apps/api/src/storage/s3-client.js` + `apps/worker/src/storage/s3-client.js`:
+  novo helper com `S3_ENDPOINT` customizável (MinIO/R2/B2). Fallback AWS S3
+  nativo quando ENDPOINT vazio (preserva compat com pipeline ECS).
+- Refactor: 4 lugares onde S3Client era instanciado direto agora importam o
+  helper (`apps/api/src/storage/s3.js`, `apps/worker/src/storage/s3.js`,
+  `apps/api/src/services/aesthetic-s3.js`, `apps/api/src/routes/video.js`).
+- Mailer: zero mudança (`apps/api/src/mailer/index.js` já tem branching
+  automático SMTP/SES via `SMTP_HOST` env).
+- `apps/web/Dockerfile.compose` (NOVO): context na raiz pra incluir
+  `apps/landing/`. Dockerfile original preserva pipeline ECS.
+- Infra: `docker-compose.prod.yml`, `Caddyfile`, `scripts/vps-setup.sh`,
+  `scripts/migrate-data.sh`, `scripts/backup-pg.sh`, `.env.vps.template`.
+
+### Limpeza adicional aplicada
+- `auditty-staging` (projeto separado do GenomaFlow): 5 ECS services
+  desired=0, RDS stopped. Economia ~USD 50-80/mês.
+- 3 EFS órfãos deletados.
+- IAM user `auditty-deploy` (AdministratorAccess) reusado temporariamente
+  pra Chime SDK na VPS. **TODO:** criar IAM user dedicado `genomaflow-vps-chime`
+  com policy mínima + rotacionar `auditty-deploy`.
+
+### DNS
+- Cutover Route 53 (zone `Z07483541PB5S8YMKZYX1`): Alias ALB → A 2.25.163.251
+- TTL: 60s
+- 6 records: genomaflow.com.br, www, app, api, s3, minio-console
+- Hostinger DNS planejado pra fase 2 (sem pressa) — quando migrar zona
+  pra Hostinger, deletar a zona Route 53. Custo Route 53 atual: USD 0.50/mês.
+
+### Custo após migração
+| Item | Mensal |
+|---|---:|
+| VPS Hostinger KVM 4 | R$ 129 (~USD 25) |
+| AWS Chime + Route 53 (residual) | ~USD 1 |
+| **Total estimado** | **~USD 26/mês** |
+
+Comparado com AWS pré-Onda-2 (USD 268/mês): **economia de ~USD 240/mês
+(BRL 1.200/mês = ~90%)**.
+
+### Próximos passos pendentes
+- [ ] Pós-7d-estável: deletar ALB (USD 22/mês), ElastiCache (USD 12), VPC
+- [ ] Pós-30d-estável: deletar RDS final (após snapshot retido), S3 bucket
+- [ ] Criar IAM user dedicado `genomaflow-vps-chime` + rotacionar `auditty-deploy`
+- [ ] Trocar senha root SSH antiga (já inválida pra SSH mas exposta no chat)
+- [ ] Migrar zona Route 53 → Hostinger DNS (sem pressa)
+- [ ] Configurar backup automatizado pro Backblaze B2 (cron já existe em `/etc/cron.d/genomaflow-backup`)
+- [ ] Atualizar webhooks externos pra novos hosts: Stripe, Z-API (já mesma URL — só DNS mudou)
 
 ## Descobertas extras — não-genomaflow na conta AWS
 
