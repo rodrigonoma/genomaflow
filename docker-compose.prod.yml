@@ -135,8 +135,11 @@ services:
   # ─────────────────────────────────────────────────────────────────────
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      # Context = raiz do repo pra conseguir COPY apps/landing.
+      # Dockerfile.compose é dedicado a esse setup (Dockerfile original
+      # do GitHub Actions continua válido pra deploy ECS).
+      context: .
+      dockerfile: apps/web/Dockerfile.compose
     image: genomaflow/web:latest
     container_name: genomaflow-web
     restart: unless-stopped
