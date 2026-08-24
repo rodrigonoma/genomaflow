@@ -87,7 +87,13 @@ services:
     networks:
       - genomaflow
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/auth/me"]
+      # 127.0.0.1, NÃO localhost: localhost resolve ::1 primeiro e a API
+      # escuta em IPv4 — dá "connection refused" com a aplicação de pé.
+      # /api/health é público e não toca em banco (ver src/routes/health.js):
+      # reiniciar a API não conserta Postgres fora do ar.
+      # Até 24/08/2026 isto apontava pra /api/auth/me, que exige token: o
+      # contêiner ficou "unhealthy" por 6 dias com a API funcionando.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -146,7 +152,9 @@ services:
     networks:
       - genomaflow
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      # A rota /health do nginx existe e responde "ok" — o contêiner aparecia
+      # unhealthy só porque `localhost` resolvia ::1. Ver nota no api acima.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
       interval: 30s
       timeout: 5s
       retries: 3

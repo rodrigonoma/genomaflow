@@ -73,6 +73,7 @@ app.register(require('./plugins/pubsub'));
 const API_PREFIX = process.env.API_PREFIX || '';
 
 app.register((fastify, _opts, done) => {
+  fastify.register(require('./routes/health'),      { prefix: '' });
   fastify.register(require('./routes/auth'),        { prefix: '/auth' });
   fastify.register(require('./routes/auth-email'),  { prefix: '/auth' });
   fastify.register(require('./routes/patients'),    { prefix: '/patients' });
