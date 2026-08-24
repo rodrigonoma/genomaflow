@@ -26,7 +26,7 @@
 # ─────────────────────────────────────────────────────────────────────
 genomaflow.com.br, www.genomaflow.com.br {
     encode zstd gzip
-    reverse_proxy web:80 {
+    reverse_proxy genomaflow-web:80 {
         header_up Host {host}
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
@@ -47,7 +47,7 @@ app.genomaflow.com.br, api.genomaflow.com.br {
     encode zstd gzip
 
     handle /api/* {
-        reverse_proxy api:3000 {
+        reverse_proxy genomaflow-api:3000 {
             header_up Host {host}
             header_up X-Real-IP {remote_host}
             header_up X-Forwarded-For {remote_host}
@@ -61,7 +61,7 @@ app.genomaflow.com.br, api.genomaflow.com.br {
     }
 
     handle {
-        reverse_proxy web:80 {
+        reverse_proxy genomaflow-web:80 {
             header_up Host {host}
             header_up X-Real-IP {remote_host}
             header_up X-Forwarded-For {remote_host}
@@ -80,7 +80,7 @@ app.genomaflow.com.br, api.genomaflow.com.br {
 # Acesso PUT/GET autenticado via signature S3-V4. Sem signature = 403.
 # ─────────────────────────────────────────────────────────────────────
 s3.genomaflow.com.br {
-    reverse_proxy minio:9000 {
+    reverse_proxy genomaflow-minio:9000 {
         header_up Host {host}
         # MinIO precisa do Host header literal pra signature funcionar.
     }
@@ -94,11 +94,11 @@ s3.genomaflow.com.br {
 # MinIO Console (admin) — pra gerenciar buckets/usuários via browser.
 # Em prod, considere restringir por IP via @internal matcher:
 #   @internal { remote_ip 1.2.3.4 }
-#   handle @internal { reverse_proxy minio:9001 }
+#   handle @internal { reverse_proxy genomaflow-minio:9001 }
 #   handle { respond 403 }
 # ─────────────────────────────────────────────────────────────────────
 minio-console.genomaflow.com.br {
-    reverse_proxy minio:9001
+    reverse_proxy genomaflow-minio:9001
     log {
         output stdout
         format console
