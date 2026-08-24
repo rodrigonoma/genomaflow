@@ -40,6 +40,7 @@ jobs:
       docs: ${{ steps.out.outputs.docs }}
       infra: ${{ steps.out.outputs.infra }}
       workflow: ${{ steps.out.outputs.workflow }}
+      stack: ${{ steps.out.outputs.stack }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -64,6 +65,12 @@ jobs:
               - 'apps/worker/src/rag/**'
             infra:
               - 'infra/**'
+            # Arquivos que definem COMO a stack roda na VPS. Sem isto, uma
+            # mudanca so no compose (uma env var nova, por exemplo) nao
+            # dispara deploy nenhum e some em silencio.
+            stack:
+              - 'docker-compose.prod.yml'
+              - 'scripts/**'
             workflow:
               - '.github/workflows/**'
 
@@ -75,7 +82,7 @@ jobs:
           FORCA: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_all }}
         run: |
           if [ "$FORCA" = "true" ]; then
-            for k in api worker web migrations infra workflow; do
+            for k in api worker web migrations infra workflow stack; do
               echo "$k=true" >> "$GITHUB_OUTPUT"
             done
             # docs=false de proposito: com api/worker/web em true o job de
@@ -91,6 +98,7 @@ jobs:
               echo "docs=${{ steps.filter.outputs.docs }}"
               echo "infra=${{ steps.filter.outputs.infra }}"
               echo "workflow=${{ steps.filter.outputs.workflow }}"
+              echo "stack=${{ steps.filter.outputs.stack }}"
             } >> "$GITHUB_OUTPUT"
           fi
           echo "--- outputs ---"; cat "$GITHUB_OUTPUT"
@@ -227,6 +235,7 @@ jobs:
        needs.changes.outputs.worker == 'true' ||
        needs.changes.outputs.web == 'true' ||
        needs.changes.outputs.migrations == 'true' ||
+       needs.changes.outputs.stack == 'true' ||
        needs.changes.outputs.workflow == 'true') &&
       (needs.test-api.result    == 'success' || needs.test-api.result    == 'skipped') &&
       (needs.test-worker.result == 'success' || needs.test-worker.result == 'skipped') &&
@@ -272,14 +281,15 @@ jobs:
           WORKER:     ${{ needs.changes.outputs.worker }}
           WEB:        ${{ needs.changes.outputs.web }}
           MIGRATIONS: ${{ needs.changes.outputs.migrations }}
+          STACK:      ${{ needs.changes.outputs.stack }}
         run: |
           # pipefail: sem ele o `| tee` mascara a falha do ssh e o job passa.
           set -o pipefail
           ssh -i ~/.ssh/id_deploy \
               -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
-              "root@$VPS_HOST" "bash -s -- '$SHA' '$API' '$WORKER' '$WEB' '$MIGRATIONS'" <<'REMOTE' | tee /tmp/deploy.log
+              "root@$VPS_HOST" "bash -s -- '$SHA' '$API' '$WORKER' '$WEB' '$MIGRATIONS' '$STACK'" <<'REMOTE' | tee /tmp/deploy.log
           set -euo pipefail
-          SHA="$1"; API="$2"; WORKER="$3"; WEB="$4"; MIGRATIONS="$5"
+          SHA="$1"; API="$2"; WORKER="$3"; WEB="$4"; MIGRATIONS="$5"; STACK="$6"
 
           COMPOSE="docker compose -f docker-compose.prod.yml --env-file .env"
           BRANCH="main"
@@ -309,6 +319,9 @@ jobs:
           if [ "$API" = "true" ] || [ "$MIGRATIONS" = "true" ]; then SERVICES="$SERVICES api"; fi
           if [ "$WORKER" = "true" ]; then SERVICES="$SERVICES worker"; fi
           if [ "$WEB" = "true" ]; then SERVICES="$SERVICES web"; fi
+          # Mudanca no compose vale pros tres: o `up -d` e quem reaplica a
+          # config do servico (env var nova, healthcheck novo, volume novo).
+          if [ "$STACK" = "true" ]; then SERVICES="api worker web"; fi
           SERVICES="${SERVICES# }"
 
           if [ -z "$SERVICES" ]; then
