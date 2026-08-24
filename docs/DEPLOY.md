@@ -20,16 +20,35 @@ A stack migrou de **AWS (ECS Fargate + RDS + ElastiCache + S3 + ALB)** para uma
 | Proxy + TLS | **Caddy** (Let's Encrypt automático) |
 | Contêineres | `genomaflow-{caddy,web,api,worker,postgres,redis,minio}` |
 | Branch em produção | **`feat/vps-migration`** (não é a `main`) |
-| AWS que sobrou | só o **Chime SDK**, para vídeo consulta |
+| AWS que sobrou | **nada funcional** — o Chime SDK era a última dependência e sua credencial foi apagada no cleanup (vídeo consulta desligada) |
 
-### ⚠️ Armadilha nº 1 — o CI ainda aponta para a AWS
+### ~~Armadilha nº 1 — o CI aponta para a AWS~~ — resolvida em 24/08/2026
 
-`.github/workflows/deploy.yml` dispara em **push para `main`** e faz build →
-ECR → ECS. **Esse caminho não existe mais.** Um push para `main` hoje não leva
-nada para produção: no melhor caso falha, no pior gasta tempo e dá a impressão
-de que subiu.
+`.github/workflows/deploy.yml` foi reescrito: os três jobs de ECR/ECS viraram
+um job **`deploy-vps`** por SSH. Os gates de teste e o `concurrency` continuam
+como estavam — só o destino da entrega mudou.
 
-**Enquanto o workflow não for reescrito para a VPS, o deploy é manual** (abaixo).
+⚠️ **Ainda faltam dois passos para o pipeline funcionar de ponta a ponta:**
+
+1. **Cadastrar os segredos** em Settings → Secrets and variables → Actions:
+
+   | Segredo | Valor |
+   |---|---|
+   | `VPS_SSH_KEY` | conteúdo de `~/.ssh/genomaflow_vps` (chave **privada**) |
+   | `VPS_KNOWN_HOSTS` | saída de `ssh-keyscan 2.25.163.251` |
+   | `VPS_HOST` | `2.25.163.251` |
+
+2. **Alinhar a branch da VPS com a `main`** (ver armadilha nº 2).
+
+O job aborta com mensagem explícita se faltar qualquer um — não entrega pela
+metade nem reporta sucesso falso.
+
+**O que o deploy remoto faz, em ordem:** aborta se a VPS estiver numa branch
+diferente da entregue → `git merge --ff-only` (**nunca** `reset --hard`: o
+Caddyfile da VPS está alterado na mão e serve três produtos) → build só do que
+mudou, com `--build-arg CACHEBUST=<sha>` → migrations na imagem recém
+construída **antes** de trocar os contêineres → `up -d` → espera cada
+contêiner ficar `healthy`, com log e falha se não ficar em 5 min.
 
 ### ⚠️ Armadilha nº 2 — produção roda de uma branch de feature
 
@@ -81,7 +100,11 @@ apontar `AWS_SHARED_CREDENTIALS_FILE` para o arquivo dentro do projeto.
 
 ---
 
-## O procedimento (manual, hoje)
+## O procedimento manual (fallback)
+
+Desde 24/08/2026 o caminho normal é o CI (job `deploy-vps`). Este procedimento
+continua valendo para quando o CI estiver indisponível ou para intervenção na
+mão — e é literalmente o que o job faz remotamente.
 
 ```bash
 ssh -i ~/.ssh/genomaflow_vps root@2.25.163.251
@@ -120,59 +143,98 @@ for u in https://genomaflow.com.br https://app.genomaflow.com.br; do
 done
 ```
 
-### ⚠️ Estado em 23/08/2026: o domínio não resolve
+### ⚠️ O domínio não resolve — e a causa foi encontrada em 24/08/2026
 
-`genomaflow.com.br` e `app.genomaflow.com.br` **não têm DNS nenhum** — nem
-registro `A`, nem `NS`. A stack está de pé na VPS há dias, mas **ninguém
-consegue chegar nela pelo nome**.
+`genomaflow.com.br` e `app.genomaflow.com.br` respondem **SERVFAIL** em
+qualquer resolver. A stack está de pé na VPS, mas **ninguém chega nela pelo
+nome**.
 
-O Caddy só emite certificado quando o DNS aponta para a VPS, então enquanto isso
-não for resolvido não há HTTPS. A fase 4 de `docs/vps-migration.md` lista os
-registros necessários.
+**Não é falta de registro `A`. É a delegação apontando para um lugar que
+deixou de existir.** O registro.br continua delegando o domínio para quatro
+nameservers do **Route 53**:
+
+```
+ns-1307.awsdns-35.org   ns-1830.awsdns-36.co.uk
+ns-392.awsdns-49.com    ns-684.awsdns-21.net
+```
+
+A hosted zone foi apagada no cleanup da AWS, então esses servidores hoje
+respondem **`REFUSED`** para o domínio — e RDAP do registro.br confirma:
+
+```
+delegation check ....... 2026-08-21  status: "ns query refused"
+last correct delegation  2026-07-13
+```
+
+Ou seja: **quebrado desde ~13/07/2026**. O cleanup da AWS derrubou o DNS junto
+e ninguém percebeu, porque o produto continuou de pé — só inalcançável.
+
+Para verificar você mesmo:
+
+```bash
+curl -s https://rdap.registro.br/domain/genomaflow.com.br | grep -o '"status":\[[^]]*\]'
+nslookup -type=NS genomaflow.com.br a.dns.br     # o que o TLD .br delega
+```
+
+**⏰ Isto tem prazo.** O certificado do Caddy foi emitido em 02/06 e vale até
+**31/08/2026**. O Caddy só renova depois que o DNS apontar para a VPS —
+passando dessa data, o erro deixa de ser "site não encontrado" e vira "site
+inseguro", que é pior.
+
+**A correção** (decidido em 24/08: hospedar a zona na Hostinger) — criar estes
+seis registros, todos para `2.25.163.251`, e trocar os nameservers no
+registro.br para os da Hostinger:
+
+| Nome | Tipo | Valor |
+|---|---|---|
+| `@` | A | `2.25.163.251` |
+| `www` | A | `2.25.163.251` |
+| `app` | A | `2.25.163.251` |
+| `api` | A | `2.25.163.251` |
+| `s3` | A | `2.25.163.251` |
+| `minio-console` | A | `2.25.163.251` |
+
+São exatamente os domínios que o Caddy da VPS serve — nenhum a mais, nenhum a
+menos.
+
+⚠️ O editor de DNS da Hostinger só funciona depois que o domínio aponta para
+os nameservers dela: crie a zona no hPanel **antes** de trocar o NS, para não
+ficar nenhum minuto sem resposta.
+
+⚠️ Se houver e-mail entrante em `@genomaflow.com.br`, o registro `MX` também
+estava no Route 53 e foi embora — precisa ser recriado na zona nova. O e-mail
+**transacional** (verificação, reset de senha, NPS) sai por SMTP do Zoho e não
+depende de MX aqui.
 
 ---
 
-## ⚠️ O healthcheck da API está quebrado (e mascara pane de verdade)
+## ~~O healthcheck da API está quebrado~~ — corrigido em 24/08/2026
 
-Constatado em 23/08/2026: `genomaflow-api` aparece como **unhealthy** há 6 dias,
-com `FailingStreak` de **17.731** — mas **a API está funcionando**.
-
-```yaml
-# docker-compose.prod.yml (como está hoje)
-test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/auth/me"]
-```
-
-São **dois** defeitos no mesmo comando, e cada um sozinho já reprovaria:
+Ficou 6 dias marcando `unhealthy` com `FailingStreak` de **17.731** enquanto a
+API funcionava normalmente. O comando tinha **dois** defeitos, e cada um
+sozinho já reprovaria:
 
 1. **`localhost` resolve para `::1` primeiro** (IPv6) e a aplicação escuta em
-   IPv4. Resultado: `Connection refused`. Por `127.0.0.1` a API responde
-   normalmente.
-2. **`/api/auth/me` exige autenticação** e devolve **401** sem token. Mesmo pelo
-   IPv4 correto, o `wget` sairia com erro.
+   IPv4 → `Connection refused`.
+2. **`/api/auth/me` exige autenticação** e devolve 401 sem token.
 
-Ou seja: **este healthcheck nunca poderia passar.** E um alarme que está sempre
-vermelho é pior que alarme nenhum — ninguém mais olha, e a pane real chega sem
-avisar.
+Ou seja: nunca poderia passar. E um alarme sempre vermelho é pior que alarme
+nenhum — ninguém mais olha, e a pane real chega sem avisar. O `web` tinha o
+mesmo problema de IPv6 (a rota `/health` do nginx existe e responde `ok`).
 
-**Correção mínima** (não exige mexer no código da aplicação):
+A API agora tem duas rotas públicas (`apps/api/src/routes/health.js`):
 
-```yaml
-healthcheck:
-  # `nc -z` prova que o processo está aceitando conexão. Não prova que a
-  # aplicação está correta, mas é honesto — e infinitamente melhor que um
-  # teste que não tem como passar. Use 127.0.0.1: `localhost` tenta IPv6.
-  test: ["CMD-SHELL", "nc -z 127.0.0.1 3000"]
-  interval: 30s
-  timeout: 5s
-  retries: 3
-```
+| Rota | Para quê |
+|---|---|
+| `GET /api/health` | **liveness** — 200 sempre que o processo responde. **Não** toca em banco nem Redis de propósito: reiniciar a API não conserta Postgres fora do ar, só troca uma pane por duas. É esta que o Docker usa. |
+| `GET /api/health/ready` | **readiness** — 200 só com pg **e** redis vivos, 503 caso contrário, com timeout de 2s por check. Para monitoramento. |
 
-**Correção certa**, quando houver oportunidade: criar um endpoint `/health` que
-responda **200 sem autenticação** e apontar o healthcheck para ele por
-`127.0.0.1`. Hoje esse endpoint **não existe** na API.
+São rotas públicas na borda: a resposta não carrega versão, hostname, env nem
+mensagem de erro — só `status` e os booleanos dos checks. Há teste cobrindo
+exatamente isso.
 
-⚠️ O mesmo cuidado vale para o `web`, que usa
-`http://localhost/health` — vale conferir se essa rota existe de fato.
+⚠️ **A correção só chega à produção no próximo deploy** — os contêineres que
+estão rodando ainda têm o healthcheck antigo.
 
 ---
 
