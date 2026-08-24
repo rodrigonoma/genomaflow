@@ -3,6 +3,15 @@ name: Deploy Production
 on:
   push:
     branches: [main]
+  # Disparo manual: precisa existir para o caso de o deploy ter abortado por
+  # algo externo ao código (VPS numa branch diferente, segredo faltando). Sem
+  # isso, a única forma de repetir uma entrega é um commit vazio.
+  workflow_dispatch:
+    inputs:
+      deploy_all:
+        description: 'Reconstruir api, worker e web mesmo sem mudança de path'
+        type: boolean
+        default: true
 
 # Garantia: somente um deploy ativo por vez. Pushes consecutivos cancelam
 # runs antigas (em fila ou em curso) e mantêm apenas a mais recente.
@@ -24,17 +33,20 @@ jobs:
     name: Detect changed paths
     runs-on: ubuntu-latest
     outputs:
-      api: ${{ steps.filter.outputs.api }}
-      worker: ${{ steps.filter.outputs.worker }}
-      web: ${{ steps.filter.outputs.web }}
-      migrations: ${{ steps.filter.outputs.migrations }}
-      docs: ${{ steps.filter.outputs.docs }}
-      infra: ${{ steps.filter.outputs.infra }}
-      workflow: ${{ steps.filter.outputs.workflow }}
+      api: ${{ steps.out.outputs.api }}
+      worker: ${{ steps.out.outputs.worker }}
+      web: ${{ steps.out.outputs.web }}
+      migrations: ${{ steps.out.outputs.migrations }}
+      docs: ${{ steps.out.outputs.docs }}
+      infra: ${{ steps.out.outputs.infra }}
+      workflow: ${{ steps.out.outputs.workflow }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
+        # No disparo manual não há "commit anterior" com que comparar — o
+        # filtro não roda e os outputs vêm do passo abaixo.
+        if: github.event_name != 'workflow_dispatch'
         with:
           filters: |
             api:
@@ -54,6 +66,34 @@ jobs:
               - 'infra/**'
             workflow:
               - '.github/workflows/**'
+
+      # Consolida os outputs. Num disparo manual com deploy_all, tudo é "true"
+      # e a entrega roda inteira. `migrations=true` é seguro de repetir:
+      # migrate.js registra o que já aplicou em _migrations e pula.
+      - id: out
+        env:
+          FORCA: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_all }}
+        run: |
+          if [ "$FORCA" = "true" ]; then
+            for k in api worker web migrations infra workflow; do
+              echo "$k=true" >> "$GITHUB_OUTPUT"
+            done
+            # docs=false de proposito: com api/worker/web em true o job de
+            # reindex nao roda de qualquer forma, e deixar false evita
+            # confundir quem le o resumo do run.
+            echo "docs=false" >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "api=${{ steps.filter.outputs.api }}"
+              echo "worker=${{ steps.filter.outputs.worker }}"
+              echo "web=${{ steps.filter.outputs.web }}"
+              echo "migrations=${{ steps.filter.outputs.migrations }}"
+              echo "docs=${{ steps.filter.outputs.docs }}"
+              echo "infra=${{ steps.filter.outputs.infra }}"
+              echo "workflow=${{ steps.filter.outputs.workflow }}"
+            } >> "$GITHUB_OUTPUT"
+          fi
+          echo "--- outputs ---"; cat "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Unit test gates — condicionais por componente
