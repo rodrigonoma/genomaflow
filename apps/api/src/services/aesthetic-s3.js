@@ -1,11 +1,8 @@
 'use strict';
 
-const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-
-const REGION = process.env.AWS_REGION || 'us-east-1';
-const BUCKET = process.env.S3_BUCKET || 'genomaflow-uploads-prod';
-const s3 = new S3Client({ region: REGION });
+const { client: s3, BUCKET } = require('../storage/s3-client');
 
 function buildKey({ tenantId, subjectId, photoId, ext = 'jpg' }) {
   return `aesthetic-photos/${tenantId}/${subjectId}/${photoId}.${ext}`;

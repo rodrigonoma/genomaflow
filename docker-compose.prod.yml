@@ -1,0 +1,265 @@
+# Docker Compose stack para deploy na VPS Hostinger (BR).
+#
+# Substitui:
+#   AWS ECS Fargate (3 services) → containers api+worker+web no mesmo host
+#   AWS ALB                      → Caddy (reverse proxy + Let's Encrypt automático)
+#   AWS RDS PostgreSQL 15        → postgres:15 com pgvector via imagem pgvector/pgvector
+#   AWS ElastiCache Redis        → redis:7-alpine
+#   AWS EFS                      → volume Docker `uploads` montado em api+worker
+#   AWS S3                       → MinIO self-host (S3-compatible)
+#   AWS SES                      → SMTP Zoho (mailer já tem fallback nativo)
+#   AWS Secrets Manager / SSM    → arquivo .env na raiz da VPS
+#
+# Permanece na AWS (acessado via SDK + credenciais no .env):
+#   AWS Chime SDK Meetings       → vídeo consulta (custo ~USD 0.20/mês)
+#
+# Pré-requisitos na VPS:
+#   - Docker + Docker Compose v2
+#   - Arquivo .env preenchido (ver .env.vps.template)
+#   - Caddyfile na raiz (apontando pros services internos)
+#   - DNS apontando genomaflow.com.br + app + s3 + minio-console para o IP da VPS
+#
+# Comandos:
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d
+#   docker compose -f docker-compose.prod.yml logs -f api
+#   docker compose -f docker-compose.prod.yml down            # NÃO destrói volumes
+#   docker compose -f docker-compose.prod.yml down -v          # destrói TUDO (cuidado!)
+
+services:
+  # ─────────────────────────────────────────────────────────────────────
+  # Caddy: TLS termination + reverse proxy + Let's Encrypt automático.
+  # Substitui o ALB. Não precisa de certbot manual — Caddy faz HTTP-01
+  # challenge e renovação sozinho. Logs em stdout (capturados via journald).
+  # ─────────────────────────────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: genomaflow-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3 (QUIC)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+      - minio
+    restart: unless-stopped
+    networks:
+      - genomaflow
+
+  # ─────────────────────────────────────────────────────────────────────
+  # API: Fastify + Node 20. Serve /api/* via Caddy.
+  # ─────────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    image: genomaflow/api:latest
+    container_name: genomaflow-api
+    env_file: ./.env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      API_PREFIX: /api
+      # DB interno via docker network (sem SSL — está dentro da rede privada)
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME}"
+      REDIS_URL: redis://redis:6379
+      # Storage interno via MinIO. S3_PUBLIC_URL fica externo (Caddy roteia).
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_URL: https://s3.genomaflow.com.br
+      S3_FORCE_PATH_STYLE: "true"
+      S3_REGION: us-east-1
+      # Consulta por vídeo depende do AWS Chime, cujo IAM user foi apagado no
+      # cleanup da AWS (08/2026) — a credencial devolve UnrecognizedClientException.
+      # Com isto a rota responde 503 explícito e NÃO debita crédito, em vez de
+      # deixar o médico pagar para receber um 500 opaco. Voltar para "true"
+      # quando houver solução de vídeo de verdade.
+      VIDEO_CONSULTATION_ENABLED: "false"
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_started }
+      minio:    { condition: service_started }
+    restart: unless-stopped
+    networks:
+      - genomaflow
+    healthcheck:
+      # 127.0.0.1, NÃO localhost: localhost resolve ::1 primeiro e a API
+      # escuta em IPv4 — dá "connection refused" com a aplicação de pé.
+      # /api/health é público e não toca em banco (ver src/routes/health.js):
+      # reiniciar a API não conserta Postgres fora do ar.
+      # Até 24/08/2026 isto apontava pra /api/auth/me, que exige token: o
+      # contêiner ficou "unhealthy" por 6 dias com a API funcionando.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Worker: BullMQ consumer + ONNX inference.
+  # Mesmo image base + .env do API. Sem porta exposta.
+  # stopTimeout grande pra deixar SIGTERM drenar jobs do BullMQ (graceful).
+  # ─────────────────────────────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: ./apps/worker/Dockerfile
+    image: genomaflow/worker:latest
+    container_name: genomaflow-worker
+    env_file: ./.env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME}"
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_URL: https://s3.genomaflow.com.br
+      S3_FORCE_PATH_STYLE: "true"
+      S3_REGION: us-east-1
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_started }
+      minio:    { condition: service_started }
+    restart: unless-stopped
+    stop_grace_period: 120s
+    networks:
+      - genomaflow
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Web: nginx servindo bundle Angular + landing estática.
+  # Mesma imagem que está no ECS hoje.
+  # ─────────────────────────────────────────────────────────────────────
+  web:
+    build:
+      # Context = raiz do repo pra conseguir COPY apps/landing.
+      # Dockerfile.compose é dedicado a esse setup (Dockerfile original
+      # do GitHub Actions continua válido pra deploy ECS).
+      context: .
+      dockerfile: apps/web/Dockerfile.compose
+    image: genomaflow/web:latest
+    container_name: genomaflow-web
+    restart: unless-stopped
+    networks:
+      - genomaflow
+    healthcheck:
+      # A rota /health do nginx existe e responde "ok" — o contêiner aparecia
+      # unhealthy só porque `localhost` resolvia ::1. Ver nota no api acima.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─────────────────────────────────────────────────────────────────────
+  # PostgreSQL 15 + pgvector (mesma versão do RDS).
+  # shared_preload_libraries em command_line porque ALTER SYSTEM em container
+  # com bind volume não persiste.
+  # ─────────────────────────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: genomaflow-postgres
+    environment:
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+      POSTGRES_DB: "${DB_NAME}"
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c max_connections=200
+      -c shared_buffers=2GB
+      -c effective_cache_size=6GB
+      -c work_mem=16MB
+      -c maintenance_work_mem=512MB
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./apps/api/src/db/migrations:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+    networks:
+      - genomaflow
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Redis 7 — persistência leve (RDB snapshot a cada 60s se 1 chave mudou).
+  # Sessões de chat (TTL 2h) podem ser perdidas em restart, é o trade-off.
+  # ─────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: genomaflow-redis
+    # BullMQ exige maxmemory-policy=noeviction (filas não podem perder jobs).
+    # Sessões de chat (TTL 2h) usam expiração nativa, não dependem de eviction.
+    command: >
+      redis-server
+      --save 60 1
+      --loglevel warning
+      --maxmemory 1gb
+      --maxmemory-policy noeviction
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+    networks:
+      - genomaflow
+
+  # ─────────────────────────────────────────────────────────────────────
+  # MinIO — S3-compatible storage. Substitui o bucket genomaflow-uploads-prod.
+  # API em :9000 (S3 protocol), Console admin em :9001.
+  # Caddy expõe ambos com TLS automático.
+  # Credenciais root vêm do .env — usar credentials separadas (criar via
+  # console) pra app, não usar root key direto.
+  # ─────────────────────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: genomaflow-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+      MINIO_BROWSER_REDIRECT_URL: https://minio-console.genomaflow.com.br
+      MINIO_SERVER_URL: https://s3.genomaflow.com.br
+    volumes:
+      - miniodata:/data
+    restart: unless-stopped
+    networks:
+      - genomaflow
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+  miniodata:
+    driver: local
+  uploads:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+
+networks:
+  genomaflow:
+    driver: bridge
