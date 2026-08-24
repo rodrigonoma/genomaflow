@@ -163,360 +163,170 @@ jobs:
         run: npm run test:integration
 
   # ---------------------------------------------------------------------------
-  # Deploy jobs paralelos — cada componente roda independente.
-  # Antes: 1 job sequencial gastando ~10min. Agora: 3 jobs paralelos ~3-4min.
-  # Cada job só roda se seu path foi tocado.
+  # Deploy na VPS Hostinger (BR) via SSH.
+  #
+  # A produção saiu da AWS em 06/2026 (docs/vps-migration.md). Até 24/08/2026
+  # este workflow ainda fazia build → ECR → ECS: um caminho que não existe
+  # mais. Push na main não levava nada pra produção, e o run verde dava a
+  # impressão contrária — pior que não ter pipeline nenhum.
+  #
+  # Não há registry: a imagem é construída na própria VPS. O primeiro build
+  # leva ~10min; os seguintes reaproveitam camada.
+  #
+  # Segredos necessários (Settings → Secrets and variables → Actions):
+  #   VPS_SSH_KEY      chave privada com acesso root na VPS
+  #   VPS_KNOWN_HOSTS  saída de `ssh-keyscan <ip-da-vps>`
+  #   VPS_HOST         IP da VPS
   # ---------------------------------------------------------------------------
-  deploy-api:
-    name: Deploy API
-    needs: [changes, test-api, integration]
+  deploy-vps:
+    name: Deploy VPS
+    needs: [changes, test-api, test-worker, test-web, integration]
     if: |
       always() &&
-      (needs.changes.outputs.api == 'true' || needs.changes.outputs.migrations == 'true' || needs.changes.outputs.workflow == 'true') &&
-      (needs.test-api.result == 'success' || needs.test-api.result == 'skipped') &&
+      (needs.changes.outputs.api == 'true' ||
+       needs.changes.outputs.worker == 'true' ||
+       needs.changes.outputs.web == 'true' ||
+       needs.changes.outputs.migrations == 'true' ||
+       needs.changes.outputs.workflow == 'true') &&
+      (needs.test-api.result    == 'success' || needs.test-api.result    == 'skipped') &&
+      (needs.test-worker.result == 'success' || needs.test-worker.result == 'skipped') &&
+      (needs.test-web.result    == 'success' || needs.test-web.result    == 'skipped') &&
       (needs.integration.result == 'success' || needs.integration.result == 'skipped')
     runs-on: ubuntu-latest
     environment: production
-    env:
-      AWS_REGION: us-east-1
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            us-east-1
-
-      - name: Login to ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Set image tag
-        run: echo "IMAGE_TAG=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # Cache layers do Docker via GHA cache. Build incremental ~50% mais rápido
-      # quando node_modules/package.json não mudou.
-      - name: Build & push API (cached)
-        uses: docker/build-push-action@v5
-        with:
-          context: apps/api
-          tags: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/api:${{ env.IMAGE_TAG }},${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/api:latest
-          push: true
-          build-args: CACHEBUST=${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
-
-      - name: Update ECS task definition (api)
+      - name: Conferir segredos da VPS
+        env:
+          KEY:   ${{ secrets.VPS_SSH_KEY }}
+          HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          HOST:  ${{ secrets.VPS_HOST }}
         run: |
-          ACCOUNT=${{ secrets.AWS_ACCOUNT_ID }}
-          TAG=${{ env.IMAGE_TAG }}
-          NEW_IMAGE="$ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/genomaflow/api:$TAG"
-
-          TASK_DEF_ARN=$(aws ecs describe-services \
-            --cluster genomaflow --services genomaflow-api \
-            --query 'services[0].taskDefinition' --output text)
-
-          # Upsert env vars que vieram de infra (SES + FRONTEND_URL).
-          NEW_TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition "$TASK_DEF_ARN" \
-            --query 'taskDefinition' --output json | \
-            jq \
-              --arg img "$NEW_IMAGE" \
-              --arg ses_name "SES_FROM_EMAIL" --arg ses_val "noreply@genomaflow.com.br" \
-              --arg fe_name  "FRONTEND_URL"    --arg fe_val  "https://genomaflow.com.br" \
-              'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
-               | .containerDefinitions[0].image = $img
-               | .containerDefinitions[0].environment |= (
-                   map(select(.name != $ses_name and .name != $fe_name)) +
-                   [{name:$ses_name,value:$ses_val},{name:$fe_name,value:$fe_val}]
-                 )')
-
-          NEW_ARN=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEF" \
-            --query 'taskDefinition.taskDefinitionArn' --output text)
-          echo "api → $NEW_ARN"
-
-          aws ecs update-service \
-            --cluster genomaflow --service genomaflow-api \
-            --task-definition "$NEW_ARN" \
-            --query 'service.serviceName' --output text
-
-      - name: Run migrations (if SQL changed)
-        if: needs.changes.outputs.migrations == 'true'
-        run: |
-          CLUSTER="genomaflow"
-          TASK_DEF=$(aws ecs list-task-definitions \
-            --family-prefix genomaflow-prod-migrate \
-            --sort DESC --query "taskDefinitionArns[0]" --output text)
-          SUBNET=$(aws cloudformation describe-stacks --stack-name genomaflow-vpc \
-            --query 'Stacks[0].Outputs[?OutputKey==`PublicSubnet1`].OutputValue' --output text)
-          SG=$(aws cloudformation describe-stacks --stack-name genomaflow-vpc \
-            --query 'Stacks[0].Outputs[?OutputKey==`SgEcsId`].OutputValue' --output text)
-
-          TASK_ARN=$(aws ecs run-task \
-            --cluster "$CLUSTER" --task-definition "$TASK_DEF" \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SG],assignPublicIp=ENABLED}" \
-            --query "tasks[0].taskArn" --output text)
-          echo "Migration task: $TASK_ARN"
-
-          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
-
-          EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" \
-            --query "tasks[0].containers[0].exitCode" --output text)
-
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "❌ Migration falhou (exit $EXIT_CODE)"
-            TASK_ID=$(echo "$TASK_ARN" | awk -F'/' '{print $NF}')
-            aws logs get-log-events \
-              --log-group-name /genomaflow/prod \
-              --log-stream-name "migrate/migrate/$TASK_ID" \
-              --query 'events[*].message' --output text || true
+          missing=""
+          [ -n "$KEY" ]   || missing="$missing VPS_SSH_KEY"
+          [ -n "$HOSTS" ] || missing="$missing VPS_KNOWN_HOSTS"
+          [ -n "$HOST" ]  || missing="$missing VPS_HOST"
+          if [ -n "$missing" ]; then
+            echo "❌ Faltam segredos:$missing"
+            echo "Cadastrar em Settings → Secrets and variables → Actions."
             exit 1
           fi
-          echo "✅ Migration concluída"
 
-      - name: Wait API stable
+      - name: Preparar SSH
         env:
-          AWS_REGION: us-east-1
+          KEY:   ${{ secrets.VPS_SSH_KEY }}
+          HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
         run: |
-          for i in $(seq 1 24); do
-            PENDING=$(aws ecs describe-services --cluster genomaflow --services genomaflow-api \
-              --query 'services[0].pendingCount' --output text)
-            RUNNING=$(aws ecs describe-services --cluster genomaflow --services genomaflow-api \
-              --query 'services[0].runningCount' --output text)
-            DESIRED=$(aws ecs describe-services --cluster genomaflow --services genomaflow-api \
-              --query 'services[0].desiredCount' --output text)
-            echo "API check $i: running=$RUNNING pending=$PENDING desired=$DESIRED"
-            if [ "$PENDING" = "0" ] && [ "$RUNNING" = "$DESIRED" ]; then
-              echo "✅ API estável"; exit 0
-            fi
-            sleep 20
-          done
-          echo "⚠️ Timeout API"; exit 1
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY"   > ~/.ssh/id_deploy   && chmod 600 ~/.ssh/id_deploy
+          # known_hosts vem de segredo, NÃO de ssh-keyscan na hora: keyscan
+          # aceita qualquer chave que responder, o que anula a proteção.
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
 
-  deploy-worker:
-    name: Deploy Worker
-    needs: [changes, test-worker]
-    if: |
-      always() &&
-      (needs.changes.outputs.worker == 'true' || needs.changes.outputs.workflow == 'true') &&
-      (needs.test-worker.result == 'success' || needs.test-worker.result == 'skipped')
-    runs-on: ubuntu-latest
-    environment: production
-    env:
-      AWS_REGION: us-east-1
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            us-east-1
-
-      - name: Login to ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Set image tag
-        run: echo "IMAGE_TAG=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build & push Worker (cached)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: apps/worker/Dockerfile
-          tags: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/worker:${{ env.IMAGE_TAG }},${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/worker:latest
-          push: true
-          build-args: CACHEBUST=${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=worker
-          cache-to: type=gha,mode=max,scope=worker
-
-      - name: Update ECS task definition (worker)
+      - name: Deploy
+        env:
+          VPS_HOST:   ${{ secrets.VPS_HOST }}
+          SHA:        ${{ github.sha }}
+          API:        ${{ needs.changes.outputs.api }}
+          WORKER:     ${{ needs.changes.outputs.worker }}
+          WEB:        ${{ needs.changes.outputs.web }}
+          MIGRATIONS: ${{ needs.changes.outputs.migrations }}
         run: |
-          ACCOUNT=${{ secrets.AWS_ACCOUNT_ID }}
-          TAG=${{ env.IMAGE_TAG }}
-          NEW_IMAGE="$ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/genomaflow/worker:$TAG"
+          ssh -i ~/.ssh/id_deploy \
+              -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
+              "root@$VPS_HOST" "bash -s -- '$SHA' '$API' '$WORKER' '$WEB' '$MIGRATIONS'" <<'REMOTE'
+          set -euo pipefail
+          SHA="$1"; API="$2"; WORKER="$3"; WEB="$4"; MIGRATIONS="$5"
 
-          TASK_DEF_ARN=$(aws ecs describe-services \
-            --cluster genomaflow --services genomaflow-worker \
-            --query 'services[0].taskDefinition' --output text)
+          COMPOSE="docker compose -f docker-compose.prod.yml --env-file .env"
+          BRANCH="main"
+          cd /opt/genomaflow
 
-          NEW_TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition "$TASK_DEF_ARN" \
-            --query 'taskDefinition' --output json | \
-            jq --arg img "$NEW_IMAGE" \
-              'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
-               | .containerDefinitions[0].image = $img')
+          echo "── Pré-checagem ────────────────────────────────────────────"
+          CURRENT=$(git rev-parse --abbrev-ref HEAD)
+          if [ "$CURRENT" != "$BRANCH" ]; then
+            echo "❌ A VPS está na branch '$CURRENT' e este workflow entrega '$BRANCH'."
+            echo "   Puxar aqui não traria nada. Alinhar a branch antes de deployar."
+            exit 1
+          fi
 
-          NEW_ARN=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEF" \
-            --query 'taskDefinition.taskDefinitionArn' --output text)
-          echo "worker → $NEW_ARN"
+          # A VPS tem arquivos versionados alterados na mão — o Caddyfile serve
+          # TRÊS produtos (GenomaFlow, Auditty, Auditty-Sales). O deploy jamais
+          # sobrescreve isso: --ff-only falha em vez de descartar.
+          git fetch --quiet origin "$BRANCH"
+          if ! git merge --ff-only "origin/$BRANCH"; then
+            echo "❌ Não foi fast-forward: divergência ou conflito com alteração local."
+            echo "   Resolver na mão na VPS — este passo não descarta nada."
+            git status --porcelain
+            exit 1
+          fi
+          echo "✅ Código em $(git rev-parse --short HEAD)"
 
-          aws ecs update-service \
-            --cluster genomaflow --service genomaflow-worker \
-            --task-definition "$NEW_ARN" \
-            --query 'service.serviceName' --output text
+          SERVICES=""
+          if [ "$API" = "true" ] || [ "$MIGRATIONS" = "true" ]; then SERVICES="$SERVICES api"; fi
+          if [ "$WORKER" = "true" ]; then SERVICES="$SERVICES worker"; fi
+          if [ "$WEB" = "true" ]; then SERVICES="$SERVICES web"; fi
+          SERVICES="${SERVICES# }"
 
-      - name: Reindex Copilot product-help docs (if docs changed)
-        if: needs.changes.outputs.docs == 'true'
-        run: |
-          CLUSTER="genomaflow"
-          TASK_DEF=$(aws ecs list-task-definitions \
-            --family-prefix genomaflow-prod-reindex-help \
-            --sort DESC --query "taskDefinitionArns[0]" --output text)
-
-          if [ "$TASK_DEF" = "None" ] || [ -z "$TASK_DEF" ]; then
-            echo "⚠️ Task def reindex ainda não existe — skip"
+          if [ -z "$SERVICES" ]; then
+            echo "Nenhum serviço afetado — nada a construir."
             exit 0
           fi
 
-          SUBNET=$(aws cloudformation describe-stacks --stack-name genomaflow-vpc \
-            --query 'Stacks[0].Outputs[?OutputKey==`PublicSubnet1`].OutputValue' --output text)
-          SG=$(aws cloudformation describe-stacks --stack-name genomaflow-vpc \
-            --query 'Stacks[0].Outputs[?OutputKey==`SgEcsId`].OutputValue' --output text)
+          echo "── Build: $SERVICES ────────────────────────────────────────"
+          # CACHEBUST é obrigatório: sem ele o Docker pode reaproveitar camada
+          # com código antigo em silêncio (ver CLAUDE.md).
+          $COMPOSE build --build-arg CACHEBUST="$SHA" $SERVICES
 
-          TASK_ARN=$(aws ecs run-task \
-            --cluster "$CLUSTER" --task-definition "$TASK_DEF" \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SG],assignPublicIp=ENABLED}" \
-            --query "tasks[0].taskArn" --output text)
-
-          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
-
-          EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" \
-            --query "tasks[0].containers[0].exitCode" --output text)
-
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "⚠️ Reindex falhou (exit $EXIT_CODE) — deploy segue, Copilot defasado"
-            exit 0
+          if [ "$MIGRATIONS" = "true" ]; then
+            echo "── Migrations ────────────────────────────────────────────"
+            # Roda na imagem RECÉM construída e ANTES de trocar os contêineres:
+            # se a migration falhar, a produção segue na versão anterior.
+            $COMPOSE run --rm api node src/db/migrate.js
           fi
-          echo "✅ Reindex concluído"
 
-      - name: Wait Worker stable
-        env:
-          AWS_REGION: us-east-1
-        run: |
-          for i in $(seq 1 18); do
-            PENDING=$(aws ecs describe-services --cluster genomaflow --services genomaflow-worker \
-              --query 'services[0].pendingCount' --output text)
-            RUNNING=$(aws ecs describe-services --cluster genomaflow --services genomaflow-worker \
-              --query 'services[0].runningCount' --output text)
-            DESIRED=$(aws ecs describe-services --cluster genomaflow --services genomaflow-worker \
-              --query 'services[0].desiredCount' --output text)
-            echo "Worker check $i: running=$RUNNING pending=$PENDING desired=$DESIRED"
-            if [ "$PENDING" = "0" ] && [ "$RUNNING" = "$DESIRED" ]; then
-              echo "✅ Worker estável"; exit 0
+          echo "── Subindo: $SERVICES ──────────────────────────────────────"
+          $COMPOSE up -d $SERVICES
+
+          echo "── Verificando saúde ───────────────────────────────────────"
+          for svc in $SERVICES; do
+            name="genomaflow-$svc"
+            has_hc=$(docker inspect -f '{{if .State.Health}}sim{{end}}' "$name")
+            if [ -z "$has_hc" ]; then
+              running=$(docker inspect -f '{{.State.Running}}' "$name")
+              if [ "$running" != "true" ]; then
+                echo "❌ $name não está rodando"
+                docker logs --tail 50 "$name"
+                exit 1
+              fi
+              echo "   ✅ $name rodando (sem healthcheck definido)"
+              continue
             fi
-            sleep 20
-          done
-          echo "⚠️ Timeout Worker"; exit 1
 
-  deploy-web:
-    name: Deploy Web
-    needs: [changes, test-web]
-    if: |
-      always() &&
-      (needs.changes.outputs.web == 'true' || needs.changes.outputs.workflow == 'true') &&
-      (needs.test-web.result == 'success' || needs.test-web.result == 'skipped')
-    runs-on: ubuntu-latest
-    environment: production
-    env:
-      AWS_REGION: us-east-1
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            us-east-1
-
-      - name: Login to ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Set image tag
-        run: echo "IMAGE_TAG=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Copy landing to web context
-        run: cp -r apps/landing apps/web/landing
-
-      - name: Build & push Web (cached)
-        uses: docker/build-push-action@v5
-        with:
-          context: apps/web
-          tags: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/web:${{ env.IMAGE_TAG }},${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/genomaflow/web:latest
-          push: true
-          build-args: CACHEBUST=${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=web
-          cache-to: type=gha,mode=max,scope=web
-
-      - name: Update ECS task definition (web)
-        run: |
-          ACCOUNT=${{ secrets.AWS_ACCOUNT_ID }}
-          TAG=${{ env.IMAGE_TAG }}
-          NEW_IMAGE="$ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/genomaflow/web:$TAG"
-
-          TASK_DEF_ARN=$(aws ecs describe-services \
-            --cluster genomaflow --services genomaflow-web \
-            --query 'services[0].taskDefinition' --output text)
-
-          NEW_TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition "$TASK_DEF_ARN" \
-            --query 'taskDefinition' --output json | \
-            jq --arg img "$NEW_IMAGE" \
-              'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
-               | .containerDefinitions[0].image = $img')
-
-          NEW_ARN=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEF" \
-            --query 'taskDefinition.taskDefinitionArn' --output text)
-          echo "web → $NEW_ARN"
-
-          aws ecs update-service \
-            --cluster genomaflow --service genomaflow-web \
-            --task-definition "$NEW_ARN" \
-            --query 'service.serviceName' --output text
-
-      - name: Wait Web stable
-        env:
-          AWS_REGION: us-east-1
-        run: |
-          for i in $(seq 1 24); do
-            PENDING=$(aws ecs describe-services --cluster genomaflow --services genomaflow-web \
-              --query 'services[0].pendingCount' --output text)
-            RUNNING=$(aws ecs describe-services --cluster genomaflow --services genomaflow-web \
-              --query 'services[0].runningCount' --output text)
-            DESIRED=$(aws ecs describe-services --cluster genomaflow --services genomaflow-web \
-              --query 'services[0].desiredCount' --output text)
-            echo "Web check $i: running=$RUNNING pending=$PENDING desired=$DESIRED"
-            if [ "$PENDING" = "0" ] && [ "$RUNNING" = "$DESIRED" ]; then
-              echo "✅ Web estável"; exit 0
+            ok=""
+            for i in $(seq 1 30); do
+              st=$(docker inspect -f '{{.State.Health.Status}}' "$name")
+              if [ "$st" = "healthy" ]; then ok="sim"; break; fi
+              sleep 10
+            done
+            if [ -z "$ok" ]; then
+              echo "❌ $name não ficou healthy em 5min (último estado: $st)"
+              docker logs --tail 50 "$name"
+              exit 1
             fi
-            sleep 20
+            echo "   ✅ $name healthy"
           done
-          echo "⚠️ Timeout Web"; exit 1
+
+          echo "✅ Deploy concluído em $(git rev-parse --short HEAD)"
+          REMOTE
 
   # ---------------------------------------------------------------------------
-  # Docs-only deploy: dispara só reindex Copilot RAG, sem build/push.
-  # Quando push tem APENAS mudanças em docs/, CLAUDE.md ou rag/ — não precisa
-  # de novo deploy de container. Reindex é uma tarefa ECS one-shot.
+  # Push só de documentação: não rebuilda nada, apenas reindexa o RAG do
+  # Copilot de ajuda de produto (que lê docs/user-help/**).
   # ---------------------------------------------------------------------------
   reindex-docs-only:
-    name: Reindex Copilot (docs-only push)
+    name: Reindex Copilot (push só de docs)
     needs: changes
     if: |
       needs.changes.outputs.docs == 'true' &&
@@ -526,45 +336,35 @@ jobs:
       needs.changes.outputs.migrations != 'true'
     runs-on: ubuntu-latest
     environment: production
-    env:
-      AWS_REGION: us-east-1
     steps:
       - uses: actions/checkout@v4
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            us-east-1
-      - name: Reindex Copilot product-help docs
-        run: |
-          CLUSTER="genomaflow"
-          TASK_DEF=$(aws ecs list-task-definitions \
-            --family-prefix genomaflow-prod-reindex-help \
-            --sort DESC --query "taskDefinitionArns[0]" --output text)
 
-          if [ "$TASK_DEF" = "None" ] || [ -z "$TASK_DEF" ]; then
-            echo "⚠️ Task def reindex não existe — skip"
+      - name: Preparar SSH
+        env:
+          KEY:   ${{ secrets.VPS_SSH_KEY }}
+          HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$KEY" ] || [ -z "$HOSTS" ]; then
+            echo "⚠️ Segredos da VPS ausentes — reindex pulado."
+            echo "SKIP=1" >> "$GITHUB_ENV"
             exit 0
           fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY"   > ~/.ssh/id_deploy   && chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
 
-          SUBNET=$(aws cloudformation describe-stacks --stack-name genomaflow-vpc \
-            --query 'Stacks[0].Outputs[?OutputKey==`PublicSubnet1`].OutputValue' --output text)
-          SG=$(aws cloudformation describe-stacks --stack-name genomaflow-vpc \
-            --query 'Stacks[0].Outputs[?OutputKey==`SgEcsId`].OutputValue' --output text)
-
-          TASK_ARN=$(aws ecs run-task \
-            --cluster "$CLUSTER" --task-definition "$TASK_DEF" \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SG],assignPublicIp=ENABLED}" \
-            --query "tasks[0].taskArn" --output text)
-
-          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
-
-          EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" \
-            --query "tasks[0].containers[0].exitCode" --output text)
-
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "⚠️ Reindex falhou (exit $EXIT_CODE)"; exit 1
-          fi
+      - name: Reindexar docs do Copilot
+        if: env.SKIP != '1'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -o ServerAliveInterval=30 \
+              "root@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/genomaflow
+          git fetch --quiet origin main
+          git merge --ff-only origin/main
+          docker compose -f docker-compose.prod.yml --env-file .env \
+            exec -T worker node src/rag/reindex-product-help.js
           echo "✅ Reindex concluído"
+          REMOTE
