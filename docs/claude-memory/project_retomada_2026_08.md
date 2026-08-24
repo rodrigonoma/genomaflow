@@ -23,24 +23,28 @@ produção e no DNS — não é leitura de documento antigo.
 
 ## O que estava quebrado
 
-### 1. DNS morto — a causa raiz demorou a aparecer
+### 1. DNS morto — RESOLVIDO em 24/08/2026
 
-Não era falta de registro `A`. O **registro.br continua delegando** o domínio
-para 4 nameservers do **Route 53** cuja hosted zone foi apagada no cleanup da
-AWS. Eles respondem `REFUSED` → `SERVFAIL` em qualquer resolver.
+Não era falta de registro `A`. O **registro.br delegava** o domínio para 4
+nameservers do **Route 53** que respondiam `REFUSED`. RDAP:
+`delegation check 2026-08-21 → "ns query refused"`, última correta
+**13/07/2026** — quebrado há ~6 semanas.
 
-RDAP do registro.br: `delegation check 2026-08-21 → "ns query refused"`,
-`last correct delegation → 2026-07-13`. **Quebrado há ~6 semanas.**
+⚠️ **A zona NÃO foi apagada no cleanup** — ela foi preservada de propósito
+(`project_aws_cost_reduction.md`: stack `genomaflow-dns`, 16 registros).
+Somando com as credenciais AWS inválidas em dois lugares independentes
+(máquina local e contêiner na VPS), a hipótese é que a **conta AWS foi
+encerrada ou suspensa** depois de 02/06. Se for isso, os snapshots de RDS
+retidos "para rollback" foram junto.
 
-⚠️ **Lição:** desligar infraestrutura de nuvem derruba o DNS junto se a zona
-morava lá. O produto continuou de pé o tempo todo — só inalcançável pelo nome,
-o que é indistinguível de "ninguém acessou" em qualquer painel interno.
+**Corrigido:** zona movida para o DNS do próprio registro.br (delegação agora
+em `d.sec.dns.br` / `e.sec.dns.br`), 6 registros A para `2.25.163.251`.
 
-Decisão (24/08): hospedar a zona na **Hostinger**. Registros e ordem de
-execução em `../DEPLOY.md`.
+⚠️ **Registros de e-mail do Zoho (MX/SPF/DKIM/DMARC) foram embora com a zona** e
+precisam ser recriados a partir do console do Zoho — sem eles, e-mail
+transacional (verificação, reset de senha, NPS) cai em spam.
 
-⏰ **Certificado do Caddy vence 31/08/2026** — emitido em 02/06, e o Caddy só
-renova depois que o DNS apontar para a VPS.
+**Certificado:** renovado em 24/08, válido até **22/11/2026**.
 
 ### 2. Chime sem credencial → vídeo consulta morta
 
@@ -58,6 +62,20 @@ continua mostrando o botão.
 **Pendente:** solução de vídeo própria na VPS, sem AWS e sem custo por minuto.
 Ainda não desenhada — exige brainstorm (SFU self-hosted consome banda e
 CPU da VPS, que é compartilhada com outros dois produtos).
+
+### 2b. Caddy entregando tráfego do GenomaFlow para o Auditty
+
+Descoberto assim que o DNS voltou: 502 nos quatro domínios e
+`s3.genomaflow.com.br` servindo o MinIO do Auditty. O Caddy está em duas redes
+Docker e os nomes `api`/`web`/`minio` resolviam para os contêineres do
+vizinho. Corrigido para nome de contêiner. Sem vazamento de dado (403 anônimo;
+URL pré-assinada carrega assinatura, não chave). Lição completa em
+[[feedback_docker_alias_colisao_redes]].
+
+⚠️ **Disco encheu em 17/08** (`no space left on device` ao gravar locks do
+CertMagic) — foi o que travou a renovação do certificado junto com o DNS morto.
+Hoje está em 49% e o Docker tem rotação de log configurada; a causa daquele pico
+não foi determinada. Vale um alarme de disco na VPS.
 
 ### 3. Healthchecks que nunca poderiam passar
 
@@ -92,7 +110,8 @@ Removido do template.
 
 | Pendência | De quem | Situação |
 |---|---|---|
-| Criar zona DNS na Hostinger + trocar NS no registro.br | usuário | **bloqueia tudo**, prazo 31/08 |
+| ~~DNS~~ | — | ✅ resolvido 24/08 via DNS do registro.br |
+| Recriar MX/SPF/DKIM/DMARC do Zoho na zona nova | usuário | e-mail transacional em spam sem isso |
 | Cadastrar os 3 segredos da VPS no GitHub | usuário | CI não entrega sem isso |
 | Merge `feat/vps-migration` → `main` e produção passar a rodar `main` | a decidir | armadilha nº 2 do DEPLOY.md |
 | Remover `NODE_TLS_REJECT_UNAUTHORIZED=0` do `.env` da VPS | próximo deploy | — |
