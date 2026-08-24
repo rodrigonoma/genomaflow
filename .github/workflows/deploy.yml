@@ -273,9 +273,11 @@ jobs:
           WEB:        ${{ needs.changes.outputs.web }}
           MIGRATIONS: ${{ needs.changes.outputs.migrations }}
         run: |
+          # pipefail: sem ele o `| tee` mascara a falha do ssh e o job passa.
+          set -o pipefail
           ssh -i ~/.ssh/id_deploy \
               -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
-              "root@$VPS_HOST" "bash -s -- '$SHA' '$API' '$WORKER' '$WEB' '$MIGRATIONS'" <<'REMOTE'
+              "root@$VPS_HOST" "bash -s -- '$SHA' '$API' '$WORKER' '$WEB' '$MIGRATIONS'" <<'REMOTE' | tee /tmp/deploy.log
           set -euo pipefail
           SHA="$1"; API="$2"; WORKER="$3"; WEB="$4"; MIGRATIONS="$5"
 
@@ -311,23 +313,33 @@ jobs:
 
           if [ -z "$SERVICES" ]; then
             echo "Nenhum serviço afetado — nada a construir."
+            # A sentinela também sai por aqui: este é um fim legítimo do script,
+            # e sem ela a verificação lá fora reprovaria um deploy correto.
+            echo "__DEPLOY_CHEGOU_AO_FIM__"
             exit 0
           fi
 
           echo "── Build: $SERVICES ────────────────────────────────────────"
           # CACHEBUST é obrigatório: sem ele o Docker pode reaproveitar camada
           # com código antigo em silêncio (ver CLAUDE.md).
-          $COMPOSE build --build-arg CACHEBUST="$SHA" $SERVICES
+          $COMPOSE build --build-arg CACHEBUST="$SHA" $SERVICES < /dev/null
 
           if [ "$MIGRATIONS" = "true" ]; then
             echo "── Migrations ────────────────────────────────────────────"
             # Roda na imagem RECÉM construída e ANTES de trocar os contêineres:
             # se a migration falhar, a produção segue na versão anterior.
-            $COMPOSE run --rm api node src/db/migrate.js
+            # -T e </dev/null são OBRIGATÓRIOS aqui, e não são preciosismo.
+            # Este script chega no host remoto pela STDIN (`bash -s`), e o bash
+            # lê o corpo dele de lá conforme executa. `docker compose run` sem
+            # -T anexa a stdin e ENGOLE o resto do script: em 24/08/2026 o
+            # deploy parou logo depois desta linha, nunca rodou `up -d`, e
+            # mesmo assim saiu 0 — o GitHub marcou verde um deploy que não
+            # entregou nada.
+            $COMPOSE run --rm -T api node src/db/migrate.js < /dev/null
           fi
 
           echo "── Subindo: $SERVICES ──────────────────────────────────────"
-          $COMPOSE up -d $SERVICES
+          $COMPOSE up -d $SERVICES < /dev/null
 
           echo "── Verificando saúde ───────────────────────────────────────"
           for svc in $SERVICES; do
@@ -359,7 +371,23 @@ jobs:
           done
 
           echo "✅ Deploy concluído em $(git rev-parse --short HEAD)"
+          # Marcador de fim. O passo seguinte confere que ele apareceu — ver o
+          # porquê logo abaixo.
+          echo "__DEPLOY_CHEGOU_AO_FIM__"
           REMOTE
+
+          # Um script que chega por stdin pode ser ENGOLIDO no meio por qualquer
+          # comando que leia stdin, e aí o bash termina com o status do último
+          # comando que sobrou — verde, sem ter feito o deploy. Foi o que
+          # aconteceu em 24/08/2026 com `docker compose run` sem -T.
+          # Cada comando ganhou `< /dev/null`, mas a proteção que não depende de
+          # eu lembrar disso é esta: se o marcador final não veio, o script não
+          # rodou inteiro, e isso é falha.
+          if ! grep -q "__DEPLOY_CHEGOU_AO_FIM__" /tmp/deploy.log; then
+            echo "❌ O script remoto não chegou ao fim — saída truncada."
+            echo "   Suspeite de algum comando consumindo a stdin do heredoc."
+            exit 1
+          fi
 
   # ---------------------------------------------------------------------------
   # Push só de documentação: não rebuilda nada, apenas reindexa o RAG do
