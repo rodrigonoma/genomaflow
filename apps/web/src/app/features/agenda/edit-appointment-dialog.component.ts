@@ -19,6 +19,7 @@ import {
 } from './agenda.models';
 import { AuthService } from '../../core/auth/auth.service';
 import { StartVideoConsultationDialogComponent } from '../video/start-video-consultation-dialog.component';
+import { environment } from '../../../environments/environment';
 
 export interface EditAppointmentDialogData {
   appointment: Appointment;
@@ -144,9 +145,18 @@ export type EditAppointmentDialogResult =
           <button class="action-btn danger" (click)="quickAction('no_show')">Marcou falta</button>
         }
         @if (isTelemedicina() && (data.appointment.status === 'scheduled' || data.appointment.status === 'confirmed')) {
-          <button class="action-btn" style="color:#86efac;border-color:rgba(134,239,172,0.4);" (click)="startVideoConsultation()">
-            📹 Iniciar vídeo
-          </button>
+          @if (videoEnabled) {
+            <button class="action-btn" style="color:#86efac;border-color:rgba(134,239,172,0.4);" (click)="startVideoConsultation()">
+              📹 Iniciar vídeo
+            </button>
+          } @else {
+            <!-- Desabilitado em vez de escondido: o agendamento É de
+                 telemedicina, e sumir com o botão faria parecer defeito da
+                 tela. Dizer o que está acontecendo é mais honesto. -->
+            <button class="action-btn" disabled title="Indisponível no momento — nenhum crédito é debitado">
+              📹 Vídeo indisponível
+            </button>
+          }
         }
         @if (data.appointment.status !== 'cancelled' && data.appointment.status !== 'blocked') {
           <button class="action-btn danger" (click)="cancelAppointment()">Cancelar agendamento</button>
@@ -184,6 +194,7 @@ export class EditAppointmentDialogComponent {
   notes = this.data.appointment.notes || '';
   errorMsg = signal('');
   submitting = signal(false);
+  readonly videoEnabled = environment.videoConsultation;
 
   appointmentTypes() {
     const mod = this.auth.currentUser?.module || 'human';

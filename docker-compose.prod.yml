@@ -77,6 +77,12 @@ services:
       S3_PUBLIC_URL: https://s3.genomaflow.com.br
       S3_FORCE_PATH_STYLE: "true"
       S3_REGION: us-east-1
+      # Consulta por vídeo depende do AWS Chime, cujo IAM user foi apagado no
+      # cleanup da AWS (08/2026) — a credencial devolve UnrecognizedClientException.
+      # Com isto a rota responde 503 explícito e NÃO debita crédito, em vez de
+      # deixar o médico pagar para receber um 500 opaco. Voltar para "true"
+      # quando houver solução de vídeo de verdade.
+      VIDEO_CONSULTATION_ENABLED: "false"
     volumes:
       - uploads:/app/uploads
     depends_on:

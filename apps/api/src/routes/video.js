@@ -27,6 +27,16 @@ const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_SECRET_KEY;
 const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://app.genomaflow.com.br').replace(/\/$/, '');
 const JOIN_TOKEN_TTL_SECONDS = 24 * 60 * 60; // 24h
 
+// A consulta por vídeo depende do AWS Chime. No cleanup da AWS (08/2026) o
+// IAM user do Chime foi apagado junto — a credencial que sobrou na VPS devolve
+// UnrecognizedClientException. Sem esta trava, o médico gastaria crédito e
+// receberia um 500 opaco.
+//
+// Fica ligado por padrão (dev e testes seguem exercitando o fluxo). A produção
+// desliga por VIDEO_CONSULTATION_ENABLED=false no docker-compose.prod.yml.
+// Remover quando houver solução de vídeo de verdade.
+const VIDEO_ENABLED = process.env.VIDEO_CONSULTATION_ENABLED !== 'false';
+
 // Créditos por modalidade
 const CREDITS = { simple: 2, complete: 6 };
 const TRANSCRIPTION_CREDIT_REFUND = 4; // estorno em caso de falha pós-vídeo
@@ -103,6 +113,14 @@ module.exports = async function (fastify) {
     config: { rateLimit: { max: 20, timeWindow: '1 hour' } },
     preHandler: [fastify.authenticate],
   }, async (request, reply) => {
+    // Antes de qualquer validação ou débito de crédito.
+    if (!VIDEO_ENABLED) {
+      return reply.status(503).send({
+        code: 'VIDEO_CONSULTATION_DISABLED',
+        error: 'A consulta por vídeo está temporariamente indisponível. Nenhum crédito foi debitado.',
+      });
+    }
+
     const { tenant_id, user_id, module: module_ } = request.user;
     const { appointment_id, modality } = request.body || {};
 
